@@ -1,9 +1,10 @@
 import { uploadMPU } from "../../shared/uploadPaste"
 import { vi, test, describe, it, expect, afterAll, beforeEach } from "vitest"
 import { createExecutionContext } from "cloudflare:test"
-import { areBlobsEqual, BASE_URL, genRandomBlob, workerFetch } from "./testUtils"
+import { addRole, areBlobsEqual, BASE_URL, genRandomBlob, workerFetch } from "./testUtils"
 import { PRIVATE_PASTE_NAME_LEN } from "../../shared/constants"
 import { parsePath } from "../../shared/parsers"
+import { MetaResponse } from "../../shared/interfaces"
 
 const ctx = createExecutionContext()
 beforeEach(() => {
@@ -45,8 +46,12 @@ test("uploadMPU", async () => {
     callBack,
   )
 
+  const reGetMetaResp: MetaResponse = await (await workerFetch(ctx, addRole(uploadResp.url, "m"))).json()
+  expect(reGetMetaResp.sizeBytes).toStrictEqual(content.size)
+
   const reGetResp = await workerFetch(ctx, uploadResp.url)
   expect(await areBlobsEqual(await reGetResp.blob(), newContent)).toStrictEqual(true)
+  expect(reGetResp.headers.has("etag")).toStrictEqual(true)
 })
 
 describe("uploadMPU with variant parameters", () => {

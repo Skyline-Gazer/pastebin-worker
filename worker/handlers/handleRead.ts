@@ -236,6 +236,10 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
     exposeHeaders.push("X-PB-Highlight-Language")
   }
 
+  if (item.httpEtag) {
+    headers["etag"] = item.httpEtag
+  }
+
   if (returnFilename) {
     const encodedFilename = encodeURIComponent(returnFilename)
     headers["Content-Disposition"] = `${disp}; filename*=UTF-8''${encodedFilename}`

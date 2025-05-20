@@ -66,6 +66,7 @@ function migratePasteMetadata(original: PasteMetadataInStorage): PasteMetadata {
 export type PasteWithMetadata = {
   paste: ArrayBuffer | ReadableStream
   metadata: PasteMetadata
+  httpEtag?: string
 }
 
 async function updateAccessCounter(env: Env, short: string, value: ArrayBuffer, metadata: PasteMetadata) {
@@ -117,8 +118,7 @@ export async function getPaste(env: Env, short: string, ctx: ExecutionContext): 
       if (object === null) {
         return null
       }
-      // TODO: how Content-Length handled?
-      return { paste: object.body, metadata }
+      return { paste: object.body, metadata, httpEtag: object.httpEtag }
     } else {
       return { paste: item.value, metadata }
     }

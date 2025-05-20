@@ -85,7 +85,7 @@ export async function handleMPUResume(request: Request, env: Env): Promise<Respo
 // formdata same as POST/PUT a normal paste, but
 //   - field `c` is interpreted as JSON { partNumber: number, etag: string }[]
 //   - field `n` is ignored
-export async function handleMPUComplete(request: Request, env: Env, completeBody: R2UploadedPart[]): Promise<string> {
+export async function handleMPUComplete(request: Request, env: Env, completeBody: R2UploadedPart[]): Promise<R2Object> {
   const url = new URL(request.url)
   const uploadId = url.searchParams.get("uploadId")
   const key = url.searchParams.get("key")
@@ -104,5 +104,5 @@ export async function handleMPUComplete(request: Request, env: Env, completeBody
     await env.R2.delete(object.key)
     throw new WorkerError(413, `payload too large (max ${parseSize(env.R2_MAX_ALLOWED)!} bytes allowed)`)
   }
-  return object.httpEtag
+  return object
 }

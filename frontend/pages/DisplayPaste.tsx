@@ -18,7 +18,7 @@ import "../style.css"
 import "../styles/highlight-theme-light.css"
 import "../styles/highlight-theme-dark.css"
 
-const utf8CompatibleEncodings = ["utf-8", "ASCII", "ISO-8859-1"]
+const utf8CompatibleEncodings = ["UTF-8", "ASCII", "ISO-8859-1"]
 
 export function DisplayPaste() {
   const [pasteFile, setPasteFile] = useState<File | undefined>(undefined)

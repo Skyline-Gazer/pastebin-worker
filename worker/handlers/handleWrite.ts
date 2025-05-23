@@ -90,8 +90,6 @@ export async function handlePostOrPut(
 
   const contentType = request.headers.get("Content-Type") || ""
 
-  // TODO: support multipart upload (https://developers.cloudflare.com/r2/api/workers/workers-multipart-usage/)
-
   // parse formdata
   if (!contentType.includes("multipart/form-data")) {
     throw new WorkerError(400, `bad usage, please use 'multipart/form-data' instead of ${contentType}`)

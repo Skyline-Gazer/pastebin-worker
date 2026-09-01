@@ -1,0 +1,30 @@
+<type>(<scope>): <concise summary>
+
+Context:
+- What business/user problem is this change solving?
+- Why is the change needed?
+
+Expected behavior:
+- What should happen after this change?
+- Include relevant before -> after behavior/business rules.
+
+Acceptance criteria:
+- [ ] Observable criterion 1
+- [ ] Observable criterion 2
+
+Constraints:
+- Architecture, security, upstream-sync, compatibility, or explicit scope limits.
+
+Validation:
+- Exact tests/checks run and important evidence.
+
+Docs:
+- Documents updated, or N/A with reason.
+
+Refs:
+- Issue/task/PR/design reference if available.
+
+# For generic upstream patch commits also include:
+# Upstream base: <exact SHA>
+# Patch ID: <stable patch id>
+# Dependencies: <none or prerequisite patch IDs>

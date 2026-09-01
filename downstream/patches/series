@@ -1,0 +1,7 @@
+# Ordered release patch series.
+# One repository-relative patch path per line.
+# Blank lines and comments are ignored.
+#
+# Example after 010 is implemented/exported:
+# 010-non-expiring-paste/0001-expiration-support-non-expiring-pastes.patch
+# 010-non-expiring-paste/0002-expiration-skip-permanent-r2-cleanup.patch

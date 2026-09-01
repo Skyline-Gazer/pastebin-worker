@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "remote": "upstream",
+    "branch": "goshujin",
+    "commit": "REPLACE_WITH_EXACT_40_CHARACTER_UPSTREAM_SHA"
+  },
+  "patchSeries": "downstream/patches/series",
+  "addon": {
+    "path": "downstream/addons/feishu"
+  }
+}

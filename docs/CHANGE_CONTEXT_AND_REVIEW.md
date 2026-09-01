@@ -527,7 +527,27 @@ Approved PLAN, SPEC, Phase decomposition, and the active Phase TODO MUST NOT exi
 - PR body/checklist;
 - another durable owner-approved project artifact.
 
-Architecture/product/API/security specifications SHOULD use tracked repository docs when practical. Do not require unnecessary new files for trivial changes, but never rely only on ephemeral conversation context. Commit and PR `Refs:` MUST point to the applicable approved artifacts. Owner approval MUST be explicit.
+Architecture/product/API/security specifications SHOULD use tracked repository docs when practical. Do not require unnecessary new files for genuinely trivial changes, but never rely only on ephemeral conversation context. Commit and PR `Refs:` MUST point to the applicable approved artifacts. Owner approval MUST be explicit.
+
+**Durable-artifact persistence checkpoint.** Owner approval alone is not sufficient if the approved artifact remains only in transient conversation context. Before advancing to the next workflow stage, the approved artifact MUST be persisted to a durable, reviewable location (see the permitted locations above):
+
+```text
+PLAN approved
+→ persist approved PLAN
+→ SPEC
+
+SPEC approved
+→ persist approved SPEC
+→ PHASE/TODO
+
+PHASE/TODO approved
+→ persist/update durable artifact
+→ implementation
+```
+
+A PR body/checklist MAY serve as the durable source only when that PR/draft/planning artifact already existed before implementation. A normal implementation PR opened after coding MUST NOT retroactively serve as the sole proof that required pre-implementation planning existed.
+
+Planning-artifact exemption is limited to: (a) genuinely trivial changes outside the non-trivial workflow, or (b) the explicitly documented one-time governance bootstrap exception. TDD/test-first exceptions apply only to TDD evidence and do NOT exempt planning artifacts.
 
 ### 10.8 Bootstrap exception
 

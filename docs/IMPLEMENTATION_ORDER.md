@@ -17,6 +17,8 @@ PLAN
 
 - PLAN/SPEC/PHASE/TODO chapter requirements and the mandatory interaction sequence: `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.
 - TDD evidence requirements (including test-first exceptions): `docs/TESTING.md` §1.
+- Each approved artifact MUST be persisted to a durable, reviewable location before the next workflow stage advances: `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.7.
+- Planning-artifact exemption is limited to genuinely trivial changes and the recorded governance bootstrap exception; TDD/test-first exceptions do not exempt planning artifacts.
 - Planning artifacts MUST have durable, reviewable references, never only transient conversation context: `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.7.
 
 ## Phase completion gate (applies to every implementation phase)

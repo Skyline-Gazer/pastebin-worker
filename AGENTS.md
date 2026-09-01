@@ -673,7 +673,7 @@ If the issue/task contains only a title or lacks acceptance criteria, agents MUS
 
 ## 18. Required development workflow
 
-For every non-trivial change, the approved planning artifacts (PLAN → owner approval → SPEC → owner approval → PHASE decomposition → TODO → owner approval) MUST exist before implementation starts, with durable reviewable references (`docs/CHANGE_CONTEXT_AND_REVIEW.md` §10). Behavioral changes MUST record TDD evidence per `docs/TESTING.md` §1.1.
+For every non-trivial change, the approved planning artifacts (PLAN → owner approval → SPEC → owner approval → PHASE decomposition → TODO → owner approval) MUST exist before implementation starts, with durable reviewable references (`docs/CHANGE_CONTEXT_AND_REVIEW.md` §10); each approved artifact MUST be persisted to its durable location before the next workflow stage advances (§10.7 persistence checkpoint). Behavioral changes MUST record TDD evidence per `docs/TESTING.md` §1.1.
 
 1. Read `AGENTS.md`.
 2. Read `DECISIONS.md`.
@@ -751,6 +751,6 @@ A change is not complete until all applicable items pass:
 - [ ] Every actionable finding is fixed or explicitly dispositioned, with no blocking finding self-dispositioned by an agent.
 - [ ] Required CI/checks are green for the current reviewed HEAD.
 - [ ] Dependent next-phase work starts only after the previous phase/PR merged and the target branch was refreshed.
-- [ ] Approved PLAN/SPEC/PHASE/TODO artifacts exist with durable references (or a valid trivial/test-first exception is recorded).
+- [ ] Approved PLAN/SPEC/PHASE/TODO artifacts exist with durable references, persisted before the next workflow stage advanced (exemptions limited to genuinely trivial changes and the recorded governance bootstrap exception; TDD/test-first exceptions do NOT exempt planning artifacts).
 - [ ] Owner approval of planning artifacts was explicit (not implied by silence).
 - [ ] TDD evidence (RED/GREEN/REFACTOR/REGRESSION) recorded per `docs/TESTING.md` §1.1, or `TDD: N/A` with reason and alternative verification.

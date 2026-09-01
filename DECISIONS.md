@@ -231,5 +231,6 @@ Costs:
 - This decision governs planning artifacts and the development workflow.
 - The AI Review Bot Phase Review Gate (D-028, `docs/CHANGE_CONTEXT_AND_REVIEW.md` §9) remains the merge gate applied after PR creation.
 - Owner approval MUST be explicit; silence, timeout, or lack of objection MUST NOT be interpreted as approval.
-- TDD applies to behavioral changes; valid test-first exceptions (docs-only, formatting, mechanical metadata) are recorded per `docs/TESTING.md`.
+- TDD applies to behavioral changes; valid test-first exceptions (docs-only, formatting, mechanical metadata) are recorded per `docs/TESTING.md`. TDD/test-first exceptions apply only to TDD evidence and do NOT exempt PLAN/SPEC/PHASE/TODO artifacts; planning-artifact exemption is limited to genuinely trivial changes and the documented one-time governance bootstrap exception.
+- Approved planning artifacts MUST be persisted to a durable, reviewable location before the next workflow stage advances (§10.7 persistence checkpoint); a PR opened after coding cannot retroactively prove pre-implementation planning.
 - This governance change is a bootstrap exception: it predates the durable-artifact workflow it introduces, so its owner-approved planning context is accepted as the bootstrap source; the new workflow applies prospectively after this policy merges. The exception is limited to this change and is not a general bypass.

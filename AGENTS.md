@@ -118,9 +118,11 @@ Rules:
 - no downstream product customization;
 - no downstream documentation;
 - no downstream-only fixes;
-- update by fetching upstream and fast-forwarding/moving this branch to the chosen upstream commit.
+- update ONLY by fetching official upstream and fast-forwarding this branch to a commit that exists in official upstream history; no arbitrary ref movement, no rewinds, and no force updates;
 
 Any change not present in official upstream is downstream-owned and MUST NOT be committed to `upstream-sync`. Do not directly modify `upstream-sync` for any downstream purpose.
+
+If a historical release requires an older official-upstream commit, pin that older SHA in the release manifest — do NOT rewind `upstream-sync`.
 
 ### 4.2 `downstream/main`
 
@@ -198,12 +200,31 @@ The downstream is actively curated, not a passive mirror. An upstream change is 
 3. Upstream PR status (open/closed/rejected/ignored/unmerged) MUST NOT be treated as evidence that the code is good or bad.
 4. Adoption MUST follow the normal patch path: dedicated `patch/<id>` branch from the exact pinned upstream SHA → development → tests → review → export with `git format-patch` → add to the ordered `downstream/patches/series`.
 5. Do NOT directly merge arbitrary upstream PR branches or external branches into `downstream/main`.
-6. Adopted patches MUST record provenance in their patch README (origin repository, PR URL/number, original author, original commit SHA(s), upstream status at adoption, adoption date, reason, local changes, validation, risks, dependencies, removal condition). Unknown data MUST be marked `unknown` / `not available`; never fabricate it.
+6. Adopted patches MUST record provenance in their patch README (origin repository, PR URL/number, original author, original commit SHA(s), upstream status at adoption, adoption date, reason, license/IP compatibility, attribution/NOTICE requirements, local changes, validation, risks, dependencies, removal condition). Unknown data MUST be marked `unknown` / `not available`; never fabricate it, including license status. If license/IP compatibility cannot be established with sufficient confidence, adoption MUST STOP and be escalated to the owner.
 7. Preserve original Git authorship when adopting commits. Do not rewrite third-party authorship as if the downstream maintainer wrote the original change.
 8. Once adopted, the downstream assumes maintenance responsibility for that change until removed, superseded, or upstreamed.
 9. Dependency changes affecting upstream-owned files that are not merged upstream MUST be represented as downstream patches (see §2 rule 18), never committed directly to `downstream/main`.
 10. Dependencies belonging only to downstream-owned code (`downstream/addons/feishu/` or downstream tooling) are normal downstream changes and MAY merge into `downstream/main`; they do NOT become upstream patches.
 11. Keep the patch stack curated: do not adopt a change downstream does not need, does not unblock, or whose maintenance burden is not justified, and do not keep a duplicate carried patch once official upstream includes an equivalent change.
+
+### 4.8 Mandatory AI Review Bot Phase Review Gate
+
+Every non-trivial change — product development, upstream patch development, patch promotion, build/release, security, and governance — MUST pass the Phase Review Gate described in `docs/CHANGE_CONTEXT_AND_REVIEW.md` §9 before its PR is merged.
+
+1. Every non-trivial implementation PR MUST pass the AI Review Bot Phase Review Gate before merge.
+2. Review MUST cover the latest/current PR HEAD; ANY commit that changes the HEAD SHA invalidates the previous gate and requires a new completed review of the new HEAD.
+3. Material changes after review invalidate the previous AI-review gate.
+4. All actionable findings MUST be fixed or explicitly dispositioned; a blocking/critical finding MUST NOT be dispositioned as false-positive or not-applicable by a coding agent alone.
+5. Blocking findings cannot be self-overridden by a coding agent; only the owner may override, explicitly and recorded.
+6. Bot failure/unavailability is NOT approval; the gate fails closed.
+7. Dependent next-phase work MUST start only after the required previous phase/PR is merged (with target branch refreshed).
+8. Large phases MAY be split; every constituent PR remains independently review-gated.
+9. Patch source PRs are review-only and MUST NOT merge into `upstream-sync`.
+10. Exported patch promotion PRs MUST also pass review before merge into `downstream/main`.
+11. External/untrusted PR code MUST NOT gain privileged secrets merely to enable review automation.
+12. Required tests/checks must be current for the reviewed HEAD.
+13. Review-fix commits must preserve review context and references.
+14. Owner override, when allowed, MUST be explicit and recorded; agents cannot self-override.
 
 ## 5. Patch development and export workflow
 
@@ -694,7 +715,13 @@ Agents MUST NOT:
 - adopt an external change without provenance recording and independent validation;
 - keep a duplicate carried downstream patch after official upstream includes the equivalent change;
 - apply upstream-owned dependency/file changes outside an exported downstream patch;
-- modify `upstream-sync` for any downstream purpose.
+- modify `upstream-sync` for any downstream purpose;
+- merge a PR that has not passed the latest-HEAD AI Review Gate;
+- treat "no bot comments" as bot approval;
+- self-override a blocking finding, or approve a bot-outage/blocking override without owner authorization;
+- start dependent-phase work from an unmerged phase branch;
+- merge a patch source review-only PR into `upstream-sync`;
+- dismiss actionable bot findings without fixing or recording an owner-approved disposition.
 
 ## 20. Completion checklist
 
@@ -720,3 +747,7 @@ A change is not complete until all applicable items pass:
 - [ ] Adopted external changes record provenance (origin repository, PR URL/number, original author/commits, upstream status at adoption) and validation.
 - [ ] Upstream-owned dependency/upstream-file changes appear only as exported patches, never as direct commits to `downstream/main`.
 - [ ] Carried patches are retired (with a recorded reason) when equivalent upstream changes are merged.
+- [ ] AI Review Bot completed a review of the current HEAD (or an explicit recorded owner override exists).
+- [ ] Every actionable finding is fixed or explicitly dispositioned, with no blocking finding self-dispositioned by an agent.
+- [ ] Required CI/checks are green for the current reviewed HEAD.
+- [ ] Dependent next-phase work starts only after the previous phase/PR merged and the target branch was refreshed.

@@ -13,7 +13,7 @@
 - [`TESTING.md`](TESTING.md) — test matrix, patch replay, and CI gates.
 - [`BUILD_DEPLOY.md`](BUILD_DEPLOY.md) — pinned release inputs, ephemeral assembly, build/deploy model.
 - [`REPO_AND_GIT.md`](REPO_AND_GIT.md) — branch roles, patch promotion, release refs, commit/PR workflow.
-- [`CHANGE_CONTEXT_AND_REVIEW.md`](CHANGE_CONTEXT_AND_REVIEW.md) — business context, acceptance criteria, commit-body and AI-review requirements.
+- [`CHANGE_CONTEXT_AND_REVIEW.md`](CHANGE_CONTEXT_AND_REVIEW.md) — business context, acceptance criteria, commit-body and AI-review requirements; canonical home of the mandatory Phase Review Gate.
 - [`IMPLEMENTATION_ORDER.md`](IMPLEMENTATION_ORDER.md) — TDD-oriented implementation order.
 
 ## Operational scaffold

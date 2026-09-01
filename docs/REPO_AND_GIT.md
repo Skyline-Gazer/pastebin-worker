@@ -139,7 +139,7 @@ The exported patch preserves the reviewed commit message, including business con
 When upstream advances:
 
 1. fetch upstream;
-2. move/update `upstream-sync` to the desired new upstream commit;
+2. fast-forward `upstream-sync` ONLY to the new upstream commit, after verifying the target exists in official upstream history; no arbitrary ref movement, no rewinds, no force updates;
 3. merge that clean upstream update into `downstream/main` (normally through a `chore(upstream)` PR) without adding downstream edits to upstream-owned paths;
 4. update the pinned upstream SHA in the release manifest for a candidate build;
 5. replay the existing complete patch series from the new base;
@@ -151,6 +151,8 @@ When upstream advances:
 11. create a downstream release commit/tag only after all gates pass.
 
 Do not fix a conflict in a generated build tree and then continue. Such a fix is not durable.
+
+If a historical release requires an older official-upstream commit, pin that older SHA in the release manifest for that release; do NOT rewind `upstream-sync`.
 
 ## 7. Curated adoption of external changes
 
@@ -260,3 +262,21 @@ Rules:
 - delete/regenerate them after a failed replay or release build.
 
 If integration fails, fix the source: either the responsible patch branch or `downstream/main` Add-on code.
+
+## 11. Phase review gates and branch hygiene
+
+Review-process details live in `docs/CHANGE_CONTEXT_AND_REVIEW.md` §9; this section covers the branch-level rules.
+
+- Dependent phases branch from the refreshed merged `downstream/main` (`switch downstream/main` → `fetch/pull --ff-only` → verify clean/current base → create the next phase branch). Do NOT chain normal feature branches on unmerged phase branches; document an explicit dependency/workflow exception if stacking is truly required.
+- A generic upstream patch source PR is REVIEW-ONLY (`REVIEW ONLY — DO NOT MERGE INTO upstream-sync`) and is never merged into `upstream-sync`; see `docs/PATCH_AND_UPSTREAM.md` §14.
+- `upstream-sync` is fast-forward-only official-upstream history (§6); it is never used as a normal patch merge target and never receives downstream-owned commits.
+- Desired `downstream/main` branch protection/ruleset (where GitHub repository settings support it), documented intent only — do not change GitHub settings from this process:
+  - changes through PRs, not direct feature pushes;
+  - required status checks;
+  - no force pushes;
+  - no branch deletion;
+  - review conversations resolved where applicable;
+  - branch up-to-date / merge queue policy where appropriate;
+  - AI Review Bot status/check as required ONLY when the bot exposes a reliable status check; if the bot is comment/review-only, maintain the documented manual gate rather than inventing a fake status.
+- Current review status/CI checks MUST correspond to the latest PR HEAD; any commit changing the HEAD SHA invalidates the previous AI-review gate (§9.2, §9.8).
+- Whatever merge strategy is used, the resulting history MUST retain traceability to the reviewed PR and purpose (§9.12); the release contract (pinned upstream SHA + ordered patch series + Add-on source) is unchanged by this section.

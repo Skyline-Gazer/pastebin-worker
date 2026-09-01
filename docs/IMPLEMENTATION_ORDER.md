@@ -1,5 +1,21 @@
 # Recommended Implementation Order
 
+## Phase completion gate (applies to every implementation phase)
+
+A phase is NOT complete until ALL of the following hold:
+
+- implementation/phase-scoped PRs are complete and merged;
+- required tests pass (unit/integration/replay as applicable);
+- each PR was opened with full review context (see `docs/CHANGE_CONTEXT_AND_REVIEW.md`);
+- the AI Review Bot reviewed the latest HEAD of each PR;
+- actionable findings were fixed or explicitly dispositioned, with no blocking finding self-dispositioned by an agent;
+- material fixes were re-reviewed against the new HEAD;
+- required CI/checks are green for the current HEAD;
+- the merge completed and the target branch was refreshed (`downstream/main`);
+- only then may the dependent next phase start.
+
+For large phases: a phase MAY contain multiple coherent PRs; every constituent PR passes the gate independently; the phase acceptance criteria must pass before the phase is marked complete.
+
 ## Phase 1 — Repository and release skeleton
 
 - establish `upstream-sync` and `downstream/main` roles;
@@ -24,12 +40,18 @@ TDD:
 
 No Feishu code in patch.
 
-After review:
+Two-stage review/promotion (see `docs/PATCH_AND_UPSTREAM.md` §14 and `docs/CHANGE_CONTEXT_AND_REVIEW.md` §9.13-9.14):
+
+Stage A — source patch review: open a REVIEW-ONLY PR (`REVIEW ONLY — DO NOT MERGE INTO upstream-sync`) against the exact pinned upstream SHA; AI Review Bot + CI review loop; never merge the source PR into `upstream-sync`.
+
+After source review passes:
 
 - export with `git format-patch`;
-- commit exported files under `downstream/patches/010-non-expiring-paste/`;
+- commit exported files under `downstream/patches/010-non-expiring-paste/` with provenance README;
 - add them to `downstream/patches/series`;
 - replay the complete series from the pinned upstream SHA.
+
+Stage B — promotion review: open a promotion PR into `downstream/main` with the patch artifact, provenance, series position, and full replay result; AI Review Bot + CI review loop; merge the promotion PR. The phase is complete only after the promotion PR merges.
 
 ## Phase 3 — Feishu Paste client + binding store
 

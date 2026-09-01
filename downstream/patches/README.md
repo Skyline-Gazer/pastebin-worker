@@ -62,6 +62,8 @@ Upstream PR status when adopted
 Adoption date
 Reason for carrying downstream
 Local changes made after adoption, if any
+License / IP compatibility
+Attribution / NOTICE requirements
 Validation performed
 Known risks / limitations
 Dependencies on other downstream patches
@@ -69,7 +71,7 @@ Removal condition
 Upstreamed/superseded status
 ```
 
-Unknown data MUST be marked `unknown` / `not available`; do not fabricate it. Preserve original Git authorship when adopting commits.
+Unknown data MUST be marked `unknown` / `not available`; do not fabricate it, including license status. Do not strip attribution. If license/IP compatibility cannot be established with sufficient confidence, adoption MUST STOP and be escalated to the owner; cross-repository copied/adapted code requires explicit license compatibility verification. Preserve original Git authorship when adopting commits.
 
 When official upstream later includes an equivalent change, retire the carried patch from `series`, record why it was removed, and re-run the complete relevant test/build suite. Do not keep duplicate patches.
 

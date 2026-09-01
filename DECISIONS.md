@@ -151,3 +151,37 @@ Costs:
 ### Boundary
 
 `upstream-sync` still remains a clean official upstream mirror/reference and MUST NOT contain adopted PRs, unmerged dependency updates, Feishu code, downstream patches, downstream documentation, or downstream-only fixes.
+
+## D-028 — Mandatory phase-level AI review gates
+
+### Decision
+
+Non-trivial development is gated by PR review using the configured AI Review Bot plus required CI/checks before merge and before dependent phases advance.
+
+### Rationale
+
+Small/coherent reviewed increments give the AI reviewer sufficient context, reduce defect scope, avoid downstream phases building on unreviewed interfaces, and create traceable acceptance evidence.
+
+### Consequences
+
+Positive:
+
+- earlier defect detection;
+- smaller review scope;
+- review context stays close to code;
+- dependent phases build only on accepted work;
+- review findings and fixes remain auditable.
+
+Costs:
+
+- more PR/review cycles;
+- bot availability may block merges;
+- patch development requires a source review and a promotion review;
+- owner override process is needed for bot outages/false positives.
+
+### Boundary
+
+- AI Review Bot is mandatory review input but not an infallible authority.
+- Owner/human retains final authority.
+- Agent cannot self-override blocking findings, and the latest-HEAD rule is mechanical (any commit changing the PR HEAD SHA requires a new completed review).
+- `upstream-sync` remains fast-forward-only official-upstream history and is never used as a normal patch merge target.

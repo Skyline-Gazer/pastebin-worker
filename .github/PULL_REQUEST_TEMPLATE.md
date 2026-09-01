@@ -36,6 +36,8 @@
 - Dependencies: `<none / patch IDs / N/A>`
 - Exported patch files: `<paths or N/A>`
 - Position in `downstream/patches/series`: `<order or N/A>`
+- License / IP compatibility: `<verified / unknown - do not fabricate / N/A>`
+- Attribution / NOTICE requirements: `<recorded or N/A>`
 
 ## Implementation notes
 
@@ -68,6 +70,41 @@ downstream/scripts/check-patches.sh
 ## Risk / rollback
 
 <!-- What could fail and how would this release/change be reverted? -->
+
+## AI Review Gate
+
+- Reviewed HEAD SHA: `<sha / pending>`
+- AI Review Bot: `<pending / completed / unavailable / owner override>`
+- [ ] AI Review Bot reviewed the current/latest HEAD.
+- [ ] All actionable findings are fixed or explicitly dispositioned.
+- [ ] Material changes after the last bot review were re-reviewed.
+- [ ] Required CI/status checks pass for the current HEAD.
+- [ ] No unresolved blocking findings remain.
+- [ ] Acceptance criteria and validation evidence are current.
+
+### Review finding disposition
+
+<!-- Link/summarize findings that were not fixed and explain false-positive,
+not-applicable, or deferred-non-blocking rationale. Blocking/critical findings
+MUST NOT be dispositioned as false-positive / not-applicable by a coding agent
+alone; owner approval of that disposition must be recorded here. -->
+
+### Review override (only if explicitly approved by owner)
+
+```text
+Review override:
+Reason:
+Approved by:
+Reviewed HEAD SHA:
+Alternative validation:
+Known risk:
+```
+
+For generic upstream patch source PRs, the title/body MUST state:
+
+```text
+REVIEW ONLY — DO NOT MERGE INTO upstream-sync
+```
 
 ## References
 

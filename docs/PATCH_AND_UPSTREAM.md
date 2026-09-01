@@ -111,6 +111,8 @@ Upstream PR status when adopted
 Adoption date
 Reason for carrying downstream
 Local changes made after adoption, if any
+License / IP compatibility
+Attribution / NOTICE requirements
 Validation performed
 Known risks / limitations
 Dependencies on other downstream patches
@@ -118,7 +120,9 @@ Removal condition
 Upstreamed/superseded status
 ```
 
-Do not fabricate unknown information. Unknown data MUST be explicitly marked `unknown` / `not available`.
+Do not fabricate unknown information, including license status. Unknown data MUST be explicitly marked `unknown` / `not available`.
+
+Do not strip attribution. If license/IP compatibility cannot be established with sufficient confidence, adoption MUST STOP and be escalated to the owner. Same-upstream PRs may be straightforward under the repository's contribution/license context, but provenance must still be preserved; cross-repository copied/adapted code requires explicit license compatibility verification.
 
 When possible, preserve original Git authorship when adopting commits. Do not rewrite third-party authorship as if the downstream maintainer authored the original change.
 
@@ -400,3 +404,61 @@ A release should record:
 - test/build status.
 
 That allows a historical release to be reconstructed without requiring old patch branch heads to still exist.
+
+## 14. Patch review and promotion gates
+
+Canonical review-process details live in `docs/CHANGE_CONTEXT_AND_REVIEW.md` §9; this section covers the patch-specific lifecycle.
+
+### 14.1 Stage A — source patch review (review-only)
+
+A generic upstream patch's source branch MUST NOT be merged into `upstream-sync`. Its review happens on a REVIEW-ONLY PR whose title/body MUST clearly state:
+
+```text
+REVIEW ONLY — DO NOT MERGE INTO upstream-sync
+```
+
+The review PR base MUST resolve to the exact same pinned upstream SHA used by the patch:
+
+- normally `upstream-sync` MAY be used as the review base only if it still resolves to that exact pinned SHA;
+- if `upstream-sync` has advanced, do NOT rebase the patch merely to make the PR convenient, and do NOT compare against an unrelated newer base;
+- if the repository workflow requires a GitHub base branch, use an appropriate temporary review-base branch/ref pointing to the exact pinned upstream SHA; clearly mark it temporary/review-only, never use it as a release input, and delete it after the review/promotion lifecycle if safe;
+- do not create the temporary ref unless necessary.
+
+The source patch PR MUST go through the AI Review Bot + CI review loop (§9) and is never merged into `upstream-sync`. Export the patch (`git format-patch`) only after source review passes.
+
+### 14.2 Stage B — patch promotion review
+
+After source review passes:
+
+```text
+reviewed patch/<id>
+       ↓
+git format-patch
+       ↓
+downstream promotion branch from downstream/main
+       ↓
+add patch artifact + README/provenance + series entry
+       ↓
+full series replay from pinned upstream SHA
+       ↓
+PR -> downstream/main
+       ↓
+AI Review Bot + CI
+       ↓
+fix/re-review loop
+       ↓
+merge promotion PR
+```
+
+The promotion PR MUST make reviewable:
+
+- reviewed source commit(s);
+- exact upstream base SHA;
+- exported patch files;
+- patch provenance (including the license/IP and attribution fields from §3.3);
+- dependencies;
+- series position/order;
+- complete replay result;
+- relevant tests.
+
+The patch phase is NOT complete merely because the source patch PR passed review; it is complete only after the reviewed exported patch is promoted and merged into `downstream/main`.

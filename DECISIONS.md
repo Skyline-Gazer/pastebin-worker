@@ -185,3 +185,51 @@ Costs:
 - Owner/human retains final authority.
 - Agent cannot self-override blocking findings, and the latest-HEAD rule is mechanical (any commit changing the PR HEAD SHA requires a new completed review).
 - `upstream-sync` remains fast-forward-only official-upstream history and is never used as a normal patch merge target.
+
+## D-029 — Plan/spec/phase/TODO and TDD development workflow
+
+### Decision
+
+Non-trivial development MUST follow the planning artifacts and TDD workflow:
+
+```text
+PLAN
+→ owner approval
+→ SPEC
+→ owner approval
+→ PHASE decomposition
+→ TODO
+→ owner approval
+→ TDD implementation
+→ PR / Phase Review Gate
+```
+
+Approved PLAN, SPEC, Phase decomposition, and the active Phase TODO MUST have durable, reviewable references — never only transient conversation context.
+
+### Rationale
+
+Reviewed increments need a stable behavioral contract (SPEC) and acceptance criteria before code exists, so that implementation, review, and the AI Review Bot evaluate the change against the same approved requirements.
+
+### Consequences
+
+Positive:
+
+- behavior/API/security decisions are agreed before code;
+- acceptance criteria are testable;
+- review has a durable baseline (SPEC) instead of guessing intent;
+- TDD evidence makes RED/GREEN/REFACTOR/regression verifiable;
+- SPEC change control prevents silent scope/behavior drift.
+
+Costs:
+
+- planning overhead before each non-trivial change;
+- SPEC updates require owner re-approval when behavior drifts;
+- planning artifacts must be stored somewhere durable (repo docs, issue, PR body).
+
+### Boundary
+
+- This decision governs planning artifacts and the development workflow.
+- The AI Review Bot Phase Review Gate (D-028, `docs/CHANGE_CONTEXT_AND_REVIEW.md` §9) remains the merge gate applied after PR creation.
+- Owner approval MUST be explicit; silence, timeout, or lack of objection MUST NOT be interpreted as approval.
+- TDD applies to behavioral changes; valid test-first exceptions (docs-only, formatting, mechanical metadata) are recorded per `docs/TESTING.md`.
+- This governance change is a bootstrap exception: it predates the durable-artifact workflow it introduces, so its owner-approved planning context is accepted as the bootstrap source; the new workflow applies prospectively after this policy merges. The exception is limited to this change and is not a general bypass.

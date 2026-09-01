@@ -10,10 +10,10 @@
 - [`API_CONTRACT.md`](API_CONTRACT.md) — browser/Add-on/upstream single and batch contracts.
 - [`PATCH_AND_UPSTREAM.md`](PATCH_AND_UPSTREAM.md) — curated adoption of external changes, dedicated patch branches, export, ordered series, upstream synchronization.
 - [`SECURITY.md`](SECURITY.md) — secrets and browser/webhook trust boundaries.
-- [`TESTING.md`](TESTING.md) — test matrix, patch replay, and CI gates.
+- [`TESTING.md`](TESTING.md) — test matrix, TDD evidence record, patch replay, and CI gates.
 - [`BUILD_DEPLOY.md`](BUILD_DEPLOY.md) — pinned release inputs, ephemeral assembly, build/deploy model.
 - [`REPO_AND_GIT.md`](REPO_AND_GIT.md) — branch roles, patch promotion, release refs, commit/PR workflow.
-- [`CHANGE_CONTEXT_AND_REVIEW.md`](CHANGE_CONTEXT_AND_REVIEW.md) — business context, acceptance criteria, commit-body and AI-review requirements; canonical home of the mandatory Phase Review Gate.
+- [`CHANGE_CONTEXT_AND_REVIEW.md`](CHANGE_CONTEXT_AND_REVIEW.md) — business context, acceptance criteria, commit-body and AI-review requirements; canonical home of the mandatory Phase Review Gate and the PLAN/SPEC/PHASE/TODO development workflow.
 - [`IMPLEMENTATION_ORDER.md`](IMPLEMENTATION_ORDER.md) — TDD-oriented implementation order.
 
 ## Operational scaffold

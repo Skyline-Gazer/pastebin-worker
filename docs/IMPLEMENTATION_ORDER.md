@@ -1,5 +1,24 @@
 # Recommended Implementation Order
 
+## Pre-implementation artifacts (required before any phase starts)
+
+Every phase starts from approved planning artifacts; implementation MUST NOT begin before they are approved:
+
+```text
+PLAN
+→ owner approval
+→ SPEC
+→ owner approval
+→ PHASE decomposition
+→ TODO
+→ owner approval
+→ implementation
+```
+
+- PLAN/SPEC/PHASE/TODO chapter requirements and the mandatory interaction sequence: `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.
+- TDD evidence requirements (including test-first exceptions): `docs/TESTING.md` §1.
+- Planning artifacts MUST have durable, reviewable references, never only transient conversation context: `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.7.
+
 ## Phase completion gate (applies to every implementation phase)
 
 A phase is NOT complete until ALL of the following hold:
@@ -9,7 +28,7 @@ A phase is NOT complete until ALL of the following hold:
 - each PR was opened with full review context (see `docs/CHANGE_CONTEXT_AND_REVIEW.md`);
 - the AI Review Bot reviewed the latest HEAD of each PR;
 - actionable findings were fixed or explicitly dispositioned, with no blocking finding self-dispositioned by an agent;
-- material fixes were re-reviewed against the new HEAD;
+- ANY commit changing a PR HEAD SHA after the last bot review was re-reviewed against the new HEAD (mechanical latest-HEAD rule, `docs/CHANGE_CONTEXT_AND_REVIEW.md` §9.2);
 - required CI/checks are green for the current HEAD;
 - the merge completed and the target branch was refreshed (`downstream/main`);
 - only then may the dependent next phase start.

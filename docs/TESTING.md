@@ -2,7 +2,46 @@
 
 ## 1. Philosophy
 
-Behavior changes follow RED -> GREEN -> REFACTOR where practical. Tests protect Feishu lifecycle semantics, patch isolation, and release reproducibility.
+Behavior changes follow RED -> GREEN -> REFACTOR -> REGRESSION where practical. Tests protect Feishu lifecycle semantics, patch isolation, and release reproducibility.
+
+### 1.1 Mandatory TDD evidence
+
+For behavioral changes, the development record / PR validation MUST include at least:
+
+```text
+RED:
+- test/case name
+- exact command
+- expected failing reason
+- observed failure confirming the missing behavior
+
+GREEN:
+- targeted command
+- actual passing result
+
+REFACTOR:
+- relevant tests remained green
+
+REGRESSION:
+- broader relevant suite/checks
+- actual result
+```
+
+Concise evidence is sufficient; do not commit giant raw logs. The coding agent MUST NOT claim RED/GREEN evidence that was not actually observed.
+
+### 1.2 Test-first exceptions
+
+For changes where a strict failing-test-first cycle is not meaningful — documentation-only edits, formatting-only changes, comments, purely mechanical metadata, or certain build/configuration changes that cannot be exercised through an existing test harness — record:
+
+```text
+TDD: N/A
+Reason: <why RED is not applicable>
+Alternative verification: <what was actually performed instead>
+```
+
+Configuration changes that affect behavior SHOULD still get executable validation whenever practical.
+
+This is the canonical TDD-evidence specification. `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.9 references it rather than duplicating it.
 
 ## 2. Markdown tests
 

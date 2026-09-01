@@ -213,7 +213,7 @@ Every non-trivial change — product development, upstream patch development, pa
 
 1. Every non-trivial implementation PR MUST pass the AI Review Bot Phase Review Gate before merge.
 2. Review MUST cover the latest/current PR HEAD; ANY commit that changes the HEAD SHA invalidates the previous gate and requires a new completed review of the new HEAD.
-3. Material changes after review invalidate the previous AI-review gate.
+3. ANY commit that changes the PR HEAD SHA after review invalidates the previous AI-review gate and requires a new completed review of the new HEAD (mechanical rule).
 4. All actionable findings MUST be fixed or explicitly dispositioned; a blocking/critical finding MUST NOT be dispositioned as false-positive or not-applicable by a coding agent alone.
 5. Blocking findings cannot be self-overridden by a coding agent; only the owner may override, explicitly and recorded.
 6. Bot failure/unavailability is NOT approval; the gate fails closed.
@@ -673,13 +673,13 @@ If the issue/task contains only a title or lacks acceptance criteria, agents MUS
 
 ## 18. Required development workflow
 
-For every non-trivial change:
+For every non-trivial change, the approved planning artifacts (PLAN → owner approval → SPEC → owner approval → PHASE decomposition → TODO → owner approval) MUST exist before implementation starts, with durable reviewable references (`docs/CHANGE_CONTEXT_AND_REVIEW.md` §10). Behavioral changes MUST record TDD evidence per `docs/TESTING.md` §1.1.
 
 1. Read `AGENTS.md`.
 2. Read `DECISIONS.md`.
 3. Read relevant docs.
 4. Identify whether the change belongs to Add-on code, generic upstream patch, docs/build infrastructure, or a combination.
-5. Establish Context, Expected behavior, Acceptance criteria, Constraints, and Validation plan before implementation.
+5. Establish Context, Expected behavior, Acceptance criteria, Constraints, and Validation plan via the approved PLAN/SPEC/PHASE/TODO artifacts before implementation.
 6. Select the correct branch type.
 7. Write or update failing tests first for behavior changes.
 8. Implement the smallest correct change.
@@ -751,3 +751,6 @@ A change is not complete until all applicable items pass:
 - [ ] Every actionable finding is fixed or explicitly dispositioned, with no blocking finding self-dispositioned by an agent.
 - [ ] Required CI/checks are green for the current reviewed HEAD.
 - [ ] Dependent next-phase work starts only after the previous phase/PR merged and the target branch was refreshed.
+- [ ] Approved PLAN/SPEC/PHASE/TODO artifacts exist with durable references (or a valid trivial/test-first exception is recorded).
+- [ ] Owner approval of planning artifacts was explicit (not implied by silence).
+- [ ] TDD evidence (RED/GREEN/REFACTOR/REGRESSION) recorded per `docs/TESTING.md` §1.1, or `TDD: N/A` with reason and alternative verification.

@@ -287,7 +287,7 @@ A PR passes the AI Review Gate only when ALL of the following are true:
 1. The configured AI Review Bot actually completed a review.
 2. The completed review corresponds to the current/latest PR HEAD SHA, or there is equivalent reliable evidence that the latest code was reviewed.
 3. Every actionable finding has been either fixed in code/tests/docs and pushed, or explicitly dispositioned as false-positive / not-applicable / intentionally-deferred with evidence and rationale.
-4. Any material commit pushed after the last completed bot review invalidates the previous gate and requires re-review.
+4. ANY commit that changes the PR HEAD SHA after the last completed bot review invalidates the previous gate and requires a new completed review of the new HEAD (mechanical rule, see §9.2).
 5. Required CI/status checks for the current HEAD are green.
 6. There are no unresolved blocking findings.
 7. The PR acceptance criteria and validation evidence are current.
@@ -412,3 +412,153 @@ The exported patch promotion PR into `downstream/main` receives its own independ
 ### 9.15 External/untrusted PR review security
 
 AI-review/CI workflows MUST NOT execute untrusted external code with privileged repository secrets merely to review an external PR. Do not weaken GitHub/CI security boundaries to make the AI Review Bot run. If review automation requires elevated credentials, ensure the workflow does not expose them to untrusted PR code. This section documents the principle; CI implementation changes are out of scope here.
+
+## 10. Development workflow artifacts (PLAN/SPEC/PHASE/TODO)
+
+This section defines the mandatory planning and TDD workflow that precedes the Phase Review Gate (§9). §9 remains the merge gate; this section defines its required inputs.
+
+### 10.1 Mandatory interaction sequence
+
+For every non-trivial development request, the interaction order is fixed:
+
+```text
+STEP 1  Repository inspection → output PLAN → STOP for owner approval
+STEP 2  After PLAN approval → output SPEC → STOP for owner approval
+STEP 3  After SPEC approval → output PHASES + per-phase acceptance
+        criteria + TODOs for Phase 1 → STOP for owner approval
+STEP 4  After execution approval → implement Phase 1 using TDD → open PR
+        → AI Review Bot Phase Review Gate → merge only after gate passes
+STEP 5  Refresh downstream/main → TODOs for next Phase → implement using
+        TDD → repeat the review gate
+STEP N  Final integration/release validation → Final Report → STOP
+```
+
+Implementation MUST NOT start before the planning artifacts are produced and approved. Owner approval MUST be explicit: silence, timeout, or lack of objection MUST NOT be interpreted as approval.
+
+### 10.2 PLAN requirements
+
+The first substantive output for a new development request is an execution PLAN. Do NOT edit files, create branches, or write production code yet. The PLAN MUST contain:
+
+- **Objective** — exactly what will be delivered.
+- **Context** — why the change is needed; relevant existing behavior; which ownership boundary it belongs to.
+- **Assumptions** — each assumption that can be verified from the repository MUST include a verification method; do not silently promote assumptions into facts.
+- **Non-goals** — what will NOT be changed.
+- **Risks / unknowns** — technical, migration, compatibility, security, upstream-sync risks; unresolved owner decisions.
+- **Proposed implementation approach** — specific enough that the owner can reject a wrong design before code exists; no vague "implement feature / update tests" phrasing.
+- **Expected files/components** — candidate locations, labeled as candidates; never force meaningless changes to match a file list.
+- **Validation strategy** — which unit/integration/contract/regression/type/build/patch-replay/security checks will be required.
+
+End with:
+
+```text
+Status: PLAN READY FOR OWNER REVIEW
+Implementation has NOT started.
+```
+
+### 10.3 SPEC requirements
+
+After the PLAN is approved, produce the SPEC as the behavioral contract. It MUST include:
+
+- **3.1 Problem statement** — problem from the user/system perspective.
+- **3.2 Goals** — concrete desired outcomes.
+- **3.3 Non-goals** — scope boundaries.
+- **3.4 Current behavior** — based on actual repository inspection.
+- **3.5 Desired behavior** — externally observable behavior with explicit rules; precise state transitions where they exist.
+- **3.6 User/API flows** — step-by-step; for APIs: route, method, request, response, validation, errors, authorization/security, idempotency, partial failure semantics.
+- **3.7 Data/state model** — interfaces, fields, storage keys, enum/state transitions, retention/lifecycle; do not invent a second source of truth if architecture forbids it.
+- **3.8 Security and trust boundaries** — secrets, browser/server boundary, authentication/authorization, logging restrictions, webhook/untrusted input, external code trust.
+- **3.9 Compatibility** — backward/upstream compatibility, data migration, version assumptions, fallback behavior.
+- **3.10 Failure behavior** — network/upstream/partial failure, retries, duplicate requests, inconsistent state, missing/expired/deleted records.
+- **3.11 Acceptance criteria** — every requirement testable, expressed as checkable statements (never "code is good" / "UX is better").
+- **3.12 Test specification** — map each behavior to unit/integration/regression/negative tests.
+- **3.13 Open questions** — unresolved owner decisions stay explicit.
+
+End with:
+
+```text
+Status: SPEC READY FOR OWNER REVIEW
+Implementation has NOT started.
+```
+
+### 10.4 PHASE and TODO breakdown
+
+After the SPEC is approved, break implementation into coherent Phases. A Phase is a reviewable delivery milestone — not artificially large, not so small that trivial helpers become their own PR. Each Phase MUST include: Goal, Scope, Dependencies, Inputs, Deliverables, Acceptance criteria, Tests required, Expected branch type (`feat/*`, `fix/*`, `patch/*`, `docs/*`, `build/*` etc.), Expected PR target, Risks, Exit criteria.
+
+Phase dependency rule: a dependent Phase MUST NOT begin from an unmerged Phase branch. After the prior Phase merges: refresh target branch → verify clean/current state → create the new Phase branch. Independent phases MAY proceed in parallel only if they do not depend on an unmerged API/schema/contract/state model/shared component/architectural decision; do not guess against work still under review.
+
+For each approved Phase, produce an implementation-sized, verifiable TODO list before coding (avoid vague "do backend" / "finish frontend" items).
+
+### 10.5 SPEC change control
+
+Once a SPEC is owner-approved, implementation MUST NOT silently change:
+
+- externally observable behavior;
+- API contracts;
+- state/data model;
+- security/trust boundaries;
+- acceptance criteria;
+- architectural ownership boundary.
+
+If any of these must change:
+
+```text
+STOP
+→ update SPEC
+→ explain the change and reason
+→ obtain owner re-approval
+→ update affected PHASE/TODO artifacts
+→ resume only after approval
+```
+
+Implementation-detail changes that remain fully within the approved SPEC MAY update TODOs without reopening the behavioral specification. A coding agent MUST NOT self-approve a changed SPEC.
+
+### 10.6 TODO drift / change control
+
+Implementation-detail TODOs MAY be added/reordered/refined without reopening the SPEC when they remain fully inside the approved behavior and acceptance criteria; such TODO changes MUST remain traceable and state the reason when meaningful.
+
+If a TODO change would alter scope, externally observable behavior, API contract, state/data model, security/trust boundary, architecture ownership, or acceptance criteria, it is NOT merely a TODO update — it triggers the §10.5 SPEC change-control process (STOP → update SPEC → explain drift → owner re-approval → update Phase/TODO → resume). The coding agent cannot self-approve this change.
+
+### 10.7 Artifact traceability
+
+Approved PLAN, SPEC, Phase decomposition, and the active Phase TODO MUST NOT exist only in transient AI conversation context. They MUST have durable, reviewable references accessible to later commits, PRs, the owner, and the AI Review Bot. Permitted locations include:
+
+- tracked repository documentation;
+- GitHub Issue/task;
+- PR body/checklist;
+- another durable owner-approved project artifact.
+
+Architecture/product/API/security specifications SHOULD use tracked repository docs when practical. Do not require unnecessary new files for genuinely trivial changes, but never rely only on ephemeral conversation context. Commit and PR `Refs:` MUST point to the applicable approved artifacts. Owner approval MUST be explicit.
+
+**Durable-artifact persistence checkpoint.** Owner approval alone is not sufficient if the approved artifact remains only in transient conversation context. Before advancing to the next workflow stage, the approved artifact MUST be persisted to a durable, reviewable location (see the permitted locations above):
+
+```text
+PLAN approved
+→ persist approved PLAN
+→ SPEC
+
+SPEC approved
+→ persist approved SPEC
+→ PHASE/TODO
+
+PHASE/TODO approved
+→ persist/update durable artifact
+→ implementation
+```
+
+A PR body/checklist MAY serve as the durable source only when that PR/draft/planning artifact already existed before implementation. A normal implementation PR opened after coding MUST NOT retroactively serve as the sole proof that required pre-implementation planning existed.
+
+Planning-artifact exemption is limited to: (a) genuinely trivial changes outside the non-trivial workflow, or (b) the explicitly documented one-time governance bootstrap exception. TDD/test-first exceptions apply only to TDD evidence and do NOT exempt planning artifacts.
+
+### 10.8 Bootstrap exception
+
+This governance change predates the newly enforced durable PLAN/SPEC/PHASE/TODO artifact workflow. Its owner-approved planning context is accepted as the bootstrap source. The new workflow applies prospectively after this policy PR merges. This exception is limited to this governance-bootstrap change and MUST NOT become a general bypass.
+
+### 10.9 TDD evidence
+
+RED→GREEN→REFACTOR→REGRESSION evidence requirements (including valid test-first exceptions) are specified in detail in `docs/TESTING.md`. This section does not duplicate them. Behavioral changes MUST record TDD evidence; valid exceptions MUST state why RED is not applicable plus the alternative verification performed.
+
+### 10.10 Relationship to the Phase Review Gate
+
+- The Phase Review Gate (§9) is the merge gate; this §10 defines its required planning inputs.
+- The approved SPEC is the baseline for §9.3 condition 7 ("acceptance criteria and validation evidence are current").
+- PR traceability (§9.12) SHOULD reference the planning artifacts named in §10.7.

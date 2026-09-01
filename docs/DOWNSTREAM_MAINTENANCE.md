@@ -37,10 +37,10 @@ The Feishu Add-on is built separately from the exact downstream release commit/t
 9. `docs/API_CONTRACT.md` — single and batch API contracts.
 10. `docs/PATCH_AND_UPSTREAM.md` — curated adoption, patch development, export, ordered series, upstream sync.
 11. `docs/SECURITY.md` — password and trust-boundary rules.
-12. `docs/TESTING.md` — mandatory tests and release gates.
+12. `docs/TESTING.md` — mandatory tests, TDD evidence record, and release gates.
 13. `docs/BUILD_DEPLOY.md` — pinned release assembly and deployment.
 14. `docs/REPO_AND_GIT.md` — branch, commit, patch-promotion and release workflow.
-15. `docs/CHANGE_CONTEXT_AND_REVIEW.md` — mandatory business context, acceptance criteria, commit log/body, AI-review requirements, and the canonical Phase Review Gate (latest-HEAD review, finding disposition, owner override, bot outage).
+15. `docs/CHANGE_CONTEXT_AND_REVIEW.md` — mandatory business context, acceptance criteria, commit log/body, AI-review requirements, the canonical Phase Review Gate (latest-HEAD review, finding disposition, owner override, bot outage), and the PLAN/SPEC/PHASE/TODO development workflow.
 16. `docs/IMPLEMENTATION_ORDER.md` — recommended TDD implementation order.
 
 ## Included maintenance helpers

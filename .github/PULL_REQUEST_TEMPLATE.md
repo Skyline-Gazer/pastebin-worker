@@ -28,6 +28,17 @@
 - [ ] Upstream sync
 - [ ] Documentation only
 
+## Planning traceability
+
+- Plan ref: `<path / issue / PR body / N/A>`
+- Spec ref: `<path / issue / N/A>`
+- Phase: `<phase identifier / N/A>`
+- Phase acceptance criteria ref: `<path / issue / N/A>`
+
+<!-- Required for non-trivial changes (see docs/CHANGE_CONTEXT_AND_REVIEW.md §10.7);
+may be N/A only when the change is genuinely trivial or does not require the
+full planning workflow. Use durable references, never only chat context. -->
+
 ## Patch metadata (if applicable)
 
 - Patch ID: `<id or N/A>`
@@ -77,7 +88,7 @@ downstream/scripts/check-patches.sh
 - AI Review Bot: `<pending / completed / unavailable / owner override>`
 - [ ] AI Review Bot reviewed the current/latest HEAD.
 - [ ] All actionable findings are fixed or explicitly dispositioned.
-- [ ] Material changes after the last bot review were re-reviewed.
+- [ ] Any HEAD change after the previous bot review was re-reviewed.
 - [ ] Required CI/status checks pass for the current HEAD.
 - [ ] No unresolved blocking findings remain.
 - [ ] Acceptance criteria and validation evidence are current.

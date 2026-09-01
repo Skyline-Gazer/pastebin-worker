@@ -121,3 +121,33 @@ The patched Pastebin is `pinned upstream + ordered generic patches`. The Feishu 
 ## D-026 — `downstream/main` is the downstream control branch
 
 `downstream/main` owns the Feishu Add-on, exported patch series, manifests, scripts, docs, and review metadata. It is not a manually patched production tree. Production assembly still starts from the exact pinned upstream SHA and replays the stable patch series in a disposable worktree.
+
+## D-027 — Actively curated downstream distribution
+
+### Decision
+
+The project is an actively curated downstream distribution of `SharzyL/pastebin-worker` rather than a passive fork.
+
+### Rationale
+
+Official upstream may merge contributions slowly or inconsistently, so downstream releases cannot depend on upstream acceptance timing. Downstream MAY independently adopt open upstream PRs, closed-but-unmerged PRs, third-party contributor fixes, upstream Dependabot dependency updates, security fixes, and compatibility fixes — provided each adopted change is independently reviewed, tested, documented, and carried as an explicit downstream patch.
+
+### Consequences
+
+Positive:
+
+- downstream can independently fix issues;
+- dependency/security updates can be adopted promptly;
+- useful third-party PRs can be carried;
+- release cadence is controlled locally.
+
+Costs:
+
+- every adopted unmerged change becomes downstream maintenance responsibility;
+- patch provenance must be maintained;
+- upstream updates require patch-stack compatibility testing;
+- equivalent upstream changes require downstream patch retirement.
+
+### Boundary
+
+`upstream-sync` still remains a clean official upstream mirror/reference and MUST NOT contain adopted PRs, unmerged dependency updates, Feishu code, downstream patches, downstream documentation, or downstream-only fixes.

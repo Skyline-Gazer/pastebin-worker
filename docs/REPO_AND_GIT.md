@@ -2,7 +2,7 @@
 
 ## 1. Design goal
 
-The repository is a downstream fork that must remain easy to update from `SharzyL/pastebin-worker` while carrying a small generic patch stack and an independent Feishu Add-on.
+The repository is a downstream fork that must remain easy to update from `SharzyL/pastebin-worker` while carrying a curated patch stack and an independent Feishu Add-on. It is actively maintained by the downstream, not passively dependent on upstream merge activity. Upstream acceptance timing MUST NOT gate downstream releases.
 
 The Git model separates **development branches** from **release inputs**:
 
@@ -15,14 +15,18 @@ Do not make production reproducibility depend on the current head of a moving pa
 
 ### `upstream-sync`
 
-Clean mirror of upstream `goshujin`.
+Clean mirror of upstream `goshujin`. It MUST remain identical to official upstream at all times.
 
 Rules:
 
 - no Feishu code;
+- no locally adopted PRs;
+- no dependency updates not merged upstream;
 - no downstream customization;
 - no exported patches applied as committed source;
 - used as the trusted source of upstream baseline SHAs.
+
+Any change not present in official upstream is downstream-owned and MUST NOT be committed to `upstream-sync`.
 
 ### `downstream/main`
 
@@ -36,7 +40,7 @@ It contains:
 - release/build scripts and manifest;
 - downstream docs, `AGENTS.md`, CI/review metadata.
 
-Upstream-owned application files should remain identical to the selected upstream baseline. Downstream behavior belongs in Add-on code or exported patches.
+Upstream-owned application files should remain identical to the selected upstream baseline. Downstream behavior belongs in Add-on code or exported patches. Upstream runtime modifications MUST NOT be hidden directly in `downstream/main`; they must be represented as explicit downstream patches.
 
 There is intentionally **no long-lived `deploy` branch**.
 
@@ -47,6 +51,7 @@ Every independent upstream patch is developed on its own branch:
 ```text
 patch/non-expiring-paste
 patch/<other-generic-capability>
+patch/adopt-pr-123-multipart-fix
 ```
 
 Default creation:
@@ -56,6 +61,8 @@ git fetch upstream
 git switch upstream-sync
 git switch -c patch/non-expiring-paste <UPSTREAM_SHA>
 ```
+
+Adopted external changes use the same model, branched from the exact pinned upstream SHA.
 
 Patch branches must remain narrowly scoped. A branch named `patch/non-expiring-paste` must not also contain Feishu frontend changes or unrelated upstream refactoring.
 
@@ -145,7 +152,38 @@ When upstream advances:
 
 Do not fix a conflict in a generated build tree and then continue. Such a fix is not durable.
 
-## 7. Release refs
+## 7. Curated adoption of external changes
+
+Upstream synchronizations above handle changes already merged upstream. Independently adopted changes follow this path:
+
+```text
+exact pinned upstream SHA
+        ↓
+patch/<feature-or-adopted-change>
+        ↓
+development
+        ↓
+tests
+        ↓
+review
+        ↓
+git format-patch / stable patch artifact
+        ↓
+ordered downstream patch series
+```
+
+Rules:
+
+- Candidates MAY include open upstream PRs, closed-but-unmerged PRs, abandoned PRs, third-party fixes, and upstream Dependabot PRs. Upstream PR status is not quality evidence.
+- Do NOT directly merge arbitrary upstream/external PR branches into `downstream/main`. They must be re-developed or cherry-picked onto a dedicated `patch/<id>` branch from the pinned upstream base, reviewed, tested, and exported.
+- Dependency updates to upstream-owned files (`package.json`, `pnpm-lock.yaml`, `.github/workflows/*`, upstream `frontend/*`, `worker/*`, `shared/*`) that are not merged upstream MUST be carried as patches, never committed directly into `downstream/main`.
+- Dependencies belonging only to downstream-owned code (`downstream/addons/feishu/`, downstream tooling) MAY merge into `downstream/main` through normal PRs.
+- Every adopted change MUST preserve provenance (origin, PR URL/number, original author and commit SHA(s), upstream status at adoption, adoption date) and record validation; unknown fields are marked `unknown` / `not available`.
+- Once adopted, the downstream owns maintenance. When official upstream later includes an equivalent change, retire the carried patch (see the lifecycle in `PATCH_AND_UPSTREAM.md` §3).
+
+Independent patches SHOULD originate from the same pinned upstream base when they have no real dependency. Do not create artificial branch dependency chains only to express ordering.
+
+## 8. Release refs
 
 Production/release builds must use immutable inputs:
 
@@ -171,9 +209,9 @@ addon/feishu@latest
 upstream-sync@latest
 ```
 
-because those refs can move.
+because those refs can move. The same applies to adopted PR refs: never build from `origin/pr/<n>` or a contributor's fork head.
 
-## 8. Conventional Commits and review context
+## 9. Conventional Commits and review context
 
 Subjects use Conventional Commits:
 
@@ -206,9 +244,11 @@ Patch ID:
 Dependencies:
 ```
 
+Adopted external patch commits SHOULD additionally reference the origin PR/commit in `Refs` or provenance metadata so review can verify provenance.
+
 The AI reviewer must be able to understand why the change exists and how to verify it without reconstructing product intent from a one-line title.
 
-## 9. Generated integration trees
+## 10. Generated integration trees
 
 Temporary integration worktrees are build artifacts.
 

@@ -156,7 +156,21 @@ Series position/order
 Full-series replay result
 ```
 
-Do not submit a ready-for-review PR with meaningful sections empty or merely repeating the title.
+For PRs that adopt an external (upstream/third-party) change, additionally include:
+
+```text
+Origin repository
+Original PR URL / number
+Original author and commit SHA(s)
+Upstream PR status when adopted
+Adoption date
+Reason for carrying downstream
+Local changes made after adoption, if any
+Known risks / limitations
+Removal condition
+```
+
+Unknown provenance fields MUST be marked `unknown` / `not available`; do not fabricate them. Original Git authorship is preserved where possible. Do not submit a ready-for-review PR with meaningful sections empty or merely repeating the title.
 
 ## 6. Sparse task handling
 

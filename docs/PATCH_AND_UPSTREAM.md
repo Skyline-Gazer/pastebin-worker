@@ -82,6 +82,7 @@ Every candidate MUST be independently evaluated for at least:
 - API/behavior changes;
 - security implications where relevant;
 - maintenance burden;
+- license / IP compatibility (the source repository license must permit adoption);
 - interaction with the existing downstream patch stack.
 
 Once adopted, the downstream project owns the maintenance responsibility for that change until it is removed or superseded.
@@ -173,13 +174,13 @@ If the dependency change modifies upstream-owned files such as:
 ```text
 package.json
 pnpm-lock.yaml
-.github/workflows/*
+.github/workflows/*   (modifications to workflows that already exist upstream)
 frontend/*
 worker/*
 shared/*
 ```
 
-and is not present in official upstream, treat it as a downstream upstream-modification patch. It MUST go through:
+or modifies workflows that already exist in official upstream, and is not present in official upstream, treat it as a downstream upstream-modification patch. New downstream-only workflows (for example downstream CI covering `downstream/` or `docs/`) are not upstream patches and belong directly to `downstream/main`. It MUST go through:
 
 ```text
 candidate dependency update
@@ -327,7 +328,7 @@ Examples:
 320-cloudflare-runtime-compat
 ```
 
-These ranges are organizational conventions only. The actual authoritative application order MUST still come from the ordered `downstream/patches/series` file. Never make directory lexical ordering the source of truth.
+These ranges are organizational conventions only. The `900-999` range means patches that MUST modify upstream-owned source to support a local deployment. Deployment scripts, Feishu configuration, and CI that live entirely under `downstream/` are normal `downstream/main` content; do not force them into a patch merely to fit a category. The actual authoritative application order MUST still come from the ordered `downstream/patches/series` file. Never make directory lexical ordering the source of truth.
 
 ## 10. Validation
 

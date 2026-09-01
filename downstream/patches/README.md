@@ -43,6 +43,8 @@ The numeric prefix is an organizational category convention:
 900-999   deployment/local downstream-specific patches
 ```
 
+The `900-999` range covers patches that MUST modify upstream-owned source for a local deployment. Deployment scripts, Feishu configuration, or CI under `downstream/` are normal `downstream/main` content, not patches.
+
 `series` is authoritative for replay order. Do not automatically apply every `.patch` found in the directory tree; lexical directory order is not the source of truth.
 
 ## Adopted patch README metadata

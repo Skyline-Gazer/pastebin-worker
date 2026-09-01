@@ -43,7 +43,7 @@ upstream-sync                  exact upstream commit
 15. All behavior changes require tests and documentation in the same change.
 16. **Review context is part of the deliverable.** Non-trivial commits and PRs MUST include business context, expected behavior/business rules, acceptance criteria, constraints/non-goals, validation evidence, and documentation impact.
 17. **Curated adoption.** Open, closed-but-unmerged, abandoned, or third-party upstream PRs and fixes MAY be adopted downstream after independent review. Upstream PR status is NOT quality evidence. See §4.7.
-18. **Upstream-owned dependency changes** (e.g. `package.json`, `pnpm-lock.yaml`, `.github/workflows/*`, upstream `frontend/*`, `worker/*`, `shared/*`) that are not present in official upstream MUST be carried as explicit downstream patches — never committed directly into `downstream/main`.
+18. **Upstream-owned dependency/workflow changes** (e.g. `package.json`, `pnpm-lock.yaml`, upstream `frontend/*`, `worker/*`, `shared/*`, or modifications to workflows that already exist in official upstream, including `.github/workflows/*`) that are not present in official upstream MUST be carried as explicit downstream patches — never committed directly into `downstream/main`. New downstream-only workflows (for example downstream CI covering `downstream/` or `docs/`) belong to `downstream/main` and are not upstream patches.
 19. **Every adopted external change MUST record provenance** (origin, PR URL, author, original commit SHA, upstream status at adoption, validation) and MUST be independently reviewed and tested. Preserve original Git authorship when possible.
 20. **Once adopted, downstream owns maintenance** for that change until it is removed or superseded. When official upstream later includes an equivalent change, retire the carried downstream patch instead of keeping a duplicate.
 
@@ -110,7 +110,7 @@ A clean mirror of upstream `SharzyL/pastebin-worker:goshujin`.
 
 Rules:
 
-- MUST remain identical to official upstream at all times;
+- MUST contain only commits that exist in official upstream (no downstream-owned commits); temporarily lagging behind the newest upstream commit between syncs is expected and is not uncleanliness;
 - no locally adopted PRs;
 - no dependency updates not merged upstream;
 - no Feishu code;
@@ -194,7 +194,7 @@ pinned upstream commit
 The downstream is actively curated, not a passive mirror. An upstream change is not blocked merely because the official maintainer has not merged it.
 
 1. Candidate changes MAY come from open upstream PRs, closed-but-unmerged PRs, abandoned PRs, third-party contributor fixes, upstream Dependabot PRs, or downstream-identified fixes.
-2. Every candidate MUST be independently evaluated before adoption: correctness, compatibility with the currently pinned upstream SHA, tests, regression risk, API/behavior changes, security implications, maintenance burden, and interaction with the existing downstream patch stack.
+2. Every candidate MUST be independently evaluated before adoption: correctness, compatibility with the currently pinned upstream SHA, tests, regression risk, API/behavior changes, security implications, maintenance burden, license/IP compatibility (the source license must permit adoption), and interaction with the existing downstream patch stack.
 3. Upstream PR status (open/closed/rejected/ignored/unmerged) MUST NOT be treated as evidence that the code is good or bad.
 4. Adoption MUST follow the normal patch path: dedicated `patch/<id>` branch from the exact pinned upstream SHA → development → tests → review → export with `git format-patch` → add to the ordered `downstream/patches/series`.
 5. Do NOT directly merge arbitrary upstream PR branches or external branches into `downstream/main`.

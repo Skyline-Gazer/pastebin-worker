@@ -15,7 +15,7 @@ Do not make production reproducibility depend on the current head of a moving pa
 
 ### `upstream-sync`
 
-Clean mirror of upstream `goshujin`. It MUST remain identical to official upstream at all times.
+Clean mirror of upstream `goshujin`. It MUST contain only commits that exist in official upstream; it may temporarily lag behind the newest upstream commit between syncs. Updates MUST fast-forward to an official upstream commit only.
 
 Rules:
 
@@ -176,7 +176,7 @@ Rules:
 
 - Candidates MAY include open upstream PRs, closed-but-unmerged PRs, abandoned PRs, third-party fixes, and upstream Dependabot PRs. Upstream PR status is not quality evidence.
 - Do NOT directly merge arbitrary upstream/external PR branches into `downstream/main`. They must be re-developed or cherry-picked onto a dedicated `patch/<id>` branch from the pinned upstream base, reviewed, tested, and exported.
-- Dependency updates to upstream-owned files (`package.json`, `pnpm-lock.yaml`, `.github/workflows/*`, upstream `frontend/*`, `worker/*`, `shared/*`) that are not merged upstream MUST be carried as patches, never committed directly into `downstream/main`.
+- Dependency updates to upstream-owned files (`package.json`, `pnpm-lock.yaml`, upstream `frontend/*`, `worker/*`, `shared/*`) and modifications to workflows that already exist upstream (e.g. `.github/workflows/*`) that are not merged upstream MUST be carried as patches, never committed directly into `downstream/main`. New downstream-only workflows (downstream CI covering `downstream/` or `docs/`) belong directly to `downstream/main`.
 - Dependencies belonging only to downstream-owned code (`downstream/addons/feishu/`, downstream tooling) MAY merge into `downstream/main` through normal PRs.
 - Every adopted change MUST preserve provenance (origin, PR URL/number, original author and commit SHA(s), upstream status at adoption, adoption date) and record validation; unknown fields are marked `unknown` / `not available`.
 - Once adopted, the downstream owns maintenance. When official upstream later includes an equivalent change, retire the carried patch (see the lifecycle in `PATCH_AND_UPSTREAM.md` §3).

@@ -47,6 +47,7 @@ This is the canonical TDD-evidence specification. `docs/CHANGE_CONTEXT_AND_REVIE
 
 Required:
 
+<!-- prettier-ignore -->
 ```markdown
 - [ ] unchecked
 - [x] checked

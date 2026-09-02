@@ -73,13 +73,13 @@ Content-Type: application/json
 or:
 
 ```json
-{"action":"archive_expiring"}
+{ "action": "archive_expiring" }
 ```
 
 or:
 
 ```json
-{"action":"delete"}
+{ "action": "delete" }
 ```
 
 The backend owns any required Markdown source update for the managed task plus lifecycle/upstream mutation.

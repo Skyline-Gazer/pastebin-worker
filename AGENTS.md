@@ -84,13 +84,17 @@ Do not restructure upstream solely to make downstream code cleaner.
 Forbidden upstream patch logic:
 
 ```ts
-if (source === "feishu") { /* special behavior */ }
+if (source === "feishu") {
+  /* special behavior */
+}
 ```
 
 Forbidden upstream patch logic:
 
 ```ts
-if (content.includes("- [x]")) { /* expire Paste */ }
+if (content.includes("- [x]")) {
+  /* expire Paste */
+}
 ```
 
 Acceptable generic behavior:
@@ -459,6 +463,7 @@ Normal Add-on view renders GFM rather than upstream `/d/<name>` source view.
 
 Required behavior:
 
+<!-- prettier-ignore -->
 ```markdown
 - [ ] task
 - [x] completed

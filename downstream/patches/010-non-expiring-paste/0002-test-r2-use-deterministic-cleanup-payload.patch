@@ -1,0 +1,26 @@
+From f579eea03f6d1e1717eae35870f485f8a2e0332e Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 2 Sep 2026 17:18:31 +0800
+Subject: [PATCH 2/3] test(r2): use deterministic cleanup payload
+
+---
+ worker/test/r2.spec.ts | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/worker/test/r2.spec.ts b/worker/test/r2.spec.ts
+index 268a33bae8235562bab64780fd4d1ff321a41fe6..661e39e0213c141267e2649edfe64197eb2131d5 100644
+--- a/worker/test/r2.spec.ts
++++ b/worker/test/r2.spec.ts
+@@ -71,7 +71,8 @@ test("r2 schedule", async () => {
+ 
+ test("permanent R2 objects survive scheduled cleanup", async () => {
+   const ctx = createExecutionContext()
+-  const uploadResponse = await upload(ctx, { c: genRandomBlob(parseSize(env.R2_THRESHOLD)! * 2), e: "never" })
++  const payload = new Blob([new Uint8Array(parseSize(env.R2_THRESHOLD)! * 2)])
++  const uploadResponse = await upload(ctx, { c: payload, e: "never" })
+   await worker.scheduled(createScheduledController({ scheduledTime: new Date(2040, 0, 0) }), env, ctx)
+   await waitOnExecutionContext(ctx)
+   expect((await workerFetch(ctx, uploadResponse.url)).status).toStrictEqual(200)
+-- 
+2.50.1 (Apple Git-155)
+

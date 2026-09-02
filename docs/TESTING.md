@@ -47,10 +47,11 @@ This is the canonical TDD-evidence specification. `docs/CHANGE_CONTEXT_AND_REVIE
 
 Required:
 
+<!-- prettier-ignore -->
 ```markdown
 - [ ] unchecked
 - [x] checked
-- [x] uppercase checked
+- [X] uppercase checked
 ```
 
 Assert semantic checkbox DOM, not just text.

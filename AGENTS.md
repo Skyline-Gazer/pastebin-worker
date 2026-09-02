@@ -463,10 +463,11 @@ Normal Add-on view renders GFM rather than upstream `/d/<name>` source view.
 
 Required behavior:
 
+<!-- prettier-ignore -->
 ```markdown
 - [ ] task
 - [x] completed
-- [x] completed
+- [X] completed
 ```
 
 renders as interactive task checkboxes.

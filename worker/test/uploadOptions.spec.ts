@@ -52,6 +52,8 @@ test("expire with option e", async () => {
   await testExpireParse("100h", 360000)
   await testExpireParse("1d", 86400)
   await testExpireParse("100d", maxExpirationSeconds) // longer expiration will be clipped to 30d
+  await testExpireParse("max", maxExpirationSeconds)
+  await testExpireParse("never", null)
   await testExpireParse("100  m", 6000)
   await testExpireParse("", defaultExpirationSeconds)
 

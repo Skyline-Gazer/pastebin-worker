@@ -8,13 +8,13 @@ const PASTE_EXPIRE_SPECIFIED_MIN = 70
 // TODO: allow admin to upload permanent paste
 // TODO: add filename length check
 export interface PasteMetadata {
-  schemaVersion: 1
+  schemaVersion: 2
   location: PasteLocation // new field on V1
   passwd: string
 
   lastModifiedAtUnix: number
   createdAtUnix: number
-  willExpireAtUnix: number
+  willExpireAtUnix: number | null
 
   accessCounter: number // a counter representing how frequent it is accessed, to administration usage
   sizeBytes: number
@@ -30,7 +30,7 @@ interface PasteMetadataInStorage {
 
   lastModifiedAtUnix: number
   createdAtUnix: number
-  willExpireAtUnix: number
+  willExpireAtUnix: number | null
 
   accessCounter?: number
   sizeBytes?: number
@@ -43,7 +43,7 @@ export function metaResponseFromMetadata(metadata: PasteMetadata): MetaResponse 
   return {
     lastModifiedAt: new Date(metadata.lastModifiedAtUnix * 1000).toISOString(),
     createdAt: new Date(metadata.createdAtUnix * 1000).toISOString(),
-    expireAt: new Date(metadata.willExpireAtUnix * 1000).toISOString(),
+    expireAt: metadata.willExpireAtUnix === null ? null : new Date(metadata.willExpireAtUnix * 1000).toISOString(),
     sizeBytes: metadata.sizeBytes,
     location: metadata.location,
     filename: metadata.filename,
@@ -52,9 +52,9 @@ export function metaResponseFromMetadata(metadata: PasteMetadata): MetaResponse 
   }
 }
 
-function migratePasteMetadata(original: PasteMetadataInStorage): PasteMetadata {
+export function migratePasteMetadata(original: PasteMetadataInStorage): PasteMetadata {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     location: original.location || "KV",
     passwd: original.passwd,
 
@@ -70,6 +70,10 @@ function migratePasteMetadata(original: PasteMetadataInStorage): PasteMetadata {
   }
 }
 
+export function isExpired(metadata: Pick<PasteMetadata, "willExpireAtUnix">, nowUnix: number): boolean {
+  return metadata.willExpireAtUnix !== null && metadata.willExpireAtUnix < nowUnix
+}
+
 export interface PasteWithMetadata {
   paste: ArrayBuffer | ReadableStream
   metadata: PasteMetadata
@@ -81,10 +85,7 @@ async function updateAccessCounter(env: Env, short: string, value: ArrayBuffer, 
   if (Math.random() < 0.01) {
     metadata.accessCounter += 1
     try {
-      await env.PB.put(short, value, {
-        metadata: metadata,
-        expiration: metadata.willExpireAtUnix,
-      })
+      await env.PB.put(short, value, metadata.willExpireAtUnix === null ? { metadata } : { metadata, expiration: metadata.willExpireAtUnix })
     } catch (e) {
       // ignore rate limit message
       if (!(e as Error).message.includes("KV PUT failed: 429 Too Many Requests")) {
@@ -104,7 +105,7 @@ export async function getPaste(env: Env, short: string, ctx: ExecutionContext): 
   } else {
     workerAssert(item.metadata != null, `paste of name '${short}' has no metadata`)
     const metadata = migratePasteMetadata(item.metadata)
-    const expired = metadata.willExpireAtUnix < new Date().getTime() / 1000
+    const expired = isExpired(metadata, new Date().getTime() / 1000)
 
     ctx.waitUntil(
       (async () => {
@@ -143,7 +144,7 @@ export async function getPasteMetadata(env: Env, short: string): Promise<PasteMe
   } else if (item.metadata === null) {
     throw new WorkerError(500, `paste of name '${short}' has no metadata`)
   } else {
-    if (item.metadata.willExpireAtUnix < new Date().getTime() / 1000) {
+    if (isExpired(migratePasteMetadata(item.metadata), new Date().getTime() / 1000)) {
       return null
     }
     return migratePasteMetadata(item.metadata)
@@ -153,7 +154,8 @@ export async function getPasteMetadata(env: Env, short: string): Promise<PasteMe
 interface WriteOptions {
   now: Date
   contentLength: number
-  expirationSeconds: number
+  expirationSeconds: number | null
+  retentionFromMPU?: number | null
   passwd: string
   filename?: string
   highlightLanguage?: string
@@ -168,9 +170,13 @@ export async function updatePaste(
   originalMetadata: PasteMetadata,
   options: WriteOptions,
 ): Promise<PasteMetadata> {
-  const expirationUnix = dateToUnix(options.now) + options.expirationSeconds
-  const expirationUnixSpecified =
-    dateToUnix(options.now) + Math.max(options.expirationSeconds, PASTE_EXPIRE_SPECIFIED_MIN)
+  const expirationUnix =
+    options.retentionFromMPU !== undefined
+      ? options.retentionFromMPU
+      : options.expirationSeconds === null
+        ? null
+        : dateToUnix(options.now) + options.expirationSeconds
+  const expirationUnixSpecified = expirationUnix === null ? null : dateToUnix(options.now) + Math.max(options.expirationSeconds!, PASTE_EXPIRE_SPECIFIED_MIN)
 
   // if the paste is previous on R2, we keep it on R2 to avoid losing reference to it
   const newLocation =
@@ -180,12 +186,12 @@ export async function updatePaste(
 
   if (newLocation === "R2" && !options.isMPUComplete) {
     await env.R2.put(pasteName, content, {
-      customMetadata: { willExpireAtUnix: String(expirationUnix) },
+      customMetadata: expirationUnix === null ? { permanent: "1" } : { willExpireAtUnix: String(expirationUnix) },
     })
   }
 
   const metadata: PasteMetadata = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     location: newLocation,
     filename: options.filename,
     highlightLanguage: options.highlightLanguage,
@@ -199,10 +205,7 @@ export async function updatePaste(
     encryptionScheme: options.encryptionScheme,
   }
 
-  await env.PB.put(pasteName, newLocation === "R2" ? "" : content, {
-    metadata: metadata,
-    expiration: expirationUnixSpecified,
-  })
+  await env.PB.put(pasteName, newLocation === "R2" ? "" : content, expirationUnixSpecified === null ? { metadata } : { metadata, expiration: expirationUnixSpecified })
 
   return metadata
 }
@@ -213,20 +216,24 @@ export async function createPaste(
   content: ArrayBuffer | ReadableStream,
   options: WriteOptions,
 ): Promise<PasteMetadata> {
-  const expirationUnix = dateToUnix(options.now) + options.expirationSeconds
+  const expirationUnix =
+    options.retentionFromMPU !== undefined
+      ? options.retentionFromMPU
+      : options.expirationSeconds === null
+        ? null
+        : dateToUnix(options.now) + options.expirationSeconds
 
-  const expirationUnixSpecified =
-    dateToUnix(options.now) + Math.max(options.expirationSeconds, PASTE_EXPIRE_SPECIFIED_MIN)
+  const expirationUnixSpecified = expirationUnix === null ? null : dateToUnix(options.now) + Math.max(options.expirationSeconds!, PASTE_EXPIRE_SPECIFIED_MIN)
 
   const location = options.isMPUComplete || options.contentLength > parseSize(env.R2_THRESHOLD)! ? "R2" : "KV"
   if (location === "R2" && !options.isMPUComplete) {
     await env.R2.put(pasteName, content, {
-      customMetadata: { willExpireAtUnix: String(expirationUnix) },
+      customMetadata: expirationUnix === null ? { permanent: "1" } : { willExpireAtUnix: String(expirationUnix) },
     })
   }
 
   const metadata: PasteMetadata = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     location: location,
     filename: options.filename,
     highlightLanguage: options.highlightLanguage,
@@ -240,10 +247,7 @@ export async function createPaste(
     encryptionScheme: options.encryptionScheme,
   }
 
-  await env.PB.put(pasteName, location === "R2" ? "" : content, {
-    metadata: metadata,
-    expiration: expirationUnixSpecified,
-  })
+  await env.PB.put(pasteName, location === "R2" ? "" : content, expirationUnixSpecified === null ? { metadata } : { metadata, expiration: expirationUnixSpecified })
 
   return metadata
 }
@@ -255,7 +259,7 @@ export async function pasteNameAvailable(env: Env, pasteName: string): Promise<b
   } else if (item.metadata === null) {
     throw new WorkerError(500, `paste of name '${pasteName}' has no metadata`)
   } else {
-    return item.metadata.willExpireAtUnix < new Date().getTime() / 1000
+    return isExpired(migratePasteMetadata(item.metadata), new Date().getTime() / 1000)
   }
 }
 
@@ -279,6 +283,7 @@ export async function cleanExpiredInR2(env: Env, controller: ScheduledController
     // separate objects with and without custom metadata
     const needKvLookup: R2Object[] = []
     for (const obj of listed.objects) {
+      if (obj.customMetadata?.permanent === "1") continue
       const expStr = obj.customMetadata?.willExpireAtUnix
       if (expStr) {
         if (Number(expStr) < nowUnix) {
@@ -293,7 +298,7 @@ export async function cleanExpiredInR2(env: Env, controller: ScheduledController
     const kvResults = await Promise.all(needKvLookup.map((obj) => getPasteMetadata(env, obj.key)))
     for (let i = 0; i < needKvLookup.length; i++) {
       const kvMeta = kvResults[i]
-      if (kvMeta === null || kvMeta.willExpireAtUnix < nowUnix) {
+      if (kvMeta === null || isExpired(kvMeta, nowUnix)) {
         toDelete.push(needKvLookup[i].key)
       }
     }

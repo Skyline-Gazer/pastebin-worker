@@ -2,13 +2,15 @@ import type { MPUCreateResponse } from "../../shared/interfaces.js"
 import { NAME_REGEX, PASTE_NAME_LEN, PRIVATE_PASTE_NAME_LEN } from "../../shared/constants.js"
 import { dateToUnix, genRandStr, WorkerError, timingSafeEqual } from "../common.js"
 import { getPasteMetadata, pasteNameAvailable } from "../storage/storage.js"
-import { parseExpiration, parseSize } from "../../shared/parsers.js"
+import { parseExpiration, parseExpirationSpec, parseSize } from "../../shared/parsers.js"
 
 function mpuExpireMetadata(url: URL, env: Env): Record<string, string> {
-  const expireParam = url.searchParams.get("e")
-  const expirationSeconds = expireParam ? parseExpiration(expireParam) : null
+  const expireParam = url.searchParams.get("e") || env.DEFAULT_EXPIRATION
+  const expirationSpec = parseExpirationSpec(expireParam)
+  if (expirationSpec === null) throw new WorkerError(400, `‘${expireParam}’ is not a valid expiration specification`)
   const maxExpiration = parseExpiration(env.MAX_EXPIRATION)!
-  const effectiveExpiration = expirationSeconds ? Math.min(expirationSeconds, maxExpiration) : maxExpiration
+  if (expirationSpec.kind === "never") return { permanent: "1" }
+  const effectiveExpiration = expirationSpec.kind === "max" ? maxExpiration : Math.min(expirationSpec.seconds, maxExpiration)
   const willExpireAtUnix = dateToUnix(new Date()) + effectiveExpiration
   return { willExpireAtUnix: String(willExpireAtUnix) }
 }

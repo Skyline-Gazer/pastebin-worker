@@ -81,7 +81,7 @@ The response body is a JSON object, for example:
 Explanation of the fields:
 
 - `lastModifiedAt`: String. An ISO String representing the last modification time of the paste.
-- `expireAt`: String. An ISO String representing when the paste will expire.
+- `expireAt`: String or `null`. An ISO string representing when the paste will expire, or `null` for a permanent paste.
 - `createdAt`: String. An ISO String representing when the paste was created.
 - `sizeBytes`: Integer. The size of the content of the paste in bytes.
 - `filename`: Optional string. The file name of the paste.
@@ -146,7 +146,7 @@ Upload your paste. It accept parameters in form-data:
 
 - `c`: mandatory. The **content** of your paste, text or binary. The maximum allowed size is set by the deployment (`R2_MAX_ALLOWED`). The `filename` in its `Content-Disposition` will be present when fetching the paste. Note that a single Cloudflare Workers request body is capped at 100 MB — request bodies larger than that are rejected by the platform with HTTP `413 Payload Too Large` before the worker is invoked. For larger files, use the official web UI at `/` or the [`pb`](https://github.com/SharzyL/pastebin-worker/tree/goshujin/scripts) CLI, which transparently chunk the content via the multipart-upload endpoints.
 
-- `e`: optional. The **expiration** time of the paste. After this period of time, the paste is permanently deleted. It should be an integer or a float point number suffixed with an optional unit (seconds by default). Supported units: `s` (seconds), `m` (minutes), `h` (hours), `d` (days). For example, `360.25` means 360.25 seconds, and `25d` means 25 days. The actual expiration might be shorter than specified expiration due to limitations imposed by the administrator. If unspecified, a default expiration time setting is used.
+- `e`: optional. The **expiration** time of the paste. Numeric values are an integer or float with an optional unit (`s`, `m`, `h`, `d`; seconds by default). `never` creates a permanent paste and `max` uses the deployment maximum. Numeric values above the maximum are clamped as before. If unspecified or empty, the deployment default is used. Permanent responses use `expireAt: null` and `expirationSeconds: null`.
 
 - `s`: optional. The **password** which allows you to modify and delete the paste. If not specified, the worker will generate a random string as password.
 
@@ -180,7 +180,7 @@ Explanation of the fields:
 
 - `url`: String. The URL to fetch the paste. When using a customized name, it looks like `https://shz.al/~myname`.
 - `manageUrl`: String. The URL to update and delete the paste, which is `url` suffixed by `:` and the password.
-- `expirationSeconds`: Number. The expiration seconds.
+- `expirationSeconds`: Number or `null`. The expiration seconds, or `null` for a permanent paste.
 
 The remaining fields mirror the [`GET /m/<name>`](#get-mname) metadata response: `lastModifiedAt`, `createdAt`, `expireAt`, `sizeBytes`, `location`, and the optional `filename`, `highlightLanguage`, `encryptionScheme`.
 
@@ -196,6 +196,14 @@ If error occurs, the worker returns status code different from `200`:
 Update your paste of the name `<name>` and password `<passwd>`. It accepts all the same form-data fields as `POST` (`c`, `e`, `s`, `lang`, `encryption-scheme`) **except** `n` (the name cannot be changed; supplying it returns `400`) and `p` (silently ignored). When `e` is supplied, the expiration is recalculated from the update time.
 
 The returning of `PUT` method is the same as `POST` method.
+
+### Multipart uploads
+
+Multipart clients select retention with `e` on `/mpu/create` or `/mpu/create-update`.
+That create-stage choice is authoritative: it is recorded with the multipart
+object and is used when `/mpu/complete` creates the paste. Supplying a different
+`e` at completion does not override it. Omitted `e` uses the deployment default;
+`never` and `max` have the same meanings as normal uploads.
 
 If error occurs, the worker returns status code different from `200`:
 

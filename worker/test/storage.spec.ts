@@ -9,6 +9,14 @@ beforeEach(vi.useFakeTimers)
 afterEach(vi.useRealTimers)
 
 describe("getPaste / getPasteMetadata expiration", () => {
+  it("keeps a permanent paste readable with nullable expiration metadata", async () => {
+    const ctx = createExecutionContext()
+    const seeded = await upload(ctx, { c: new Blob(["forever"]), e: "never" })
+    expect(seeded.expireAt).toBeNull()
+    expect(seeded.expirationSeconds).toBeNull()
+    vi.setSystemTime(new Date(2090, 0, 1))
+    expect((await workerFetch(ctx, seeded.url)).status).toStrictEqual(200)
+  })
   it("returns 404 once a paste has expired and removes it from KV", async () => {
     const ctx = createExecutionContext()
 

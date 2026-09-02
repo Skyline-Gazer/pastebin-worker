@@ -71,7 +71,8 @@ test("r2 schedule", async () => {
 
 test("permanent R2 objects survive scheduled cleanup", async () => {
   const ctx = createExecutionContext()
-  const uploadResponse = await upload(ctx, { c: genRandomBlob(parseSize(env.R2_THRESHOLD)! * 2), e: "never" })
+  const payload = new Blob([new Uint8Array(parseSize(env.R2_THRESHOLD)! * 2)])
+  const uploadResponse = await upload(ctx, { c: payload, e: "never" })
   await worker.scheduled(createScheduledController({ scheduledTime: new Date(2040, 0, 0) }), env, ctx)
   await waitOnExecutionContext(ctx)
   expect((await workerFetch(ctx, uploadResponse.url)).status).toStrictEqual(200)

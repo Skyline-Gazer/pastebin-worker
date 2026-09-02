@@ -1,0 +1,659 @@
+From adb0fa71b2c4dfc7fc05c7debadb146282341ab3 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 2 Sep 2026 16:54:44 +0800
+Subject: [PATCH 1/3] feat(expiration): support non-expiring pastes
+
+Context: add the approved generic e=never and e=max expiration capability.\n\nExpected behavior: permanent pastes use null expiration metadata, omit KV TTLs, and use an explicit R2 permanent marker; MPU completion derives retention from create-stage metadata.\n\nAcceptance criteria: preserve timed parsing and clamping, return nullable expiration fields for permanent pastes, and keep cleanup/read paths null-aware.\n\nConstraints: upstream-owned generic code only; no downstream concepts.\n\nValidation: pnpm exec vitest run; pnpm typecheck; pnpm lint; pnpm build.\n\nDocs: doc/api.md, doc/curl.md.\n\nUpstream base: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6\nPatch ID:      010-non-expiring-paste\nDependencies:  none\n\nRefs: https://github.com/Skyline-Gazer/pastebin-worker/issues/3\nhttps://github.com/Skyline-Gazer/pastebin-worker/issues/4
+---
+ doc/api.md                            | 14 ++++--
+ doc/curl.md                           |  7 ++-
+ frontend/components/UploadedPanel.tsx |  2 +-
+ frontend/test/index.spec.tsx          | 19 +++++++
+ shared/interfaces.ts                  |  4 +-
+ shared/parsers.ts                     | 11 +++++
+ shared/test/parser.spec.ts            |  8 +++
+ shared/test/uploadPaste.spec.ts       |  8 +++
+ shared/verify.ts                      |  8 +--
+ worker/handlers/handleMPU.ts          | 10 ++--
+ worker/handlers/handleWrite.ts        | 28 +++++++++--
+ worker/storage/storage.ts             | 71 ++++++++++++++-------------
+ worker/test/r2.spec.ts                |  8 +++
+ worker/test/roles.spec.ts             |  8 ++-
+ worker/test/storage.spec.ts           |  8 +++
+ worker/test/uploadOptions.spec.ts     |  2 +
+ 16 files changed, 162 insertions(+), 54 deletions(-)
+
+diff --git a/doc/api.md b/doc/api.md
+index c9d2505a6bb1a7e381b529209dc74b19f1881f75..bfa71d85c54795e7a2245cdc545dbedec5bb39a7 100644
+--- a/doc/api.md
++++ b/doc/api.md
+@@ -81,7 +81,7 @@ The response body is a JSON object, for example:
+ Explanation of the fields:
+ 
+ - `lastModifiedAt`: String. An ISO String representing the last modification time of the paste.
+-- `expireAt`: String. An ISO String representing when the paste will expire.
++- `expireAt`: String or `null`. An ISO string representing when the paste will expire, or `null` for a permanent paste.
+ - `createdAt`: String. An ISO String representing when the paste was created.
+ - `sizeBytes`: Integer. The size of the content of the paste in bytes.
+ - `filename`: Optional string. The file name of the paste.
+@@ -146,7 +146,7 @@ Upload your paste. It accept parameters in form-data:
+ 
+ - `c`: mandatory. The **content** of your paste, text or binary. The maximum allowed size is set by the deployment (`R2_MAX_ALLOWED`). The `filename` in its `Content-Disposition` will be present when fetching the paste. Note that a single Cloudflare Workers request body is capped at 100 MB — request bodies larger than that are rejected by the platform with HTTP `413 Payload Too Large` before the worker is invoked. For larger files, use the official web UI at `/` or the [`pb`](https://github.com/SharzyL/pastebin-worker/tree/goshujin/scripts) CLI, which transparently chunk the content via the multipart-upload endpoints.
+ 
+-- `e`: optional. The **expiration** time of the paste. After this period of time, the paste is permanently deleted. It should be an integer or a float point number suffixed with an optional unit (seconds by default). Supported units: `s` (seconds), `m` (minutes), `h` (hours), `d` (days). For example, `360.25` means 360.25 seconds, and `25d` means 25 days. The actual expiration might be shorter than specified expiration due to limitations imposed by the administrator. If unspecified, a default expiration time setting is used.
++- `e`: optional. The **expiration** time of the paste. Numeric values are an integer or float with an optional unit (`s`, `m`, `h`, `d`; seconds by default). `never` creates a permanent paste and `max` uses the deployment maximum. Numeric values above the maximum are clamped as before. If unspecified or empty, the deployment default is used. Permanent responses use `expireAt: null` and `expirationSeconds: null`.
+ 
+ - `s`: optional. The **password** which allows you to modify and delete the paste. If not specified, the worker will generate a random string as password.
+ 
+@@ -180,7 +180,7 @@ Explanation of the fields:
+ 
+ - `url`: String. The URL to fetch the paste. When using a customized name, it looks like `https://shz.al/~myname`.
+ - `manageUrl`: String. The URL to update and delete the paste, which is `url` suffixed by `:` and the password.
+-- `expirationSeconds`: Number. The expiration seconds.
++- `expirationSeconds`: Number or `null`. The expiration seconds, or `null` for a permanent paste.
+ 
+ The remaining fields mirror the [`GET /m/<name>`](#get-mname) metadata response: `lastModifiedAt`, `createdAt`, `expireAt`, `sizeBytes`, `location`, and the optional `filename`, `highlightLanguage`, `encryptionScheme`.
+ 
+@@ -197,6 +197,14 @@ Update your paste of the name `<name>` and password `<passwd>`. It accepts all t
+ 
+ The returning of `PUT` method is the same as `POST` method.
+ 
++### Multipart uploads
++
++Multipart clients select retention with `e` on `/mpu/create` or `/mpu/create-update`.
++That create-stage choice is authoritative: it is recorded with the multipart
++object and is used when `/mpu/complete` creates the paste. Supplying a different
++`e` at completion does not override it. Omitted `e` uses the deployment default;
++`never` and `max` have the same meanings as normal uploads.
++
+ If error occurs, the worker returns status code different from `200`:
+ 
+ - `400`: your request is in bad format.
+diff --git a/doc/curl.md b/doc/curl.md
+index ac43379dbefaf181f6ece363b4f21d6b36392fee..392dde97dba60278097cc3581777dbacee474fb2 100644
+--- a/doc/curl.md
++++ b/doc/curl.md
+@@ -11,7 +11,8 @@ full HTTP API reference, see [api.md]({{BASE_URL}}/doc/api).
+   the paste.
+ - `<expire>` — an expiration period: an integer or float, optionally suffixed
+   with `s` (seconds, default), `m` (minutes), `h` (hours), or `d` (days). For
+-  example, `300`, `30m`, `25d`.
++  example, `300`, `30m`, `25d`. Use `never` for a permanent paste or `max` for
++  the deployment maximum.
+ 
+ ## Uploading
+ 
+@@ -51,10 +52,14 @@ $ cat panty.jpg | curl -Fc=@- {{BASE_URL}}
+ $ curl -Fc='kawaii' -Fe=300 {{BASE_URL}}      # 300 seconds
+ $ curl -Fc='kawaii' -Fe=2h  {{BASE_URL}}      # 2 hours
+ $ curl -Fc=@big.bin -Fe=30d {{BASE_URL}}      # 30 days
++$ curl -Fc='keep this' -Fe=never {{BASE_URL}} # no expiration
++$ curl -Fc='longest allowed' -Fe=max {{BASE_URL}}
+ ```
+ 
+ If `e` is not specified, the default expiration of the deployment is used. The
+ maximum expiration is also enforced by the deployment.
++For permanent pastes, the response fields `expireAt` and `expirationSeconds`
++are both `null`.
+ 
+ ### Use a custom name
+ 
+diff --git a/frontend/components/UploadedPanel.tsx b/frontend/components/UploadedPanel.tsx
+index d97f27726e4af041864054f1622b2b71d67a52f3..921c7d0c2349082d2778dc07052c1d89c00971c4 100644
+--- a/frontend/components/UploadedPanel.tsx
++++ b/frontend/components/UploadedPanel.tsx
+@@ -200,7 +200,7 @@ export function UploadedPanel({
+                 pasteResponse.manageUrl,
+                 <InfoTooltip>Use this URL to update or delete the paste later. Keep it private.</InfoTooltip>,
+               )}
+-              <Input {...inputProps} label={"Expiration"} value={new Date(pasteResponse.expireAt).toLocaleString()} />
++              <Input {...inputProps} label={"Expiration"} value={pasteResponse.expireAt === null ? "Never" : new Date(pasteResponse.expireAt).toLocaleString()} />
+ 
+               <button
+                 type="button"
+diff --git a/frontend/test/index.spec.tsx b/frontend/test/index.spec.tsx
+index 7f1e698b32acaed4964e1090075e034e5de53beb..7548c67251e3c4f1bf6b2d8cbe596411c31595f6 100644
+--- a/frontend/test/index.spec.tsx
++++ b/frontend/test/index.spec.tsx
+@@ -81,6 +81,25 @@ describe("Pastebin", () => {
+     expect((manageUrlShow as HTMLInputElement).value).toStrictEqual(mockedPasteUpload.manageUrl)
+   })
+ 
++  it("renders a permanent upload expiration as Never", async () => {
++    const originalExpireAt = mockedPasteUpload.expireAt
++    const originalSeconds = mockedPasteUpload.expirationSeconds
++    mockedPasteUpload.expireAt = null
++    mockedPasteUpload.expirationSeconds = null
++    try {
++      render(<PasteBin config={__WRANGLER_CONFIG__} />)
++      await userEvent.type(screen.getByRole("textbox", { name: "Paste editor" }), "permanent")
++      await userEvent.click(screen.getByRole("button", { name: "Upload" }))
++      await screen.findByRole("textbox", { name: "Raw URL" })
++      const expirations = screen.getAllByRole("textbox", { name: "Expiration" })
++      const expiration = expirations[expirations.length - 1]
++      expect((expiration as HTMLInputElement).value).toStrictEqual("Never")
++    } finally {
++      mockedPasteUpload.expireAt = originalExpireAt
++      mockedPasteUpload.expirationSeconds = originalSeconds
++    }
++  })
++
+   it("refuse illegal settings", async () => {
+     render(<PasteBin config={__WRANGLER_CONFIG__} />)
+     // due to bugs https://github.com/adobe/react-spectrum/discussions/8037, we need to use duplicated name here
+diff --git a/shared/interfaces.ts b/shared/interfaces.ts
+index b0d8610cb6f32b5a2f2a2444e0eb72798075e5a2..b73d68322116f10144dc1ded286961cf2cb2c100 100644
+--- a/shared/interfaces.ts
++++ b/shared/interfaces.ts
+@@ -5,7 +5,7 @@ export type PasteLocation = "KV" | "R2"
+ export interface MetaResponse {
+   lastModifiedAt: string
+   createdAt: string
+-  expireAt: string
++  expireAt: string | null
+   sizeBytes: number
+   location: PasteLocation
+   filename?: string
+@@ -16,7 +16,7 @@ export interface MetaResponse {
+ export interface PasteResponse extends MetaResponse {
+   url: string
+   manageUrl: string
+-  expirationSeconds: number
++  expirationSeconds: number | null
+ }
+ 
+ export interface MPUCreateResponse {
+diff --git a/shared/parsers.ts b/shared/parsers.ts
+index adfd9daf1e00fef44dc48d6eabacceb78a60ccfb..286a0613d73562ccaaf606afb79aedf8309142a5 100644
+--- a/shared/parsers.ts
++++ b/shared/parsers.ts
+@@ -36,6 +36,17 @@ export function parseExpiration(expirationStr: string): number | null {
+   return expirationSeconds
+ }
+ 
++export type ExpirationSpec = { kind: "never" } | { kind: "max" } | { kind: "seconds"; seconds: number }
++
++/** Parse only the lexical expiration form; policy belongs to the caller. */
++export function parseExpirationSpec(expirationStr: string): ExpirationSpec | null {
++  const normalized = expirationStr.trim()
++  if (normalized === "never") return { kind: "never" }
++  if (normalized === "max") return { kind: "max" }
++  const seconds = parseExpiration(normalized)
++  return seconds === null ? null : { kind: "seconds", seconds }
++}
++
+ export function parseExpirationReadable(expirationStr: string): string | null {
+   expirationStr = expirationStr.trim()
+   const EXPIRE_REGEX = /^\d+(\.\d+)?\s*[smhd]?$/
+diff --git a/shared/test/parser.spec.ts b/shared/test/parser.spec.ts
+index 37d2fa94e91d3472c96aa304b8fc088bf2093233..16fde28b099a4d9ba4e4e19bb79429f8313519e3 100644
+--- a/shared/test/parser.spec.ts
++++ b/shared/test/parser.spec.ts
+@@ -5,6 +5,7 @@ import {
+   ParseError,
+   parseFilenameFromContentDisposition,
+   parseExpiration,
++  parseExpirationSpec,
+   parseExpirationReadable,
+   parseSize,
+ } from "../parsers.js"
+@@ -130,3 +131,10 @@ test("parseExpiration", () => {
+     expect(readable, `checking readable expiration of ${input}`).toStrictEqual(readableParsed)
+   }
+ })
++
++test("parseExpirationSpec keeps lexical expiration forms distinct", () => {
++  expect(parseExpirationSpec("never")).toStrictEqual({ kind: "never" })
++  expect(parseExpirationSpec(" max ")).toStrictEqual({ kind: "max" })
++  expect(parseExpirationSpec("1.5h")).toStrictEqual({ kind: "seconds", seconds: 5400 })
++  expect(parseExpirationSpec("invalid")).toBeNull()
++})
+diff --git a/shared/test/uploadPaste.spec.ts b/shared/test/uploadPaste.spec.ts
+index 51c7cbf49a07e211dcf3121600bcb3bde3d3ed57..6c12c70fda9a007ecb2f2a55207da3575adaf7b3 100644
+--- a/shared/test/uploadPaste.spec.ts
++++ b/shared/test/uploadPaste.spec.ts
+@@ -1,5 +1,6 @@
+ import { afterEach, describe, expect, it, vi } from "vitest"
+ import { UploadError, uploadMPU, uploadNormal } from "../uploadPaste.js"
++import { verifyExpiration } from "../verify.js"
+ 
+ const API_URL = "https://example.com"
+ 
+@@ -87,6 +88,13 @@ describe("UploadError", () => {
+   })
+ })
+ 
++describe("verifyExpiration", () => {
++  it("accepts generic permanent and max expiration forms", () => {
++    expect(verifyExpiration("never", 60)).toEqual([true, "Never expires"])
++    expect(verifyExpiration("max", 60)).toEqual([true, "Expires in maximum allowed duration"])
++  })
++})
++
+ describe("uploadNormal", () => {
+   it("POSTs to apiUrl on create and returns parsed json", async () => {
+     const calls = setupXhr(() => ({
+diff --git a/shared/verify.ts b/shared/verify.ts
+index f67620edb9a2ae377f12e4d8e369343c73d590c6..127f5ee058424de15f29f427203c64eb114f213d 100644
+--- a/shared/verify.ts
++++ b/shared/verify.ts
+@@ -1,5 +1,5 @@
+ import { MAX_PASSWD_LEN, MIN_PASSWD_LEN, NAME_REGEX } from "./constants.js"
+-import { parseExpiration, parseExpirationReadable } from "./parsers.js"
++import { parseExpirationReadable, parseExpirationSpec } from "./parsers.js"
+ 
+ export type VerifyResult = [ok: true, message: string] | [ok: false, error: string]
+ 
+@@ -30,11 +30,13 @@ export function verifyName(name: string): VerifyResult {
+ }
+ 
+ export function verifyExpiration(expiration: string, maxExpirationSeconds: number): VerifyResult {
+-  const parsed = parseExpiration(expiration)
++  const parsed = parseExpirationSpec(expiration)
+   if (parsed === null) {
+     return [false, `‘${expiration}’ is not a valid expiration specification`]
+   }
+-  if (parsed > maxExpirationSeconds) {
++  if (parsed.kind === "never") return [true, "Never expires"]
++  if (parsed.kind === "max") return [true, "Expires in maximum allowed duration"]
++  if (parsed.seconds > maxExpirationSeconds) {
+     return [false, `Exceed max expiration (${parseExpirationReadable(`${maxExpirationSeconds}s`)!})`]
+   }
+   return [true, `Expires in ${parseExpirationReadable(expiration)!}`]
+diff --git a/worker/handlers/handleMPU.ts b/worker/handlers/handleMPU.ts
+index cf1ab36f68d2be3fcd9c257a94ee367b6d6e7006..09d98c8a368f0d4c0368f393d40a0958f41676d7 100644
+--- a/worker/handlers/handleMPU.ts
++++ b/worker/handlers/handleMPU.ts
+@@ -2,13 +2,15 @@ import type { MPUCreateResponse } from "../../shared/interfaces.js"
+ import { NAME_REGEX, PASTE_NAME_LEN, PRIVATE_PASTE_NAME_LEN } from "../../shared/constants.js"
+ import { dateToUnix, genRandStr, WorkerError, timingSafeEqual } from "../common.js"
+ import { getPasteMetadata, pasteNameAvailable } from "../storage/storage.js"
+-import { parseExpiration, parseSize } from "../../shared/parsers.js"
++import { parseExpiration, parseExpirationSpec, parseSize } from "../../shared/parsers.js"
+ 
+ function mpuExpireMetadata(url: URL, env: Env): Record<string, string> {
+-  const expireParam = url.searchParams.get("e")
+-  const expirationSeconds = expireParam ? parseExpiration(expireParam) : null
++  const expireParam = url.searchParams.get("e") || env.DEFAULT_EXPIRATION
++  const expirationSpec = parseExpirationSpec(expireParam)
++  if (expirationSpec === null) throw new WorkerError(400, `‘${expireParam}’ is not a valid expiration specification`)
+   const maxExpiration = parseExpiration(env.MAX_EXPIRATION)!
+-  const effectiveExpiration = expirationSeconds ? Math.min(expirationSeconds, maxExpiration) : maxExpiration
++  if (expirationSpec.kind === "never") return { permanent: "1" }
++  const effectiveExpiration = expirationSpec.kind === "max" ? maxExpiration : Math.min(expirationSpec.seconds, maxExpiration)
+   const willExpireAtUnix = dateToUnix(new Date()) + effectiveExpiration
+   return { willExpireAtUnix: String(willExpireAtUnix) }
+ }
+diff --git a/worker/handlers/handleWrite.ts b/worker/handlers/handleWrite.ts
+index 083a6383608cd2a7824fd2c91586d9f8e1ef23a4..2cc10d7fe47759bb18f3e4b64d8169e7db4334d6 100644
+--- a/worker/handlers/handleWrite.ts
++++ b/worker/handlers/handleWrite.ts
+@@ -8,7 +8,7 @@ import {
+   updatePaste,
+ } from "../storage/storage.js"
+ import { DEFAULT_PASSWD_LEN, PASTE_NAME_LEN, PRIVATE_PASTE_NAME_LEN, PASSWD_SEP } from "../../shared/constants.js"
+-import { parsePath, parseSize, parseExpiration } from "../../shared/parsers.js"
++import { parsePath, parseSize, parseExpiration, parseExpirationSpec } from "../../shared/parsers.js"
+ import { verifyName, verifyPassword } from "../../shared/verify.js"
+ import type { PasteResponse } from "../../shared/interfaces.js"
+ import { MaxFileSizeExceededError, MultipartParseError, parseMultipartRequest } from "@mjackson/multipart-parser"
+@@ -119,13 +119,20 @@ export async function handlePostOrPut(
+   const uploadedParts = isMPUComplete ? (JSON.parse(contentAsString()) as R2UploadedPart[]) : undefined
+ 
+   // parse expiration
+-  let expirationSeconds = parseExpiration(expire)
+-  if (expirationSeconds === null) {
++  const expirationSpec = parseExpirationSpec(expire)
++  if (expirationSpec === null) {
+     throw new WorkerError(400, `‘${expire}’ is not a valid expiration specification`)
+   }
+   const maxExpiration = parseExpiration(env.MAX_EXPIRATION)!
+-  if (expirationSeconds > maxExpiration) {
+-    expirationSeconds = maxExpiration
++  let expirationSeconds = expirationSpec.kind === "never" ? null : expirationSpec.kind === "max" ? maxExpiration : Math.min(expirationSpec.seconds, maxExpiration)
++
++  function expirationFromCompletedMPU(object: R2Object): number | null {
++    if (object.customMetadata?.permanent === "1") return null
++    const expiresAt = object.customMetadata?.willExpireAtUnix
++    if (!expiresAt) throw new WorkerError(500, "completed multipart upload has no expiration metadata")
++    const expirationUnix = Number(expiresAt)
++    if (!Number.isFinite(expirationUnix)) throw new WorkerError(500, "completed multipart upload has invalid expiration metadata")
++    return expirationUnix
+   }
+ 
+   // check if password is legal
+@@ -158,6 +165,7 @@ export async function handlePostOrPut(
+   }
+ 
+   const now = new Date()
++  let retentionFromMPU: number | null | undefined
+   if (isPut) {
+     let pasteName: string | undefined
+     let password: string | undefined
+@@ -177,6 +185,10 @@ export async function handlePostOrPut(
+     }
+ 
+     const r2Object = isMPUComplete ? await handleMPUComplete(request, env, uploadedParts!) : undefined
++    if (r2Object) {
++      retentionFromMPU = expirationFromCompletedMPU(r2Object)
++      expirationSeconds = retentionFromMPU === null ? null : Math.max(0, Math.ceil(retentionFromMPU - now.getTime() / 1000))
++    }
+ 
+     const originalMetadata = await getPasteMetadata(env, pasteName)
+     if (originalMetadata === null) {
+@@ -191,6 +203,7 @@ export async function handlePostOrPut(
+     const newPasswd = passwdFromForm || originalMetadata.passwd
+     const newMetadata = await updatePaste(env, pasteName, content, originalMetadata, {
+       expirationSeconds,
++      retentionFromMPU,
+       now,
+       passwd: newPasswd,
+       contentLength: r2Object?.size || contentLength,
+@@ -226,10 +239,15 @@ export async function handlePostOrPut(
+     }
+ 
+     const r2Object = isMPUComplete ? await handleMPUComplete(request, env, uploadedParts!) : undefined
++    if (r2Object) {
++      retentionFromMPU = expirationFromCompletedMPU(r2Object)
++      expirationSeconds = retentionFromMPU === null ? null : Math.max(0, Math.ceil(retentionFromMPU - now.getTime() / 1000))
++    }
+ 
+     const password = passwdFromForm || genRandStr(DEFAULT_PASSWD_LEN)
+     const newMetadata = await createPaste(env, pasteName, content, {
+       expirationSeconds,
++      retentionFromMPU,
+       now,
+       passwd: password,
+       filename,
+diff --git a/worker/storage/storage.ts b/worker/storage/storage.ts
+index b2aa0ff6fcc13c561e87a47f0f042a1888cfebf8..133bfc16572a1b0df88b012d25eef722efbb8b58 100644
+--- a/worker/storage/storage.ts
++++ b/worker/storage/storage.ts
+@@ -8,13 +8,13 @@ const PASTE_EXPIRE_SPECIFIED_MIN = 70
+ // TODO: allow admin to upload permanent paste
+ // TODO: add filename length check
+ export interface PasteMetadata {
+-  schemaVersion: 1
++  schemaVersion: 2
+   location: PasteLocation // new field on V1
+   passwd: string
+ 
+   lastModifiedAtUnix: number
+   createdAtUnix: number
+-  willExpireAtUnix: number
++  willExpireAtUnix: number | null
+ 
+   accessCounter: number // a counter representing how frequent it is accessed, to administration usage
+   sizeBytes: number
+@@ -30,7 +30,7 @@ interface PasteMetadataInStorage {
+ 
+   lastModifiedAtUnix: number
+   createdAtUnix: number
+-  willExpireAtUnix: number
++  willExpireAtUnix: number | null
+ 
+   accessCounter?: number
+   sizeBytes?: number
+@@ -43,7 +43,7 @@ export function metaResponseFromMetadata(metadata: PasteMetadata): MetaResponse
+   return {
+     lastModifiedAt: new Date(metadata.lastModifiedAtUnix * 1000).toISOString(),
+     createdAt: new Date(metadata.createdAtUnix * 1000).toISOString(),
+-    expireAt: new Date(metadata.willExpireAtUnix * 1000).toISOString(),
++    expireAt: metadata.willExpireAtUnix === null ? null : new Date(metadata.willExpireAtUnix * 1000).toISOString(),
+     sizeBytes: metadata.sizeBytes,
+     location: metadata.location,
+     filename: metadata.filename,
+@@ -52,9 +52,9 @@ export function metaResponseFromMetadata(metadata: PasteMetadata): MetaResponse
+   }
+ }
+ 
+-function migratePasteMetadata(original: PasteMetadataInStorage): PasteMetadata {
++export function migratePasteMetadata(original: PasteMetadataInStorage): PasteMetadata {
+   return {
+-    schemaVersion: 1,
++    schemaVersion: 2,
+     location: original.location || "KV",
+     passwd: original.passwd,
+ 
+@@ -70,6 +70,10 @@ function migratePasteMetadata(original: PasteMetadataInStorage): PasteMetadata {
+   }
+ }
+ 
++export function isExpired(metadata: Pick<PasteMetadata, "willExpireAtUnix">, nowUnix: number): boolean {
++  return metadata.willExpireAtUnix !== null && metadata.willExpireAtUnix < nowUnix
++}
++
+ export interface PasteWithMetadata {
+   paste: ArrayBuffer | ReadableStream
+   metadata: PasteMetadata
+@@ -81,10 +85,7 @@ async function updateAccessCounter(env: Env, short: string, value: ArrayBuffer,
+   if (Math.random() < 0.01) {
+     metadata.accessCounter += 1
+     try {
+-      await env.PB.put(short, value, {
+-        metadata: metadata,
+-        expiration: metadata.willExpireAtUnix,
+-      })
++      await env.PB.put(short, value, metadata.willExpireAtUnix === null ? { metadata } : { metadata, expiration: metadata.willExpireAtUnix })
+     } catch (e) {
+       // ignore rate limit message
+       if (!(e as Error).message.includes("KV PUT failed: 429 Too Many Requests")) {
+@@ -104,7 +105,7 @@ export async function getPaste(env: Env, short: string, ctx: ExecutionContext):
+   } else {
+     workerAssert(item.metadata != null, `paste of name '${short}' has no metadata`)
+     const metadata = migratePasteMetadata(item.metadata)
+-    const expired = metadata.willExpireAtUnix < new Date().getTime() / 1000
++    const expired = isExpired(metadata, new Date().getTime() / 1000)
+ 
+     ctx.waitUntil(
+       (async () => {
+@@ -143,7 +144,7 @@ export async function getPasteMetadata(env: Env, short: string): Promise<PasteMe
+   } else if (item.metadata === null) {
+     throw new WorkerError(500, `paste of name '${short}' has no metadata`)
+   } else {
+-    if (item.metadata.willExpireAtUnix < new Date().getTime() / 1000) {
++    if (isExpired(migratePasteMetadata(item.metadata), new Date().getTime() / 1000)) {
+       return null
+     }
+     return migratePasteMetadata(item.metadata)
+@@ -153,7 +154,8 @@ export async function getPasteMetadata(env: Env, short: string): Promise<PasteMe
+ interface WriteOptions {
+   now: Date
+   contentLength: number
+-  expirationSeconds: number
++  expirationSeconds: number | null
++  retentionFromMPU?: number | null
+   passwd: string
+   filename?: string
+   highlightLanguage?: string
+@@ -168,9 +170,13 @@ export async function updatePaste(
+   originalMetadata: PasteMetadata,
+   options: WriteOptions,
+ ): Promise<PasteMetadata> {
+-  const expirationUnix = dateToUnix(options.now) + options.expirationSeconds
+-  const expirationUnixSpecified =
+-    dateToUnix(options.now) + Math.max(options.expirationSeconds, PASTE_EXPIRE_SPECIFIED_MIN)
++  const expirationUnix =
++    options.retentionFromMPU !== undefined
++      ? options.retentionFromMPU
++      : options.expirationSeconds === null
++        ? null
++        : dateToUnix(options.now) + options.expirationSeconds
++  const expirationUnixSpecified = expirationUnix === null ? null : dateToUnix(options.now) + Math.max(options.expirationSeconds!, PASTE_EXPIRE_SPECIFIED_MIN)
+ 
+   // if the paste is previous on R2, we keep it on R2 to avoid losing reference to it
+   const newLocation =
+@@ -180,12 +186,12 @@ export async function updatePaste(
+ 
+   if (newLocation === "R2" && !options.isMPUComplete) {
+     await env.R2.put(pasteName, content, {
+-      customMetadata: { willExpireAtUnix: String(expirationUnix) },
++      customMetadata: expirationUnix === null ? { permanent: "1" } : { willExpireAtUnix: String(expirationUnix) },
+     })
+   }
+ 
+   const metadata: PasteMetadata = {
+-    schemaVersion: 1,
++    schemaVersion: 2,
+     location: newLocation,
+     filename: options.filename,
+     highlightLanguage: options.highlightLanguage,
+@@ -199,10 +205,7 @@ export async function updatePaste(
+     encryptionScheme: options.encryptionScheme,
+   }
+ 
+-  await env.PB.put(pasteName, newLocation === "R2" ? "" : content, {
+-    metadata: metadata,
+-    expiration: expirationUnixSpecified,
+-  })
++  await env.PB.put(pasteName, newLocation === "R2" ? "" : content, expirationUnixSpecified === null ? { metadata } : { metadata, expiration: expirationUnixSpecified })
+ 
+   return metadata
+ }
+@@ -213,20 +216,24 @@ export async function createPaste(
+   content: ArrayBuffer | ReadableStream,
+   options: WriteOptions,
+ ): Promise<PasteMetadata> {
+-  const expirationUnix = dateToUnix(options.now) + options.expirationSeconds
++  const expirationUnix =
++    options.retentionFromMPU !== undefined
++      ? options.retentionFromMPU
++      : options.expirationSeconds === null
++        ? null
++        : dateToUnix(options.now) + options.expirationSeconds
+ 
+-  const expirationUnixSpecified =
+-    dateToUnix(options.now) + Math.max(options.expirationSeconds, PASTE_EXPIRE_SPECIFIED_MIN)
++  const expirationUnixSpecified = expirationUnix === null ? null : dateToUnix(options.now) + Math.max(options.expirationSeconds!, PASTE_EXPIRE_SPECIFIED_MIN)
+ 
+   const location = options.isMPUComplete || options.contentLength > parseSize(env.R2_THRESHOLD)! ? "R2" : "KV"
+   if (location === "R2" && !options.isMPUComplete) {
+     await env.R2.put(pasteName, content, {
+-      customMetadata: { willExpireAtUnix: String(expirationUnix) },
++      customMetadata: expirationUnix === null ? { permanent: "1" } : { willExpireAtUnix: String(expirationUnix) },
+     })
+   }
+ 
+   const metadata: PasteMetadata = {
+-    schemaVersion: 1,
++    schemaVersion: 2,
+     location: location,
+     filename: options.filename,
+     highlightLanguage: options.highlightLanguage,
+@@ -240,10 +247,7 @@ export async function createPaste(
+     encryptionScheme: options.encryptionScheme,
+   }
+ 
+-  await env.PB.put(pasteName, location === "R2" ? "" : content, {
+-    metadata: metadata,
+-    expiration: expirationUnixSpecified,
+-  })
++  await env.PB.put(pasteName, location === "R2" ? "" : content, expirationUnixSpecified === null ? { metadata } : { metadata, expiration: expirationUnixSpecified })
+ 
+   return metadata
+ }
+@@ -255,7 +259,7 @@ export async function pasteNameAvailable(env: Env, pasteName: string): Promise<b
+   } else if (item.metadata === null) {
+     throw new WorkerError(500, `paste of name '${pasteName}' has no metadata`)
+   } else {
+-    return item.metadata.willExpireAtUnix < new Date().getTime() / 1000
++    return isExpired(migratePasteMetadata(item.metadata), new Date().getTime() / 1000)
+   }
+ }
+ 
+@@ -279,6 +283,7 @@ export async function cleanExpiredInR2(env: Env, controller: ScheduledController
+     // separate objects with and without custom metadata
+     const needKvLookup: R2Object[] = []
+     for (const obj of listed.objects) {
++      if (obj.customMetadata?.permanent === "1") continue
+       const expStr = obj.customMetadata?.willExpireAtUnix
+       if (expStr) {
+         if (Number(expStr) < nowUnix) {
+@@ -293,7 +298,7 @@ export async function cleanExpiredInR2(env: Env, controller: ScheduledController
+     const kvResults = await Promise.all(needKvLookup.map((obj) => getPasteMetadata(env, obj.key)))
+     for (let i = 0; i < needKvLookup.length; i++) {
+       const kvMeta = kvResults[i]
+-      if (kvMeta === null || kvMeta.willExpireAtUnix < nowUnix) {
++      if (kvMeta === null || isExpired(kvMeta, nowUnix)) {
+         toDelete.push(needKvLookup[i].key)
+       }
+     }
+diff --git a/worker/test/r2.spec.ts b/worker/test/r2.spec.ts
+index 3d4dce4310030fda2a6a94b4045b8eb938b3e1ac..268a33bae8235562bab64780fd4d1ff321a41fe6 100644
+--- a/worker/test/r2.spec.ts
++++ b/worker/test/r2.spec.ts
+@@ -68,3 +68,11 @@ test("r2 schedule", async () => {
+   // test get after cleanup
+   expect((await workerFetch(ctx, url)).status).toStrictEqual(404)
+ })
++
++test("permanent R2 objects survive scheduled cleanup", async () => {
++  const ctx = createExecutionContext()
++  const uploadResponse = await upload(ctx, { c: genRandomBlob(parseSize(env.R2_THRESHOLD)! * 2), e: "never" })
++  await worker.scheduled(createScheduledController({ scheduledTime: new Date(2040, 0, 0) }), env, ctx)
++  await waitOnExecutionContext(ctx)
++  expect((await workerFetch(ctx, uploadResponse.url)).status).toStrictEqual(200)
++})
+diff --git a/worker/test/roles.spec.ts b/worker/test/roles.spec.ts
+index 17346f88bbc25a204587db135b7c8229dcee4787..9e044b7c16c1a35346c2a3f8fd8674e97949cdb0 100644
+--- a/worker/test/roles.spec.ts
++++ b/worker/test/roles.spec.ts
+@@ -68,7 +68,9 @@ test("meta with role m", async () => {
+   const content = `# Hello`
+   const ctx = createExecutionContext()
+   const uploadResp = await upload(ctx, { c: content })
+-  expect(new Date(uploadResp.expireAt).getTime()).toStrictEqual(t1.getTime() + uploadResp.expirationSeconds * 1000)
++  expect(uploadResp.expireAt).not.toBeNull()
++  expect(uploadResp.expirationSeconds).not.toBeNull()
++  expect(new Date(uploadResp.expireAt!).getTime()).toStrictEqual(t1.getTime() + uploadResp.expirationSeconds! * 1000)
+   const url = uploadResp.url
+ 
+   const metaResponse = await workerFetch(ctx, addRole(url, "m"))
+@@ -84,7 +86,9 @@ test("meta with role m", async () => {
+   const t2 = new Date(2035, 0, 1)
+   vi.setSystemTime(t2)
+   const updateResp = await upload(ctx, { c: content, e: "1d" }, { method: "PUT", url: uploadResp.manageUrl })
+-  expect(new Date(updateResp.expireAt).getTime()).toStrictEqual(t2.getTime() + updateResp.expirationSeconds * 1000)
++  expect(updateResp.expireAt).not.toBeNull()
++  expect(updateResp.expirationSeconds).not.toBeNull()
++  expect(new Date(updateResp.expireAt!).getTime()).toStrictEqual(t2.getTime() + updateResp.expirationSeconds! * 1000)
+   const updatedMeta: MetaResponse = await (await workerFetch(ctx, addRole(url, "m"))).json()
+   expect(new Date(updatedMeta.lastModifiedAt).getTime()).toStrictEqual(t2.getTime())
+   expect(new Date(updatedMeta.createdAt).getTime()).toStrictEqual(t1.getTime())
+diff --git a/worker/test/storage.spec.ts b/worker/test/storage.spec.ts
+index 99523f20bf2ed246a267ad0b406f43b271cc1058..c636eb22be88cb90b5e6c05136e87ff9f25ee9b7 100644
+--- a/worker/test/storage.spec.ts
++++ b/worker/test/storage.spec.ts
+@@ -9,6 +9,14 @@ beforeEach(vi.useFakeTimers)
+ afterEach(vi.useRealTimers)
+ 
+ describe("getPaste / getPasteMetadata expiration", () => {
++  it("keeps a permanent paste readable with nullable expiration metadata", async () => {
++    const ctx = createExecutionContext()
++    const seeded = await upload(ctx, { c: new Blob(["forever"]), e: "never" })
++    expect(seeded.expireAt).toBeNull()
++    expect(seeded.expirationSeconds).toBeNull()
++    vi.setSystemTime(new Date(2090, 0, 1))
++    expect((await workerFetch(ctx, seeded.url)).status).toStrictEqual(200)
++  })
+   it("returns 404 once a paste has expired and removes it from KV", async () => {
+     const ctx = createExecutionContext()
+ 
+diff --git a/worker/test/uploadOptions.spec.ts b/worker/test/uploadOptions.spec.ts
+index 44147452757797215f7d61c8c8063182e172d6c1..c3459e2ec75d820365dfe094325c52f650f240bd 100644
+--- a/worker/test/uploadOptions.spec.ts
++++ b/worker/test/uploadOptions.spec.ts
+@@ -52,6 +52,8 @@ test("expire with option e", async () => {
+   await testExpireParse("100h", 360000)
+   await testExpireParse("1d", 86400)
+   await testExpireParse("100d", maxExpirationSeconds) // longer expiration will be clipped to 30d
++  await testExpireParse("max", maxExpirationSeconds)
++  await testExpireParse("never", null)
+   await testExpireParse("100  m", 6000)
+   await testExpireParse("", defaultExpirationSeconds)
+ 
+
+base-commit: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+-- 
+2.50.1 (Apple Git-155)
+

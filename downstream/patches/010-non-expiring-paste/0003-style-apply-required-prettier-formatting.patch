@@ -1,0 +1,164 @@
+From e10e06fffacdcec43f2a2e271e63dbd075d757ed Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 2 Sep 2026 19:58:16 +0800
+Subject: [PATCH 3/3] style: apply required prettier formatting
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Context: Required GitHub Actions PR Tests failed only because pnpm prettier -c . reported four formatting violations.\n\nExpected behavior: No runtime or API behavior change. Formatting-only correction.\n\nAcceptance criteria: only the four CI-reported files formatted; prettier check passes; lint/typecheck/tests/build remain green.\n\nConstraints: no product behavior change; no SPEC drift; Stage A remains review-only; do not merge into upstream-sync.\n\nValidation: clean detached worktree ran pnpm install --frozen-lockfile, pnpm build:frontend, pnpm prettier -c ., pnpm lint, pnpm typecheck, pnpm exec vitest run (21 files, 161 tests), and pnpm build — all PASS.\n\nRefs: PR #5; Issue #3; Issue #4; Patch ID: 010-non-expiring-paste; Upstream base: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6.
+---
+ frontend/components/UploadedPanel.tsx |  6 +++++-
+ worker/handlers/handleMPU.ts          |  3 ++-
+ worker/handlers/handleWrite.ts        | 16 +++++++++++----
+ worker/storage/storage.ts             | 28 ++++++++++++++++++++++-----
+ 4 files changed, 42 insertions(+), 11 deletions(-)
+
+diff --git a/frontend/components/UploadedPanel.tsx b/frontend/components/UploadedPanel.tsx
+index 921c7d0c2349082d2778dc07052c1d89c00971c4..3230bfcd542ebaf4238b39c231490239ae0892d4 100644
+--- a/frontend/components/UploadedPanel.tsx
++++ b/frontend/components/UploadedPanel.tsx
+@@ -200,7 +200,11 @@ export function UploadedPanel({
+                 pasteResponse.manageUrl,
+                 <InfoTooltip>Use this URL to update or delete the paste later. Keep it private.</InfoTooltip>,
+               )}
+-              <Input {...inputProps} label={"Expiration"} value={pasteResponse.expireAt === null ? "Never" : new Date(pasteResponse.expireAt).toLocaleString()} />
++              <Input
++                {...inputProps}
++                label={"Expiration"}
++                value={pasteResponse.expireAt === null ? "Never" : new Date(pasteResponse.expireAt).toLocaleString()}
++              />
+ 
+               <button
+                 type="button"
+diff --git a/worker/handlers/handleMPU.ts b/worker/handlers/handleMPU.ts
+index 09d98c8a368f0d4c0368f393d40a0958f41676d7..0b6f09ff422268f5f7bd78083f96fa098938cba0 100644
+--- a/worker/handlers/handleMPU.ts
++++ b/worker/handlers/handleMPU.ts
+@@ -10,7 +10,8 @@ function mpuExpireMetadata(url: URL, env: Env): Record<string, string> {
+   if (expirationSpec === null) throw new WorkerError(400, `‘${expireParam}’ is not a valid expiration specification`)
+   const maxExpiration = parseExpiration(env.MAX_EXPIRATION)!
+   if (expirationSpec.kind === "never") return { permanent: "1" }
+-  const effectiveExpiration = expirationSpec.kind === "max" ? maxExpiration : Math.min(expirationSpec.seconds, maxExpiration)
++  const effectiveExpiration =
++    expirationSpec.kind === "max" ? maxExpiration : Math.min(expirationSpec.seconds, maxExpiration)
+   const willExpireAtUnix = dateToUnix(new Date()) + effectiveExpiration
+   return { willExpireAtUnix: String(willExpireAtUnix) }
+ }
+diff --git a/worker/handlers/handleWrite.ts b/worker/handlers/handleWrite.ts
+index 2cc10d7fe47759bb18f3e4b64d8169e7db4334d6..4aeb40b36e3366d2044244bbfe54f02e49d14bba 100644
+--- a/worker/handlers/handleWrite.ts
++++ b/worker/handlers/handleWrite.ts
+@@ -124,14 +124,20 @@ export async function handlePostOrPut(
+     throw new WorkerError(400, `‘${expire}’ is not a valid expiration specification`)
+   }
+   const maxExpiration = parseExpiration(env.MAX_EXPIRATION)!
+-  let expirationSeconds = expirationSpec.kind === "never" ? null : expirationSpec.kind === "max" ? maxExpiration : Math.min(expirationSpec.seconds, maxExpiration)
++  let expirationSeconds =
++    expirationSpec.kind === "never"
++      ? null
++      : expirationSpec.kind === "max"
++        ? maxExpiration
++        : Math.min(expirationSpec.seconds, maxExpiration)
+ 
+   function expirationFromCompletedMPU(object: R2Object): number | null {
+     if (object.customMetadata?.permanent === "1") return null
+     const expiresAt = object.customMetadata?.willExpireAtUnix
+     if (!expiresAt) throw new WorkerError(500, "completed multipart upload has no expiration metadata")
+     const expirationUnix = Number(expiresAt)
+-    if (!Number.isFinite(expirationUnix)) throw new WorkerError(500, "completed multipart upload has invalid expiration metadata")
++    if (!Number.isFinite(expirationUnix))
++      throw new WorkerError(500, "completed multipart upload has invalid expiration metadata")
+     return expirationUnix
+   }
+ 
+@@ -187,7 +193,8 @@ export async function handlePostOrPut(
+     const r2Object = isMPUComplete ? await handleMPUComplete(request, env, uploadedParts!) : undefined
+     if (r2Object) {
+       retentionFromMPU = expirationFromCompletedMPU(r2Object)
+-      expirationSeconds = retentionFromMPU === null ? null : Math.max(0, Math.ceil(retentionFromMPU - now.getTime() / 1000))
++      expirationSeconds =
++        retentionFromMPU === null ? null : Math.max(0, Math.ceil(retentionFromMPU - now.getTime() / 1000))
+     }
+ 
+     const originalMetadata = await getPasteMetadata(env, pasteName)
+@@ -241,7 +248,8 @@ export async function handlePostOrPut(
+     const r2Object = isMPUComplete ? await handleMPUComplete(request, env, uploadedParts!) : undefined
+     if (r2Object) {
+       retentionFromMPU = expirationFromCompletedMPU(r2Object)
+-      expirationSeconds = retentionFromMPU === null ? null : Math.max(0, Math.ceil(retentionFromMPU - now.getTime() / 1000))
++      expirationSeconds =
++        retentionFromMPU === null ? null : Math.max(0, Math.ceil(retentionFromMPU - now.getTime() / 1000))
+     }
+ 
+     const password = passwdFromForm || genRandStr(DEFAULT_PASSWD_LEN)
+diff --git a/worker/storage/storage.ts b/worker/storage/storage.ts
+index 133bfc16572a1b0df88b012d25eef722efbb8b58..e77934ff6e31b35b398aee87bcb0937e6e77fb66 100644
+--- a/worker/storage/storage.ts
++++ b/worker/storage/storage.ts
+@@ -85,7 +85,11 @@ async function updateAccessCounter(env: Env, short: string, value: ArrayBuffer,
+   if (Math.random() < 0.01) {
+     metadata.accessCounter += 1
+     try {
+-      await env.PB.put(short, value, metadata.willExpireAtUnix === null ? { metadata } : { metadata, expiration: metadata.willExpireAtUnix })
++      await env.PB.put(
++        short,
++        value,
++        metadata.willExpireAtUnix === null ? { metadata } : { metadata, expiration: metadata.willExpireAtUnix },
++      )
+     } catch (e) {
+       // ignore rate limit message
+       if (!(e as Error).message.includes("KV PUT failed: 429 Too Many Requests")) {
+@@ -176,7 +180,10 @@ export async function updatePaste(
+       : options.expirationSeconds === null
+         ? null
+         : dateToUnix(options.now) + options.expirationSeconds
+-  const expirationUnixSpecified = expirationUnix === null ? null : dateToUnix(options.now) + Math.max(options.expirationSeconds!, PASTE_EXPIRE_SPECIFIED_MIN)
++  const expirationUnixSpecified =
++    expirationUnix === null
++      ? null
++      : dateToUnix(options.now) + Math.max(options.expirationSeconds!, PASTE_EXPIRE_SPECIFIED_MIN)
+ 
+   // if the paste is previous on R2, we keep it on R2 to avoid losing reference to it
+   const newLocation =
+@@ -205,7 +212,11 @@ export async function updatePaste(
+     encryptionScheme: options.encryptionScheme,
+   }
+ 
+-  await env.PB.put(pasteName, newLocation === "R2" ? "" : content, expirationUnixSpecified === null ? { metadata } : { metadata, expiration: expirationUnixSpecified })
++  await env.PB.put(
++    pasteName,
++    newLocation === "R2" ? "" : content,
++    expirationUnixSpecified === null ? { metadata } : { metadata, expiration: expirationUnixSpecified },
++  )
+ 
+   return metadata
+ }
+@@ -223,7 +234,10 @@ export async function createPaste(
+         ? null
+         : dateToUnix(options.now) + options.expirationSeconds
+ 
+-  const expirationUnixSpecified = expirationUnix === null ? null : dateToUnix(options.now) + Math.max(options.expirationSeconds!, PASTE_EXPIRE_SPECIFIED_MIN)
++  const expirationUnixSpecified =
++    expirationUnix === null
++      ? null
++      : dateToUnix(options.now) + Math.max(options.expirationSeconds!, PASTE_EXPIRE_SPECIFIED_MIN)
+ 
+   const location = options.isMPUComplete || options.contentLength > parseSize(env.R2_THRESHOLD)! ? "R2" : "KV"
+   if (location === "R2" && !options.isMPUComplete) {
+@@ -247,7 +261,11 @@ export async function createPaste(
+     encryptionScheme: options.encryptionScheme,
+   }
+ 
+-  await env.PB.put(pasteName, location === "R2" ? "" : content, expirationUnixSpecified === null ? { metadata } : { metadata, expiration: expirationUnixSpecified })
++  await env.PB.put(
++    pasteName,
++    location === "R2" ? "" : content,
++    expirationUnixSpecified === null ? { metadata } : { metadata, expiration: expirationUnixSpecified },
++  )
+ 
+   return metadata
+ }
+-- 
+2.50.1 (Apple Git-155)
+

@@ -2,6 +2,6 @@
 # One repository-relative patch path per line.
 # Blank lines and comments are ignored.
 #
-# Example after 010 is implemented/exported:
-# 010-non-expiring-paste/0001-expiration-support-non-expiring-pastes.patch
-# 010-non-expiring-paste/0002-expiration-skip-permanent-r2-cleanup.patch
+010-non-expiring-paste/0001-feat-expiration-support-non-expiring-pastes.patch
+010-non-expiring-paste/0002-test-r2-use-deterministic-cleanup-payload.patch
+010-non-expiring-paste/0003-style-apply-required-prettier-formatting.patch

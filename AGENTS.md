@@ -84,13 +84,17 @@ Do not restructure upstream solely to make downstream code cleaner.
 Forbidden upstream patch logic:
 
 ```ts
-if (source === "feishu") { /* special behavior */ }
+if (source === "feishu") {
+  /* special behavior */
+}
 ```
 
 Forbidden upstream patch logic:
 
 ```ts
-if (content.includes("- [x]")) { /* expire Paste */ }
+if (content.includes("- [x]")) {
+  /* expire Paste */
+}
 ```
 
 Acceptable generic behavior:
@@ -462,7 +466,7 @@ Required behavior:
 ```markdown
 - [ ] task
 - [x] completed
-- [X] completed
+- [x] completed
 ```
 
 renders as interactive task checkboxes.

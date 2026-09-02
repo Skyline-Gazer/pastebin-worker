@@ -50,7 +50,7 @@ Required:
 ```markdown
 - [ ] unchecked
 - [x] checked
-- [X] uppercase checked
+- [x] uppercase checked
 ```
 
 Assert semantic checkbox DOM, not just text.

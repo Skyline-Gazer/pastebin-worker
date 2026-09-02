@@ -11,7 +11,8 @@ full HTTP API reference, see [api.md]({{BASE_URL}}/doc/api).
   the paste.
 - `<expire>` — an expiration period: an integer or float, optionally suffixed
   with `s` (seconds, default), `m` (minutes), `h` (hours), or `d` (days). For
-  example, `300`, `30m`, `25d`.
+  example, `300`, `30m`, `25d`. Use `never` for a permanent paste or `max` for
+  the deployment maximum.
 
 ## Uploading
 
@@ -51,10 +52,14 @@ $ cat panty.jpg | curl -Fc=@- {{BASE_URL}}
 $ curl -Fc='kawaii' -Fe=300 {{BASE_URL}}      # 300 seconds
 $ curl -Fc='kawaii' -Fe=2h  {{BASE_URL}}      # 2 hours
 $ curl -Fc=@big.bin -Fe=30d {{BASE_URL}}      # 30 days
+$ curl -Fc='keep this' -Fe=never {{BASE_URL}} # no expiration
+$ curl -Fc='longest allowed' -Fe=max {{BASE_URL}}
 ```
 
 If `e` is not specified, the default expiration of the deployment is used. The
 maximum expiration is also enforced by the deployment.
+For permanent pastes, the response fields `expireAt` and `expirationSeconds`
+are both `null`.
 
 ### Use a custom name
 

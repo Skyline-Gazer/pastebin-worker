@@ -1,5 +1,5 @@
 import { MAX_PASSWD_LEN, MIN_PASSWD_LEN, NAME_REGEX } from "./constants.js"
-import { parseExpiration, parseExpirationReadable } from "./parsers.js"
+import { parseExpirationReadable, parseExpirationSpec } from "./parsers.js"
 
 export type VerifyResult = [ok: true, message: string] | [ok: false, error: string]
 
@@ -30,11 +30,13 @@ export function verifyName(name: string): VerifyResult {
 }
 
 export function verifyExpiration(expiration: string, maxExpirationSeconds: number): VerifyResult {
-  const parsed = parseExpiration(expiration)
+  const parsed = parseExpirationSpec(expiration)
   if (parsed === null) {
     return [false, `‘${expiration}’ is not a valid expiration specification`]
   }
-  if (parsed > maxExpirationSeconds) {
+  if (parsed.kind === "never") return [true, "Never expires"]
+  if (parsed.kind === "max") return [true, "Expires in maximum allowed duration"]
+  if (parsed.seconds > maxExpirationSeconds) {
     return [false, `Exceed max expiration (${parseExpirationReadable(`${maxExpirationSeconds}s`)!})`]
   }
   return [true, `Expires in ${parseExpirationReadable(expiration)!}`]

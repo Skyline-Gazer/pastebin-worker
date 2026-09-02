@@ -36,6 +36,17 @@ export function parseExpiration(expirationStr: string): number | null {
   return expirationSeconds
 }
 
+export type ExpirationSpec = { kind: "never" } | { kind: "max" } | { kind: "seconds"; seconds: number }
+
+/** Parse only the lexical expiration form; policy belongs to the caller. */
+export function parseExpirationSpec(expirationStr: string): ExpirationSpec | null {
+  const normalized = expirationStr.trim()
+  if (normalized === "never") return { kind: "never" }
+  if (normalized === "max") return { kind: "max" }
+  const seconds = parseExpiration(normalized)
+  return seconds === null ? null : { kind: "seconds", seconds }
+}
+
 export function parseExpirationReadable(expirationStr: string): string | null {
   expirationStr = expirationStr.trim()
   const EXPIRE_REGEX = /^\d+(\.\d+)?\s*[smhd]?$/

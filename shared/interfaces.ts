@@ -5,7 +5,7 @@ export type PasteLocation = "KV" | "R2"
 export interface MetaResponse {
   lastModifiedAt: string
   createdAt: string
-  expireAt: string
+  expireAt: string | null
   sizeBytes: number
   location: PasteLocation
   filename?: string
@@ -16,7 +16,7 @@ export interface MetaResponse {
 export interface PasteResponse extends MetaResponse {
   url: string
   manageUrl: string
-  expirationSeconds: number
+  expirationSeconds: number | null
 }
 
 export interface MPUCreateResponse {

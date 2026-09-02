@@ -81,6 +81,25 @@ describe("Pastebin", () => {
     expect((manageUrlShow as HTMLInputElement).value).toStrictEqual(mockedPasteUpload.manageUrl)
   })
 
+  it("renders a permanent upload expiration as Never", async () => {
+    const originalExpireAt = mockedPasteUpload.expireAt
+    const originalSeconds = mockedPasteUpload.expirationSeconds
+    mockedPasteUpload.expireAt = null
+    mockedPasteUpload.expirationSeconds = null
+    try {
+      render(<PasteBin config={__WRANGLER_CONFIG__} />)
+      await userEvent.type(screen.getByRole("textbox", { name: "Paste editor" }), "permanent")
+      await userEvent.click(screen.getByRole("button", { name: "Upload" }))
+      await screen.findByRole("textbox", { name: "Raw URL" })
+      const expirations = screen.getAllByRole("textbox", { name: "Expiration" })
+      const expiration = expirations[expirations.length - 1]
+      expect((expiration as HTMLInputElement).value).toStrictEqual("Never")
+    } finally {
+      mockedPasteUpload.expireAt = originalExpireAt
+      mockedPasteUpload.expirationSeconds = originalSeconds
+    }
+  })
+
   it("refuse illegal settings", async () => {
     render(<PasteBin config={__WRANGLER_CONFIG__} />)
     // due to bugs https://github.com/adobe/react-spectrum/discussions/8037, we need to use duplicated name here

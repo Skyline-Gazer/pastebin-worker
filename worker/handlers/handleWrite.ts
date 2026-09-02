@@ -8,7 +8,7 @@ import {
   updatePaste,
 } from "../storage/storage.js"
 import { DEFAULT_PASSWD_LEN, PASTE_NAME_LEN, PRIVATE_PASTE_NAME_LEN, PASSWD_SEP } from "../../shared/constants.js"
-import { parsePath, parseSize, parseExpiration } from "../../shared/parsers.js"
+import { parsePath, parseSize, parseExpiration, parseExpirationSpec } from "../../shared/parsers.js"
 import { verifyName, verifyPassword } from "../../shared/verify.js"
 import type { PasteResponse } from "../../shared/interfaces.js"
 import { MaxFileSizeExceededError, MultipartParseError, parseMultipartRequest } from "@mjackson/multipart-parser"
@@ -119,13 +119,26 @@ export async function handlePostOrPut(
   const uploadedParts = isMPUComplete ? (JSON.parse(contentAsString()) as R2UploadedPart[]) : undefined
 
   // parse expiration
-  let expirationSeconds = parseExpiration(expire)
-  if (expirationSeconds === null) {
+  const expirationSpec = parseExpirationSpec(expire)
+  if (expirationSpec === null) {
     throw new WorkerError(400, `‘${expire}’ is not a valid expiration specification`)
   }
   const maxExpiration = parseExpiration(env.MAX_EXPIRATION)!
-  if (expirationSeconds > maxExpiration) {
-    expirationSeconds = maxExpiration
+  let expirationSeconds =
+    expirationSpec.kind === "never"
+      ? null
+      : expirationSpec.kind === "max"
+        ? maxExpiration
+        : Math.min(expirationSpec.seconds, maxExpiration)
+
+  function expirationFromCompletedMPU(object: R2Object): number | null {
+    if (object.customMetadata?.permanent === "1") return null
+    const expiresAt = object.customMetadata?.willExpireAtUnix
+    if (!expiresAt) throw new WorkerError(500, "completed multipart upload has no expiration metadata")
+    const expirationUnix = Number(expiresAt)
+    if (!Number.isFinite(expirationUnix))
+      throw new WorkerError(500, "completed multipart upload has invalid expiration metadata")
+    return expirationUnix
   }
 
   // check if password is legal
@@ -158,6 +171,7 @@ export async function handlePostOrPut(
   }
 
   const now = new Date()
+  let retentionFromMPU: number | null | undefined
   if (isPut) {
     let pasteName: string | undefined
     let password: string | undefined
@@ -177,6 +191,11 @@ export async function handlePostOrPut(
     }
 
     const r2Object = isMPUComplete ? await handleMPUComplete(request, env, uploadedParts!) : undefined
+    if (r2Object) {
+      retentionFromMPU = expirationFromCompletedMPU(r2Object)
+      expirationSeconds =
+        retentionFromMPU === null ? null : Math.max(0, Math.ceil(retentionFromMPU - now.getTime() / 1000))
+    }
 
     const originalMetadata = await getPasteMetadata(env, pasteName)
     if (originalMetadata === null) {
@@ -191,6 +210,7 @@ export async function handlePostOrPut(
     const newPasswd = passwdFromForm || originalMetadata.passwd
     const newMetadata = await updatePaste(env, pasteName, content, originalMetadata, {
       expirationSeconds,
+      retentionFromMPU,
       now,
       passwd: newPasswd,
       contentLength: r2Object?.size || contentLength,
@@ -226,10 +246,16 @@ export async function handlePostOrPut(
     }
 
     const r2Object = isMPUComplete ? await handleMPUComplete(request, env, uploadedParts!) : undefined
+    if (r2Object) {
+      retentionFromMPU = expirationFromCompletedMPU(r2Object)
+      expirationSeconds =
+        retentionFromMPU === null ? null : Math.max(0, Math.ceil(retentionFromMPU - now.getTime() / 1000))
+    }
 
     const password = passwdFromForm || genRandStr(DEFAULT_PASSWD_LEN)
     const newMetadata = await createPaste(env, pasteName, content, {
       expirationSeconds,
+      retentionFromMPU,
       now,
       passwd: password,
       filename,

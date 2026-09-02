@@ -5,6 +5,7 @@ import {
   ParseError,
   parseFilenameFromContentDisposition,
   parseExpiration,
+  parseExpirationSpec,
   parseExpirationReadable,
   parseSize,
 } from "../parsers.js"
@@ -129,4 +130,11 @@ test("parseExpiration", () => {
     const readable = parseExpirationReadable(input)
     expect(readable, `checking readable expiration of ${input}`).toStrictEqual(readableParsed)
   }
+})
+
+test("parseExpirationSpec keeps lexical expiration forms distinct", () => {
+  expect(parseExpirationSpec("never")).toStrictEqual({ kind: "never" })
+  expect(parseExpirationSpec(" max ")).toStrictEqual({ kind: "max" })
+  expect(parseExpirationSpec("1.5h")).toStrictEqual({ kind: "seconds", seconds: 5400 })
+  expect(parseExpirationSpec("invalid")).toBeNull()
 })

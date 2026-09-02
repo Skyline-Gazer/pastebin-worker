@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { UploadError, uploadMPU, uploadNormal } from "../uploadPaste.js"
+import { verifyExpiration } from "../verify.js"
 
 const API_URL = "https://example.com"
 
@@ -84,6 +85,13 @@ describe("UploadError", () => {
     expect(err).toBeInstanceOf(Error)
     expect(err.statusCode).toStrictEqual(418)
     expect(err.message).toStrictEqual("I'm a teapot")
+  })
+})
+
+describe("verifyExpiration", () => {
+  it("accepts generic permanent and max expiration forms", () => {
+    expect(verifyExpiration("never", 60)).toEqual([true, "Never expires"])
+    expect(verifyExpiration("max", 60)).toEqual([true, "Expires in maximum allowed duration"])
   })
 })
 

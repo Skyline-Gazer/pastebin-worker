@@ -10,7 +10,8 @@ function mpuExpireMetadata(url: URL, env: Env): Record<string, string> {
   if (expirationSpec === null) throw new WorkerError(400, `‘${expireParam}’ is not a valid expiration specification`)
   const maxExpiration = parseExpiration(env.MAX_EXPIRATION)!
   if (expirationSpec.kind === "never") return { permanent: "1" }
-  const effectiveExpiration = expirationSpec.kind === "max" ? maxExpiration : Math.min(expirationSpec.seconds, maxExpiration)
+  const effectiveExpiration =
+    expirationSpec.kind === "max" ? maxExpiration : Math.min(expirationSpec.seconds, maxExpiration)
   const willExpireAtUnix = dateToUnix(new Date()) + effectiveExpiration
   return { willExpireAtUnix: String(willExpireAtUnix) }
 }

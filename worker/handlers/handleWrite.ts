@@ -124,14 +124,20 @@ export async function handlePostOrPut(
     throw new WorkerError(400, `‘${expire}’ is not a valid expiration specification`)
   }
   const maxExpiration = parseExpiration(env.MAX_EXPIRATION)!
-  let expirationSeconds = expirationSpec.kind === "never" ? null : expirationSpec.kind === "max" ? maxExpiration : Math.min(expirationSpec.seconds, maxExpiration)
+  let expirationSeconds =
+    expirationSpec.kind === "never"
+      ? null
+      : expirationSpec.kind === "max"
+        ? maxExpiration
+        : Math.min(expirationSpec.seconds, maxExpiration)
 
   function expirationFromCompletedMPU(object: R2Object): number | null {
     if (object.customMetadata?.permanent === "1") return null
     const expiresAt = object.customMetadata?.willExpireAtUnix
     if (!expiresAt) throw new WorkerError(500, "completed multipart upload has no expiration metadata")
     const expirationUnix = Number(expiresAt)
-    if (!Number.isFinite(expirationUnix)) throw new WorkerError(500, "completed multipart upload has invalid expiration metadata")
+    if (!Number.isFinite(expirationUnix))
+      throw new WorkerError(500, "completed multipart upload has invalid expiration metadata")
     return expirationUnix
   }
 
@@ -187,7 +193,8 @@ export async function handlePostOrPut(
     const r2Object = isMPUComplete ? await handleMPUComplete(request, env, uploadedParts!) : undefined
     if (r2Object) {
       retentionFromMPU = expirationFromCompletedMPU(r2Object)
-      expirationSeconds = retentionFromMPU === null ? null : Math.max(0, Math.ceil(retentionFromMPU - now.getTime() / 1000))
+      expirationSeconds =
+        retentionFromMPU === null ? null : Math.max(0, Math.ceil(retentionFromMPU - now.getTime() / 1000))
     }
 
     const originalMetadata = await getPasteMetadata(env, pasteName)
@@ -241,7 +248,8 @@ export async function handlePostOrPut(
     const r2Object = isMPUComplete ? await handleMPUComplete(request, env, uploadedParts!) : undefined
     if (r2Object) {
       retentionFromMPU = expirationFromCompletedMPU(r2Object)
-      expirationSeconds = retentionFromMPU === null ? null : Math.max(0, Math.ceil(retentionFromMPU - now.getTime() / 1000))
+      expirationSeconds =
+        retentionFromMPU === null ? null : Math.max(0, Math.ceil(retentionFromMPU - now.getTime() / 1000))
     }
 
     const password = passwdFromForm || genRandStr(DEFAULT_PASSWD_LEN)

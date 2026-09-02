@@ -200,7 +200,11 @@ export function UploadedPanel({
                 pasteResponse.manageUrl,
                 <InfoTooltip>Use this URL to update or delete the paste later. Keep it private.</InfoTooltip>,
               )}
-              <Input {...inputProps} label={"Expiration"} value={pasteResponse.expireAt === null ? "Never" : new Date(pasteResponse.expireAt).toLocaleString()} />
+              <Input
+                {...inputProps}
+                label={"Expiration"}
+                value={pasteResponse.expireAt === null ? "Never" : new Date(pasteResponse.expireAt).toLocaleString()}
+              />
 
               <button
                 type="button"

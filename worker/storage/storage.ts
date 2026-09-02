@@ -85,7 +85,11 @@ async function updateAccessCounter(env: Env, short: string, value: ArrayBuffer, 
   if (Math.random() < 0.01) {
     metadata.accessCounter += 1
     try {
-      await env.PB.put(short, value, metadata.willExpireAtUnix === null ? { metadata } : { metadata, expiration: metadata.willExpireAtUnix })
+      await env.PB.put(
+        short,
+        value,
+        metadata.willExpireAtUnix === null ? { metadata } : { metadata, expiration: metadata.willExpireAtUnix },
+      )
     } catch (e) {
       // ignore rate limit message
       if (!(e as Error).message.includes("KV PUT failed: 429 Too Many Requests")) {
@@ -176,7 +180,10 @@ export async function updatePaste(
       : options.expirationSeconds === null
         ? null
         : dateToUnix(options.now) + options.expirationSeconds
-  const expirationUnixSpecified = expirationUnix === null ? null : dateToUnix(options.now) + Math.max(options.expirationSeconds!, PASTE_EXPIRE_SPECIFIED_MIN)
+  const expirationUnixSpecified =
+    expirationUnix === null
+      ? null
+      : dateToUnix(options.now) + Math.max(options.expirationSeconds!, PASTE_EXPIRE_SPECIFIED_MIN)
 
   // if the paste is previous on R2, we keep it on R2 to avoid losing reference to it
   const newLocation =
@@ -205,7 +212,11 @@ export async function updatePaste(
     encryptionScheme: options.encryptionScheme,
   }
 
-  await env.PB.put(pasteName, newLocation === "R2" ? "" : content, expirationUnixSpecified === null ? { metadata } : { metadata, expiration: expirationUnixSpecified })
+  await env.PB.put(
+    pasteName,
+    newLocation === "R2" ? "" : content,
+    expirationUnixSpecified === null ? { metadata } : { metadata, expiration: expirationUnixSpecified },
+  )
 
   return metadata
 }
@@ -223,7 +234,10 @@ export async function createPaste(
         ? null
         : dateToUnix(options.now) + options.expirationSeconds
 
-  const expirationUnixSpecified = expirationUnix === null ? null : dateToUnix(options.now) + Math.max(options.expirationSeconds!, PASTE_EXPIRE_SPECIFIED_MIN)
+  const expirationUnixSpecified =
+    expirationUnix === null
+      ? null
+      : dateToUnix(options.now) + Math.max(options.expirationSeconds!, PASTE_EXPIRE_SPECIFIED_MIN)
 
   const location = options.isMPUComplete || options.contentLength > parseSize(env.R2_THRESHOLD)! ? "R2" : "KV"
   if (location === "R2" && !options.isMPUComplete) {
@@ -247,7 +261,11 @@ export async function createPaste(
     encryptionScheme: options.encryptionScheme,
   }
 
-  await env.PB.put(pasteName, location === "R2" ? "" : content, expirationUnixSpecified === null ? { metadata } : { metadata, expiration: expirationUnixSpecified })
+  await env.PB.put(
+    pasteName,
+    location === "R2" ? "" : content,
+    expirationUnixSpecified === null ? { metadata } : { metadata, expiration: expirationUnixSpecified },
+  )
 
   return metadata
 }

@@ -32,3 +32,15 @@ RED: `fnm exec --using 22 node node_modules/vitest/vitest.mjs run --config downs
 GREEN / refinement: the same command passed 3 files / 16 tests. `fnm exec --using 22 node node_modules/typescript/bin/tsc --noEmit -p downstream/addons/feishu/tsconfig.json`, `fnm exec --using 22 node node_modules/eslint/bin/eslint.js downstream/addons/feishu`, and `fnm exec --using 22 node node_modules/vite/bin/vite.js build --config downstream/addons/feishu/vite.config.js` passed using existing Node 22.23.2. pnpm 10.34.5 is available through fnm; no dependency installation was performed. Final current-HEAD GitHub regression/review evidence remains pending.
 
 Implementation refinement: reconciliation observes matching content but never unlocks an uncertain write solely from a read. Unknown create identity remains operator-required as approved. No exactly-once remote execution guarantee is invented.
+
+## Current-HEAD CI triage (initial implementation cf4cb647)
+
+PR #9: <https://github.com/Skyline-Gazer/pastebin-worker/pull/9>. Initial implementation commit: `cf4cb6479a88d44c98a8d286b1b2e9f7750a58c8`.
+
+Feishu run `33855782084`: installation, Prettier and ESLint passed. TypeScript failed with TS2307 for `../../dist/frontend/.vite/ssr-manifest.json` in `worker/handlers/handleRead.ts(11,22)`, `worker/pages/display.ts(8,22)`, `worker/pages/index.ts(5,22)` and `worker/pages/markdown.ts(7,22)`. Vitest/build were skipped, not passing.
+
+Cause: Add-on tsconfig reuses `worker-configuration.d.ts`; its `Cloudflare.GlobalProps.mainModule` imports `./worker/index`, pulling upstream pages into the type graph. The ignored SSR manifest already existed locally but is absent in a clean checkout. This is a Phase-3 workflow prerequisite omission, not a D1 type/API error. Fix: run the existing `pnpm build:frontend` in the new downstream-only workflow before validation. No typechecking relaxation or upstream workflow modification. TDD: N/A for restoring a documented build prerequisite; authoritative validation is the new-HEAD CI run.
+
+PR Tests run `33855781979`: `test` and `coverage-goshujin` passed. `report-coverage` failed at 08:59:11 UTC with `Artifact not found for name: coverage-goshujin`, while the producer completed at 09:00:59 UTC. Inherited `pr.yml` has `report-coverage.needs: test`, not both producer jobs; its content is unchanged by this PR. Classification: baseline workflow dependency race (B). A failed-job rerun after both artifacts exist is sufficient for this specific race; do not modify upstream-owned workflow here.
+
+Kody initial current-HEAD review failed with an external `openai_compatible` execution error; validator parse failure likewise is not approval or an actionable finding. Request fresh review only after the corrected HEAD has suitable authoritative CI. No old-HEAD result approves the corrected commit. Phase 3 remains incomplete; PR #5 stays review-only and Phase 4 has not started.

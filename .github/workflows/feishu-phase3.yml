@@ -19,6 +19,9 @@ jobs:
         with:
           version: 10
       - run: pnpm install --frozen-lockfile
+      # Shared Cloudflare runtime declarations import the upstream Worker, whose
+      # page modules require this generated SSR manifest during type checking.
+      - run: pnpm build:frontend
       - run: pnpm prettier -c downstream/addons/feishu docs/planning .github/workflows/feishu-phase3.yml
       - run: pnpm exec eslint downstream/addons/feishu
       - run: pnpm exec tsc --noEmit -p downstream/addons/feishu/tsconfig.json

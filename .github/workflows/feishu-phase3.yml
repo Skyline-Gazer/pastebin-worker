@@ -1,0 +1,29 @@
+name: Feishu internal services
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  feishu-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10
+      - run: pnpm install --frozen-lockfile
+      # Shared Cloudflare runtime declarations import the upstream Worker, whose
+      # page modules require this generated SSR manifest during type checking.
+      - run: pnpm build:frontend
+      - run: pnpm prettier -c downstream/addons/feishu docs/planning .github/workflows/feishu-phase3.yml
+      - run: pnpm exec eslint downstream/addons/feishu
+      - run: pnpm exec tsc --noEmit -p downstream/addons/feishu/tsconfig.json
+      - run: pnpm exec vitest run --config downstream/addons/feishu/vitest.config.js
+      - run: pnpm exec vite build --config downstream/addons/feishu/vite.config.js

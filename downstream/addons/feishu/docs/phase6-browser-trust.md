@@ -1,5 +1,18 @@
 # Phase 6.0 browser trust boundary
 
+## Phase 6.1 completion boundary
+
+`POST /api/entries/:id/complete` accepts only `action` and an `Idempotency-Key`, alongside the
+opaque session cookie, exact Origin, and session CSRF header. It resolves the binding by entry ID,
+then authorizes its stored scope through the authenticated principal's server-side mappings before
+calling the lifecycle service. The response never exposes the binding credential, scope, source,
+or upstream management data. Archived responses expose allowlisted public entry state; delete is
+`204`.
+
+The lifecycle service uses the Phase 3 durable-operation claim. It changes exactly one unambiguous
+top-level unchecked managed task, sends `e=never` or `e=max`, stores only upstream-returned ISO
+expiry, and retains ambiguous or uncertain outcomes for reconciliation rather than reporting success.
+
 The Worker exposes these browser routes:
 
 - `GET /api/auth/login` starts Feishu authorization-code OAuth.
@@ -12,7 +25,8 @@ Provision these secrets/configuration outside source control: `FEISHU_APP_SECRET
 `FEISHU_PRINCIPAL_KEY`. `FEISHU_SESSION_COOKIE_NAME` is optional; the default is
 `feishu_addon_session` because deployment topology cannot safely require `__Host-` yet.
 
-Apply `migrations/0002_browser_trust.sql` after `0001_bindings.sql` when deploying. It only adds
+Apply migrations `0002_browser_trust.sql` and `0003_lifecycle_completion.sql` after `0001_bindings.sql` when deploying. The latter preserves existing binding rows while widening lifecycle and operation-kind checks.
+Migration 0002 only adds
 opaque session/OAuth-state and keyed-principal-to-scope authorization metadata. Feishu OAuth tokens,
 raw identity, management credentials, and Paste bodies are never persisted by this migration or
 returned by these routes. Future browser mutations must call `authorizeBrowserMutation` before any

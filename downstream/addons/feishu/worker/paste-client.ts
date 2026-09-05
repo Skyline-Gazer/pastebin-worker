@@ -43,42 +43,69 @@ export class PasteClient {
     return response
   }
 
-  private async write(path: string, method: string, content: string, password?: string): Promise<string> {
+  private async write(
+    path: string,
+    method: string,
+    content: string,
+    password?: string,
+    expiration = "never",
+  ): Promise<{ name: string; expiresAt: string | null }> {
     const body = new FormData()
     body.set("c", content)
-    body.set("e", "never")
+    body.set("e", expiration)
     if (password) body.set("s", password)
     if (method === "POST") body.set("p", "1")
     const response = await this.request(`${this.origin}${path}`, { method, body })
     try {
       const data = await response.json<Record<string, unknown>>()
-      if (data.expireAt !== null || data.expirationSeconds !== null || typeof data.url !== "string") throw new Error()
+      if (typeof data.url !== "string") throw new Error()
+      const expiresAt = data.expireAt
+      if (expiration === "never" && (expiresAt !== null || data.expirationSeconds !== null)) throw new Error()
+      if (expiration === "max" && (typeof expiresAt !== "string" || !Number.isFinite(Date.parse(expiresAt))))
+        throw new Error()
       const url = new URL(data.url)
       const name = url.pathname.slice(1)
       if (data.url !== this.publicUrl(name)) throw new Error()
-      return name
+      return { name, expiresAt: expiresAt as string | null }
     } catch {
       throw new PasteError("UPSTREAM_INVALID")
     }
   }
 
   create(content: string, password: string): Promise<string> {
-    return this.write("/", "POST", content, password)
+    return this.write("/", "POST", content, password).then((value) => value.name)
   }
 
-  async update(name: string, password: string, content: string): Promise<void> {
+  async update(
+    name: string,
+    password: string,
+    content: string,
+    expiration: "never" | "max" = "never",
+  ): Promise<string | null> {
     this.publicUrl(name)
     if (!/^[a-f0-9]{64}$/.test(password)) throw new PasteError("UPSTREAM_INVALID")
-    const returned = await this.write(`/${name}:${password}`, "PUT", content)
-    if (returned !== name) throw new PasteError("UPSTREAM_INVALID")
+    const returned = await this.write(`/${name}:${password}`, "PUT", content, undefined, expiration)
+    if (returned.name !== name) throw new PasteError("UPSTREAM_INVALID")
+    return returned.expiresAt
   }
 
-  async permanent(name: string): Promise<void> {
+  async remove(name: string, password: string): Promise<void> {
+    this.publicUrl(name)
+    if (!/^[a-f0-9]{64}$/.test(password)) throw new PasteError("UPSTREAM_INVALID")
+    await this.request(`${this.origin}/${name}:${password}`, { method: "DELETE" })
+  }
+
+  /** Verify metadata against the binding's authoritative retention state. */
+  async permanent(name: string, expectedExpiresAt: string | null = null): Promise<void> {
     this.publicUrl(name)
     const response = await this.request(`${this.origin}/m/${name}`, { method: "GET" })
     try {
       const metadata = await response.json<Record<string, unknown>>()
-      if (metadata.expireAt !== null) throw new Error()
+      if (
+        metadata.expireAt !== expectedExpiresAt ||
+        (expectedExpiresAt !== null && !Number.isFinite(Date.parse(expectedExpiresAt)))
+      )
+        throw new Error()
     } catch {
       throw new PasteError("UPSTREAM_INVALID")
     }

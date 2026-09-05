@@ -4,6 +4,7 @@ import { EntryService } from "./service"
 import { BindingStore } from "./store"
 import { BrowserTrustStore } from "./browser-store"
 import { createBrowserAuthHandler, type BrowserAuthEnvironment } from "./browser-auth"
+import { createCompletionHandler } from "./completion"
 import { derivePrincipalKey } from "./principal"
 import { consumeFeishuMessages, createFeishuWebhookHandler, type FeishuWebhookEnvironment } from "./webhook"
 
@@ -23,8 +24,9 @@ export async function createPhase4Worker(env: Phase4Environment) {
     env.FEISHU_CREDENTIAL_ENCRYPTION_KEY,
     env.FEISHU_FINGERPRINT_KEY,
   )
+  const bindings = new BindingStore(env.FEISHU_BINDINGS_DB)
   const service = new EntryService(
-    new BindingStore(env.FEISHU_BINDINGS_DB),
+    bindings,
     credentials,
     new PasteClient(env.PASTEBIN_ORIGIN, fetch, env.PASTEBIN_AUTHORIZATION),
   )
@@ -33,8 +35,10 @@ export async function createPhase4Worker(env: Phase4Environment) {
     derivePrincipalKey(env.FEISHU_PRINCIPAL_KEY, appId, tenantKey, openId),
   )
   const browser = createBrowserAuthHandler(env, trustStore)
+  const completion = createCompletionHandler(env, trustStore, bindings, service)
   return {
-    fetch: async (request: Request) => (await browser.fetch(request)) ?? handler.fetch(request),
+    fetch: async (request: Request) =>
+      (await browser.fetch(request)) ?? (await completion.fetch(request)) ?? handler.fetch(request),
     queue: (batch: Parameters<typeof consumeFeishuMessages>[0]) =>
       consumeFeishuMessages(batch, service, undefined, env.FEISHU_INGRESS_DLQ_CONFIGURED === "true"),
   }
@@ -53,6 +57,7 @@ export { Credentials } from "./credentials"
 export { PasteClient } from "./paste-client"
 export { BrowserTrustStore } from "./browser-store"
 export { authorizeBrowserMutation, createBrowserAuthHandler, requireBrowserSession } from "./browser-auth"
+export { createCompletionHandler } from "./completion"
 export { derivePrincipalKey } from "./principal"
 export type { EntryContext, EntryResult, PublicEntry } from "../shared/entries"
 export {

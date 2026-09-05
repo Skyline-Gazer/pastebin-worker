@@ -1,9 +1,10 @@
 import { env } from "cloudflare:test"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import migration from "../migrations/0001_bindings.sql?raw"
+import migration3 from "../migrations/0003_lifecycle_completion.sql?raw"
 import { Credentials } from "../worker/credentials"
 import { PasteClient } from "../worker/paste-client"
-import { BindingStore } from "../worker/store"
+import { BindingStore, type Operation } from "../worker/store"
 import { EntryService } from "../worker/service"
 
 const db = (env as unknown as { DB: D1Database }).DB
@@ -13,14 +14,21 @@ const input = { recordKey: "record-1", requestId: "create-1", content: "original
 async function setup() {
   const credentials = await Credentials.create("key1", "11".repeat(32), "22".repeat(32))
   let content = "original"
+  let expiresAt: string | null = null
   const transport = vi.fn<typeof fetch>((url, init) => {
     if (init?.method === "POST" || init?.method === "PUT") {
       content = (init.body as FormData).get("c") as string
+      const expiring = (init.body as FormData).get("e") === "max"
+      expiresAt = expiring ? "2030-01-02T03:04:05.000Z" : null
       return Promise.resolve(
-        Response.json({ url: "https://paste.example/abcd", expireAt: null, expirationSeconds: null }),
+        Response.json({
+          url: "https://paste.example/abcd",
+          expireAt: expiresAt,
+          expirationSeconds: expiring ? 3600 : null,
+        }),
       )
     }
-    if (typeof url === "string" && url.includes("/m/")) return Promise.resolve(Response.json({ expireAt: null }))
+    if (typeof url === "string" && url.includes("/m/")) return Promise.resolve(Response.json({ expireAt: expiresAt }))
     return Promise.resolve(new Response(content))
   })
   const store = new BindingStore(db)
@@ -30,7 +38,8 @@ async function setup() {
 
 beforeEach(async () => {
   await db.exec("DROP TABLE IF EXISTS feishu_operations; DROP TABLE IF EXISTS feishu_bindings;")
-  for (const statement of migration.split(";").filter((part) => part.trim())) await db.prepare(statement).run()
+  for (const statement of `${migration}\n${migration3}`.split(";").filter((part) => part.trim()))
+    await db.prepare(statement).run()
 })
 
 describe("persistent internal entry services", () => {
@@ -183,5 +192,164 @@ describe("persistent internal entry services", () => {
       code: "ENTRY_NOT_FOUND",
     })
     expect(transport.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true)
+  })
+
+  it("archives only the single managed top-level task and persists authoritative expiry", async () => {
+    const { service, transport } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] managed\n  - [ ] nested content" })
+    if (!created.ok) throw new Error("create failed")
+    const permanent = await service.completeEntry(context, {
+      entryId: created.entry.id,
+      requestId: "complete-1",
+      action: "archive_permanent",
+    })
+    expect(permanent).toMatchObject({
+      ok: true,
+      entry: { visibility: "archived", retentionMode: "permanent", expiresAt: null, version: 2 },
+    })
+    expect(
+      await service.completeEntry(context, {
+        entryId: created.entry.id,
+        requestId: "complete-1",
+        action: "archive_permanent",
+      }),
+    ).toEqual(permanent)
+    const timedCreated = await service.createEntry(context, {
+      recordKey: "record-timed",
+      requestId: "create-timed",
+      content: "- [ ] timed",
+    })
+    if (!timedCreated.ok) throw new Error("create failed")
+    expect(
+      await service.completeEntry(context, {
+        entryId: timedCreated.entry.id,
+        requestId: "complete-timed",
+        action: "archive_expiring",
+      }),
+    ).toMatchObject({ ok: true, entry: { retentionMode: "timed", expiresAt: "2030-01-02T03:04:05.000Z" } })
+    const writes = transport.mock.calls
+      .filter(([, init]) => init?.method === "PUT")
+      .map(([, init]) => init!.body as FormData)
+    expect(writes.map((body) => body.get("e"))).toEqual(["never", "max"])
+  })
+
+  it("reads timed archived bindings when upstream metadata matches their authoritative expiry", async () => {
+    const { service, store, credentials } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] timed" })
+    if (!created.ok) throw new Error("create failed")
+    const archived = await service.completeEntry(context, {
+      entryId: created.entry.id,
+      requestId: "timed-read",
+      action: "archive_expiring",
+    })
+    if (!archived.ok || !("entry" in archived)) throw new Error("archive failed")
+    expect(await service.readEntry(context, { entryId: created.entry.id })).toMatchObject({
+      ok: true,
+      entry: { retentionMode: "timed", expiresAt: archived.entry.expiresAt },
+      content: "- [x] timed",
+    })
+    const pending: Operation = {
+      id: "timed-pending",
+      scope_id: context.scopeId,
+      request_id: "timed-pending",
+      entry_id: created.entry.id,
+      kind: "update",
+      fingerprint: "fingerprint",
+      content_fingerprint: await credentials.fingerprint("- [x] timed"),
+      expected_version: archived.entry.version,
+      status: "reserved",
+      result: null,
+    }
+    expect(await store.reserveUpdate(pending)).toBe(true)
+    expect(await service.reconcileEntry(context, { entryId: created.entry.id })).toMatchObject({
+      ok: false,
+      code: "OUTCOME_OBSERVED_OPERATOR_CONFIRMATION_REQUIRED",
+    })
+  })
+
+  it("preserves a missing Paste error while reading completion source before reservation", async () => {
+    const { service, transport } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] missing" })
+    if (!created.ok) throw new Error("create failed")
+    transport.mockResolvedValueOnce(new Response(null, { status: 404 }))
+    expect(
+      await service.completeEntry(context, {
+        entryId: created.entry.id,
+        requestId: "missing-source",
+        action: "archive_permanent",
+      }),
+    ).toMatchObject({ ok: false, code: "ENTRY_NOT_FOUND", retryable: false })
+  })
+
+  it("replays a delete that wins the reservation race as a delete result", async () => {
+    const { service, store, credentials } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] delete" })
+    if (!created.ok) throw new Error("create failed")
+    const raced: Operation = {
+      id: "winner",
+      scope_id: context.scopeId,
+      request_id: "delete-race",
+      entry_id: created.entry.id,
+      kind: "delete",
+      fingerprint: await credentials.fingerprint(
+        JSON.stringify(["complete", context.scopeId, created.entry.id, "delete"]),
+      ),
+      content_fingerprint: "fingerprint",
+      expected_version: created.entry.version,
+      status: "succeeded",
+      result: "{}",
+    }
+    vi.spyOn(store, "operation").mockResolvedValueOnce(null).mockResolvedValueOnce(raced)
+    vi.spyOn(store, "reserveCompletion").mockRejectedValueOnce(new Error("unique race"))
+    expect(
+      await service.completeEntry(context, {
+        entryId: created.entry.id,
+        requestId: "delete-race",
+        action: "delete",
+      }),
+    ).toEqual({ ok: true, deleted: true })
+  })
+
+  it("fails closed on ambiguous task source and deletes only after upstream DELETE", async () => {
+    const { service, transport } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] one\n- [ ] two" })
+    if (!created.ok) throw new Error("create failed")
+    expect(
+      await service.completeEntry(context, {
+        entryId: created.entry.id,
+        requestId: "ambiguous",
+        action: "archive_permanent",
+      }),
+    ).toMatchObject({ ok: false, code: "MANAGED_TASK_AMBIGUOUS" })
+    const deletable = await service.createEntry(context, {
+      recordKey: "delete",
+      requestId: "create-delete",
+      content: "- [ ] delete",
+    })
+    if (!deletable.ok) throw new Error("create failed")
+    expect(
+      await service.completeEntry(context, { entryId: deletable.entry.id, requestId: "delete-1", action: "delete" }),
+    ).toEqual({ ok: true, deleted: true })
+    expect(
+      await service.completeEntry(context, { entryId: deletable.entry.id, requestId: "delete-1", action: "delete" }),
+    ).toEqual({ ok: true, deleted: true })
+    expect(transport.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(true)
+    expect(await service.readEntry(context, { entryId: deletable.entry.id })).toMatchObject({
+      ok: false,
+      code: "ENTRY_NOT_FOUND",
+    })
+  })
+
+  it("does not treat task syntax in fenced code as a managed task", async () => {
+    const { service } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "```md\n- [ ] literal\n```" })
+    if (!created.ok) throw new Error("create failed")
+    expect(
+      await service.completeEntry(context, {
+        entryId: created.entry.id,
+        requestId: "fenced",
+        action: "archive_permanent",
+      }),
+    ).toMatchObject({ ok: false, code: "MANAGED_TASK_AMBIGUOUS" })
   })
 })

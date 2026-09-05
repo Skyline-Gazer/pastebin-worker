@@ -2,9 +2,9 @@ export interface PublicEntry {
   id: string
   pasteName: string
   publicUrl: string
-  visibility: "active"
-  retentionMode: "permanent"
-  expiresAt: null
+  visibility: "active" | "archived"
+  retentionMode: "permanent" | "timed"
+  expiresAt: string | null
   version: number
 }
 

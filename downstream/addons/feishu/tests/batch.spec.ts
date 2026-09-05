@@ -351,7 +351,7 @@ describe("batch lifecycle delegation", () => {
     ]
     for (const result of cases) {
       const coordinator = { execute: vi.fn().mockResolvedValue({ result }) }
-      const response = await createBatchDispatch(coordinator as never)(
+      const response = await createBatchDispatch(coordinator)(
         { ids: result.results.map((item) => item.id), action: "delete" },
         session,
         ["scope-a"],

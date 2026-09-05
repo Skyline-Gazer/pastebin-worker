@@ -435,6 +435,40 @@ STEP N  Final integration/release validation → Final Report → STOP
 
 Implementation MUST NOT start before the planning artifacts are produced and approved. Owner approval MUST be explicit: silence, timeout, or lack of objection MUST NOT be interpreted as approval.
 
+### 10.1.1 Owner Delegated Continuous Execution (bounded exception)
+
+Normal mode in §10.1 remains the default. It is not globally removed or weakened.
+
+Only for existing roadmap Phases 5–10 in `docs/IMPLEMENTATION_ORDER.md`, an owner may explicitly authorize continuous execution. With that authorization, the delegated sequence is:
+
+```text
+explicit owner authorization
+→ PLAN
+→ internal consistency review
+→ SPEC
+→ internal consistency review
+→ PHASE/TODO
+→ implementation
+→ CI / Phase Review Gate / merge
+→ next roadmap Phase
+```
+
+There are no routine owner pauses while work remains inside that delegated roadmap. Internal consistency review must confirm that each artifact remains consistent with locked decisions, the approved roadmap, the preceding artifact, acceptance criteria, ownership boundaries, and applicable security constraints. Artifacts still require durable, reviewable references under §10.7.
+
+`PROJECT_QUEUE_EMPTY` does not mean that one Phase has merged. For this delegation, the queue remains non-empty until every applicable Phase 5–10 is complete under `docs/IMPLEMENTATION_ORDER.md`; after a completed and merged Phase, refresh `downstream/main` and proceed to the next queued roadmap Phase.
+
+Continuous execution MUST STOP and obtain a real owner decision; it MUST NOT auto-continue when any of the following applies:
+
+- product behavior is ambiguous and not resolved by `DECISIONS.md` or applicable documentation;
+- proposed work exceeds `docs/IMPLEMENTATION_ORDER.md` Phases 5–10 or invents new product scope;
+- a security, API, or trust-boundary change is outside the applicable SPEC;
+- a destructive migration or production deployment is proposed;
+- work involves PR #5, `upstream-sync`, or a `goshujin` rewrite;
+- a bot-unavailable merge override or disposition of a blocking finding requires owner authority; or
+- SPEC change control alters observable behavior, an API, security/trust boundaries, or acceptance criteria beyond the delegated roadmap/SPEC. Continuous mode replaces routine approval pauses only for in-scope PLAN/SPEC/PHASE/TODO progression; it does not permit silent SPEC drift or boundary expansion.
+
+The owner message authorizing Owner Delegated Continuous Execution for Phases 5–10 is also the authorizing decision for this governance documentation change. That bootstrap authorization applies only to this policy change; after it merges, this subsection governs prospective delegated execution.
+
 ### 10.2 PLAN requirements
 
 The first substantive output for a new development request is an execution PLAN. Do NOT edit files, create branches, or write production code yet. The PLAN MUST contain:

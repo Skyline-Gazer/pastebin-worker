@@ -1,46 +1,33 @@
 # Phase 6 — Single completion actions PHASE decomposition
 
-Status: CONTINUOUS-MODE STOP — implementation blocked pending owner-approved browser authorization / scope resolution
+Status: CONTINUOUS-MODE PHASE READY AFTER INTERNAL CONSISTENCY REVIEW / IMPLEMENTATION AUTHORIZED under D-030 after this §10.5 artifact-update PR merges.
 
-This durable decomposition follows [Phase 6 SPEC](phase6-spec.md) and CHANGE_CONTEXT §10.4. The Phase 4 webhook is not a browser authorization adapter. No implementation phase may start until the owner resolves SPEC §3.13 and the artifacts are updated through §10.5.
+Implementation has NOT started. This follows the owner-approved trust decision and [Phase 6 SPEC](phase6-spec.md).
 
-## Phase 6.0 — Trust-boundary resolution (planning only)
+## Phase 6.0 — Browser trust-boundary implementation
 
-- **Goal:** obtain owner-approved browser authentication, principal, and server-side scope-resolution contract.
-- **Scope:** record the decision and revise/review affected SPEC/PHASE/TODO; no auth/product code.
-- **Dependencies / inputs:** owner decision; Phase 6 SPEC §3.8/§3.13; Phase 3 trusted-context restriction; Phase 4 webhook boundary.
-- **Deliverables:** durable approved trust contract and unblocked revised plan.
-- **Acceptance criteria:** exactly one approved browser boundary resolves the caller to allowed scope server-side; browser scope/global/default paths are rejected; security tests are specified.
-- **Tests required:** N/A until the owner selects a design; test requirements are added with the revised contract.
-- **Expected branch / PR target:** `docs/*` → `downstream/main` if required.
-- **Risks:** silent trust-boundary invention. **Exit:** owner decision recorded; §10.5 artifacts updated and internally reviewed.
+- **Goal:** implement approved Feishu OAuth authorization-code, opaque Add-on session, CSRF/Origin, and server-side principal-to-scope boundary.
+- **Scope:** OAuth callback state validation, server code exchange/identity lookup, keyed principal, regenerated eight-hour server session, secure cookie, logout/revocation invalidation, exact Origin plus session-bound CSRF, additive principal-scope/session persistence, and authenticated Phase 4 P2P event mapping.
+- **Constraints:** no browser Feishu token/identity/scope authority, global/default scope, second Paste body/receipt table, destructive migration, or Phase 3/4 semantic change.
+- **Tests (RED first):** all SPEC §3.10 negatives; callback/state/error, session-cookie, trusted-event mapping, multi-scope/absence, secret/log redaction, Phase 3/4 regressions.
+- **Exit:** TDD evidence and current-HEAD checks/review gate pass; merge before 6.1.
 
 ## Phase 6.1 — Scoped lifecycle completion service and adapter
 
-- **Goal:** after 6.0, add the narrow authenticated single-completion route and lifecycle transitions.
-- **Scope:** additive state/operation extensions, deterministic managed-source update, permanent/timed metadata capture/delete ordering, and Worker adapter.
-- **Dependencies / inputs:** merged 6.0 decision; refreshed `downstream/main`; Phase 3 service claim protocol.
-- **Deliverables:** scoped completion service/adapter and tests.
-- **Acceptance criteria:** SPEC §3.11 criteria 2–7; no browser secret/scope; archive/delete persistence ordering and reconciliation are fail-closed.
-- **Tests required:** SPEC §3.12 service/store/client/adapter/security/migration tests plus regressions.
-- **Expected branch / PR target:** `feat/feishu-single-completion` → `downstream/main`.
-- **Risks:** scope bypass, uncertain upstream write, expiry fabrication, destructive migration. **Exit:** current-HEAD checks/review gate pass and merge with authority.
+- **Goal:** add narrow authenticated completion and lifecycle transitions using 6.0 authorization.
+- **Scope:** additive state/operation extensions, principal-to-allowed-scopes join before Phase 3/upstream activity, deterministic source update, retention metadata/delete ordering, Worker adapter.
+- **Constraints:** browser supplies only entry ID/action/idempotency/session/CSRF—not scope, Feishu token, Paste secret/body/URL, or deadline. No UI/restore/timer/Batch Mode.
+- **Tests (RED first):** authorization regressions; permanent/timed/delete, exact `expiresAt`, source precision, claims/replay/conflicts/reconciliation, adapter validation, additive migration, secret-free output/logs.
+- **Exit:** lifecycle acceptance, TDD evidence, current-HEAD gate; merge before 6.2.
 
-## Phase 6.2 — Completion chooser and authoritative Archive presentation
+## Phase 6.2 — Completion chooser and Archive presentation
 
-- **Goal:** replace Phase 5's no-op with the accessible single-item flow.
-- **Scope:** chooser, delete confirmation, pending state, returned-result Active/Archive updates; no restore/countdown loop/batch behavior.
-- **Dependencies / inputs:** merged 6.1, refreshed `downstream/main`, approved adapter contract.
-- **Deliverables:** frontend flow/tests/docs.
-- **Acceptance criteria:** SPEC §3.11 criteria 1, 3, and 4.
-- **Tests required:** SPEC §3.12 frontend/a11y/error/no-secret regressions.
-- **Expected branch / PR target:** `feat/feishu-single-completion-ui` → `downstream/main`.
-- **Risks:** optimistic mutation, accidental delete, arbitrary Markdown task mapping. **Exit:** current-HEAD checks/review gate pass and merge with authority.
+- **Goal:** replace Phase 5 no-op with accessible single-item UI.
+- **Scope:** chooser, delete confirmation, pending state, session/CSRF request wiring, returned-result Active/Archive updates; no restore/countdown/Batch Mode.
+- **Dependencies:** merged 6.1 and refreshed `downstream/main`.
+- **Tests (RED first):** chooser/cancel/delete-confirm/pending/result-only/Archive exact-expiry/session-CSRF/a11y/no-secret regressions.
+- **Exit:** TDD evidence and current-HEAD gate before merge.
 
 ## Internal consistency review
 
-The phases respect the dependency rule: 6.1 cannot begin before the owner trust decision, and 6.2 cannot begin from an unmerged 6.1 branch. They retain the API's semantic route without exposing it prematurely, maintain Phase 3's trusted-context model, and avoid later Phase 7–9 scope.
-
-Status: CONTINUOUS-MODE STOP — implementation blocked pending owner-approved browser authorization / scope resolution
-
-Implementation has NOT started.
+The sequence implements trust before completion and backend before UI, retains lifecycle semantics, Phase 3 idempotency, Phase 4 compatibility, Add-on ownership, additive-only migration, and D-030/CHANGE_CONTEXT §10.5. No STOP exists; code has not started.

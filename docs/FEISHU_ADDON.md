@@ -33,6 +33,9 @@ Frontend MUST NOT hold management credentials.
 
 ## 3. Worker responsibilities
 
+- perform Feishu OAuth code callback exchange and server-side identity resolution;
+- create/revoke opaque Add-on sessions and enforce exact Origin plus session-bound CSRF for browser mutations;
+- derive principals and maintain additive trusted principal-to-Phase-3-scope authorization metadata from authenticated Feishu-side events;
 - verify/process Feishu webhook events;
 - normalize Bot actions;
 - expose frontend API;
@@ -85,7 +88,13 @@ Webhook handling should be idempotent because Feishu can retry events.
 
 Avoid duplicate Paste creation for the same logical event. Use a stable event/record key and persist idempotency state where needed.
 
-## 7. Web page identity
+A fully authenticated/authorized P2P event may additionally establish/update the server-side principal-to-scope authorization mapping used by browser mutations. This metadata is not a second Paste-body store or a webhook receipt/idempotency table, and browser input must never establish it.
+
+## 7. Browser trust contract
+
+The web page uses the Add-on session after OAuth; it does not retain a Feishu user token as an Add-on credential. Session/OAuth/CSRF secrets, raw Feishu identifiers where avoidable, scope IDs, Paste credentials, management URLs, and raw upstream errors never appear in public responses or routine logs. A user without a prior trusted P2P-derived mapping fails closed; one principal may have multiple scopes.
+
+## 8. Web page identity
 
 The Add-on is named Feishu because Feishu feeds/controls it, but the page itself should remain visually part of the Pastebin Worker web product.
 

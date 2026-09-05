@@ -1,6 +1,6 @@
 # Phase 6 — Single completion actions PLAN
 
-Status: CONTINUOUS-MODE PLAN READY AFTER INTERNAL CONSISTENCY REVIEW
+Status: CONTINUOUS-MODE PLAN READY AFTER INTERNAL CONSISTENCY REVIEW; browser trust boundary approved in the Phase 6 owner decision.
 
 Implementation has NOT started.
 
@@ -8,7 +8,10 @@ Implementation has NOT started.
 
 This PLAN is an in-scope planning artifact under **Owner Delegated Continuous
 Execution for roadmap Phases 5–10 (D-030)** and `docs/CHANGE_CONTEXT_AND_REVIEW.md`
-§10.1.1. It authorizes neither implementation nor a change outside roadmap Phase 6.
+§10.1.1. The browser trust boundary is now approved by
+`docs/decisions/phase6-browser-trust-2026-09-06.md`;
+the revised SPEC/PHASE/TODO authorize Phase 6.0 after their §10.5 artifact-update
+PR merges. This PLAN does not authorize a change outside roadmap Phase 6.
 It does not authorize deployment, migration, PR #5, `upstream-sync`, or a
 `goshujin` rewrite.
 
@@ -105,15 +108,15 @@ then records/returns public-safe final state. The adapter must consume the
 existing Phase 3 mutation claim/idempotency/reconciliation model rather than
 making unclaimed writes or treating an uncertain upstream result as success.
 
-This PLAN deliberately does **not** invent a browser authentication/session
-mechanism or permit the request to supply `scopeId`. The authoritative route
-and payload semantics are locked by `docs/API_CONTRACT.md`; the missing
-authentication and trusted scope-resolution design is an open security
-contract that must be resolved in the Phase 6 SPEC from an existing approved
-Add-on boundary. If no such approved boundary exists, continuous execution
-MUST STOP before implementation under §10.1.1 rather than expose a
-cross-scope completion endpoint. This is a security implementation dependency,
-not permission to alter the documented product actions.
+The owner-approved browser boundary is official Feishu/Lark OAuth
+authorization-code → Worker callback and server-side verification/exchange →
+server-derived principal → Add-on session, followed by server-side
+principal-to-scope authorization. `docs/decisions/phase6-browser-trust-2026-09-06.md`
+and the Phase 6 SPEC lock that boundary. The browser must not supply `scopeId`
+or any other identity/scope authority, and Phase 6 must not invent a different
+authentication model, browser-controlled scope, or global/default scope. This
+approved security boundary is an implementation constraint, not permission to
+alter the documented product actions.
 
 ## Non-goals
 
@@ -130,11 +133,11 @@ not permission to alter the documented product actions.
 
 ## Risks, unknowns, and STOP conditions
 
-- **Security/trust boundary:** the repository has no implemented browser
-  authentication or server-side browser-to-scope resolver. Phase 3 explicitly
-  forbids accepting a browser-provided `scopeId`. The Phase 6 SPEC must identify
-  an already approved trusted resolver and its authorization rule, or STOP for
-  owner direction; an unauthenticated/global/default scope is forbidden.
+- **Security/trust boundary — RESOLVED:** owner decision 2026-09-06 approves
+  Feishu OAuth authorization-code → Add-on session → server-derived principal
+  → server-side scope authorization. Phase 3 still forbids a browser-provided
+  `scopeId`; implementation must not substitute a different authentication
+  model, browser scope authority, or global/default scope.
 - **Lifecycle persistence:** the inspected D1 schema/service represents only
   active/permanent/null state. The SPEC must define the smallest additive,
   backward-compatible lifecycle fields and operation-result/state transitions
@@ -149,17 +152,22 @@ not permission to alter the documented product actions.
   other GFM checkboxes as content. If the locked one-managed-top-level-task
   model cannot identify the source location safely for existing bindings,
   STOP rather than choose an arbitrary checkbox.
-- **No current STOP:** these are implementation/SPEC resolution items bounded
-  by the locked API/lifecycle documents. No product-action ambiguity, new
-  product scope, deployment, destructive migration, PR #5, upstream-sync,
-  goshujin, bot override, or external adoption is proposed by this PLAN.
+- **STOP conditions that remain:** stop for owner direction if the locked
+  one-managed-top-level-task model cannot safely identify the source location,
+  or if verified official Feishu protocol/runtime evidence materially
+  contradicts the approved trust boundary and would require a different
+  security architecture. No product-action ambiguity, new product scope,
+  deployment, destructive migration, PR #5, upstream-sync, goshujin, bot
+  override, or external adoption is proposed by this PLAN.
 
 ## Proposed implementation approach
 
-1. In the SPEC, pin the trusted browser authorization/scope-resolution
-   precondition and request identity/error mapping before any route is written.
-   If it cannot be grounded in an approved boundary, stop and request the owner
-   decision described above.
+1. The SPEC now locks the approved Feishu OAuth authorization-code → Add-on
+   session → server-derived principal → server-side scope-authorization
+   boundary and request identity/error mapping before any route is written.
+   Implement that boundary without seeking routine owner re-approval; stop
+   only if verified official Feishu protocol/runtime evidence materially
+   contradicts it and requires a different security architecture.
 2. Specify and test first a generic Add-on lifecycle extension around the
    existing Phase 3 claim protocol: public lifecycle projection, operation
    fingerprint/action/version behavior, additive binding state, authoritative
@@ -237,12 +245,16 @@ D-012, D-016, D-017, D-030, `IMPLEMENTATION_ORDER.md` Phase 6,
 - It chooses the smallest coherent ownership/API path already contemplated by
   the API contract: Browser → Add-on Worker → Pastebin, using Phase 3 rather
   than direct browser mutation or a parallel store.
-- It explicitly retains the unresolved authentication/scope-resolution
-  precondition rather than inventing a public trust boundary. The Phase 6 SPEC
-  must STOP for owner direction if that precondition cannot be met from an
-  approved existing boundary; implementation must not proceed on a guessed
-  auth model.
-- No other D-030 STOP condition is triggered by this documentation-only PLAN.
+- The authentication/scope STOP is **RESOLVED** by the owner decision dated
+  2026-09-06: the approved Feishu OAuth authorization-code → Add-on session →
+  server-derived principal → server-side scope-authorization boundary is
+  recorded in `docs/decisions/phase6-browser-trust-2026-09-06.md` and locked
+  by the Phase 6 SPEC. The PLAN still forbids a different auth model,
+  browser-provided scope authority, and global/default scope.
+- Remaining STOP conditions are limited to source-location ambiguity and a
+  verified official Feishu protocol/runtime contradiction that requires a
+  materially different security architecture. No other D-030 STOP condition
+  is triggered by this documentation-only PLAN.
 
 ## References
 
@@ -255,6 +267,8 @@ D-012, D-016, D-017, D-030, `IMPLEMENTATION_ORDER.md` Phase 6,
 - `docs/planning/phase3-spec.md`,
   `downstream/addons/feishu/docs/phase3-services.md`, and
   `docs/CHANGE_CONTEXT_AND_REVIEW.md` §§10.1.1, 10.2, and 10.7.
+- `docs/decisions/phase6-browser-trust-2026-09-06.md` — approved browser
+  trust boundary.
 
 Status: CONTINUOUS-MODE PLAN READY AFTER INTERNAL CONSISTENCY REVIEW
 

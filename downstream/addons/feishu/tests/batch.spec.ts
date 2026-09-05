@@ -160,23 +160,27 @@ describe("batch lifecycle delegation", () => {
       expect.objectContaining({ entryId: "entry-b", action: "archive_permanent" }),
     )
     expect(execution.items).toEqual([
-      expect.objectContaining({ id: "entry-a", outcome: "succeeded" }),
-      expect.objectContaining({ id: "entry-b", outcome: "succeeded", expiresAt: "2030-01-02T03:04:05.000Z" }),
-      expect.objectContaining({ id: "entry-c", outcome: "succeeded", deleted: true }),
+      expect.objectContaining({ id: "entry-a", outcome: "succeeded", expiresAt: null }),
+      expect.objectContaining({ id: "entry-b", outcome: "succeeded", expiresAt: null }),
+      expect.objectContaining({ id: "entry-c", outcome: "succeeded", expiresAt: null }),
     ])
     expect(JSON.stringify(execution)).not.toContain("sealed-secret")
-    await coordinator.execute(
+    const expiringExecution = await coordinator.execute(
       { ids: ["entry-a"], action: "archive_expiring" },
       { principalKey: "principal-a" },
       ["scope-a"],
       "opaque-browser-key-expiring",
     )
-    await coordinator.execute(
+    expect(expiringExecution.items).toEqual([
+      expect.objectContaining({ id: "entry-a", outcome: "succeeded", expiresAt: "2030-01-02T03:04:05.000Z" }),
+    ])
+    const deleteExecution = await coordinator.execute(
       { ids: ["entry-a"], action: "delete" },
       { principalKey: "principal-a" },
       ["scope-a"],
       "opaque-browser-key-delete",
     )
+    expect(deleteExecution.items).toEqual([expect.objectContaining({ id: "entry-a", outcome: "succeeded", deleted: true })])
     expect(service.completeEntry).toHaveBeenNthCalledWith(
       4,
       { scopeId: "scope-a" },

@@ -518,7 +518,7 @@ export class EntryService {
       }
       if (await this.store.pending(binding.id)) return this.error("RECONCILIATION_REQUIRED")
       const current = await this.store.get(context.scopeId, input.entryId)
-      if (!current || current.version !== binding.version) return this.error("RECONCILIATION_REQUIRED")
+      if (current?.version !== binding.version) return this.error("RECONCILIATION_REQUIRED")
       return { ok: true, entry: this.project(current) }
     } catch (error) {
       if (error instanceof PasteError && error.code === "UPSTREAM_UNCERTAIN")

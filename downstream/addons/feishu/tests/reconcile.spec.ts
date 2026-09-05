@@ -21,7 +21,7 @@ describe("reconciliation browser adapter", () => {
     const trust = { getSession: vi.fn().mockResolvedValue(session), scopes: vi.fn().mockResolvedValue(["scope-a"]) }
     const bindings = { getById: vi.fn().mockResolvedValue({ id: "entry-a", scope_id: "scope-a" }) }
     const service = { reconcileArchivedAbsence: vi.fn().mockResolvedValue({ ok: true, absent: true }) }
-    const handler = createReconciliationHandler(env as never, trust as never, bindings as never, service as never)
+    const handler = createReconciliationHandler(env, trust as never, bindings as never, service as never)
     const result = await handler.fetch(request({ "x-browser-scope": "other", "x-browser-password": "secret" }))
     expect(result?.status).toBe(204)
     expect(service.reconcileArchivedAbsence).toHaveBeenCalledWith({ scopeId: "scope-a" }, { entryId: "entry-a" })
@@ -32,7 +32,7 @@ describe("reconciliation browser adapter", () => {
     const trust = { getSession: vi.fn().mockResolvedValue(session), scopes: vi.fn().mockResolvedValue(["other"]) }
     const bindings = { getById: vi.fn().mockResolvedValue({ id: "entry-a", scope_id: "scope-a" }) }
     const service = { reconcileArchivedAbsence: vi.fn() }
-    const handler = createReconciliationHandler(env as never, trust as never, bindings as never, service as never)
+    const handler = createReconciliationHandler(env, trust as never, bindings as never, service as never)
     expect((await handler.fetch(request({}, "{}")))?.status).toBe(400)
     expect((await handler.fetch(request()))?.status).toBe(403)
     expect((await handler.fetch(request({ origin: "https://evil.example" })))?.status).toBe(403)

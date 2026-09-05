@@ -219,3 +219,9 @@ Implementation must identify the managed completion control for an entry. The si
 - Dialog focus must be trapped/restored correctly.
 - Destructive actions must be distinguishable without relying only on color.
 - Countdown text should remain understandable to screen readers.
+
+## 11. Browser access boundary
+
+Before the completion UI can mutate an entry, the page establishes an Add-on session through Feishu/Lark OAuth authorization-code. It subsequently sends only the Add-on session, an anti-CSRF header, entry ID, selected action, and idempotency identity. The page never displays, stores, or submits a Feishu user token as an Add-on credential; trusted Feishu identity/scope fields; Paste password/management URL/body; or a retention deadline.
+
+The server authorizes each entry through a trusted principal-to-scope association created from authenticated Feishu-side P2P interaction. Users without that association see a sanitized access/linkage failure rather than a global/default view or a way to select scope in the UI.

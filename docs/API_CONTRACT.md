@@ -12,6 +12,10 @@ Allowed direction:
 Browser -> Feishu Add-on Worker -> Pastebin
 ```
 
+Browser authentication is Feishu/Lark OAuth authorization-code followed by a server-created Add-on session. Feishu OAuth/user tokens, tenant/open/app identifiers, chat IDs, scope IDs, Paste passwords, management URLs, Paste bodies, and retention deadlines are not browser authority or completion inputs.
+
+State-changing browser requests require the authenticated opaque Add-on session, exact allowed `Origin`, and a session-bound CSRF header. The Worker derives the principal server-side and authorizes by principal → allowed scopes → binding/entry; entry ID alone never establishes scope.
+
 ## 2. Entry shape returned to frontend
 
 Example public shape:
@@ -62,6 +66,8 @@ Conceptual request:
 ```http
 POST /api/entries/:id/complete
 Content-Type: application/json
+Idempotency-Key: <bounded opaque request identity>
+X-CSRF-Token: <session-bound token>
 ```
 
 ```json
@@ -83,6 +89,8 @@ or:
 ```
 
 The backend owns any required Markdown source update for the managed task plus lifecycle/upstream mutation.
+
+The request body contains only `action`. The browser supplies no scope, Feishu token, tenant/chat/app authority, Paste credential/body/management URL, or deadline. No session is `401`; invalid/expired/revoked session is `401`; failed scope authorization, Origin, or CSRF checks reject before Phase 3/upstream activity. Repeated identical completion preserves Phase 3 idempotent replay; conflicting reuse is rejected.
 
 ### Permanent response
 

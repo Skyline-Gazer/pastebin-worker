@@ -1,46 +1,39 @@
 # Phase 6 — Single completion actions TODO
 
-Status: CONTINUOUS-MODE STOP — implementation blocked pending owner-approved browser authorization / scope resolution
+Status: CONTINUOUS-MODE TODO READY AFTER INTERNAL CONSISTENCY REVIEW / IMPLEMENTATION AUTHORIZED under D-030 after this §10.5 artifact-update PR merges.
 
-Active planning checklist for [Phase 6](phase6-spec.md). This is not implementation authorization. Do not create a public completion adapter, add a browser request, or alter lifecycle storage until the owner resolves SPEC §3.13 and §10.5 updates these artifacts.
+Implementation has NOT started. Active checklist for [Phase 6](phase6-spec.md).
 
-## 0. Owner decision required
+## 1. Phase 6.0 — browser trust boundary
 
-- [ ] Owner selects/approves the existing Add-on browser authentication boundary and server-side principal-to-scope authorization rule.
-- [ ] Record credential verification, scope ownership rule, origin/CSRF policy where applicable, expiry/revocation, deployment configuration, sanitized errors, and required negative tests in the revised SPEC.
-- [ ] Run SPEC change control and internal consistency review; refresh this PHASE/TODO before implementation.
+- [ ] Start from refreshed `downstream/main`; record RED evidence first.
+- [ ] Add failing OAuth/session tests: callback/state/error, server-only exchange/user-info, keyed principal, regenerated opaque eight-hour session, secure cookie, logout/revocation, token/session/CSRF redaction.
+- [ ] Add failing negatives: no session `401`; invalid/expired/revoked session `401`; invalid Origin; missing/invalid CSRF; browser-supplied scope ineffective; guessed entry ID grants no scope.
+- [ ] Add mapping tests: authenticated Phase 4 P2P event alone establishes/updates mapping; no scope forbidden; one principal multiple scopes; A cannot mutate B; Phase 3/4 remain compatible.
+- [ ] Implement only approved OAuth/session/CSRF/Origin/principal-scope boundary and additive D1 metadata/session migration; no Paste body, receipt/idempotency table, destructive migration, or browser credential storage.
+- [ ] Record GREEN/REFACTOR/REGRESSION; run checks/current-HEAD review gate and merge before 6.1.
 
-## 1. Phase 6.1 preflight — blocked
+## 2. Phase 6.1 — lifecycle completion backend
 
-- [ ] Start only from refreshed `downstream/main` after Phase 6.0 is resolved; create `feat/feishu-single-completion` (or equivalent).
-- [ ] Confirm additive migration feasibility and upstream metadata shape for `e=max`; no reset, browser expiry arithmetic, or root/upstream changes.
-- [ ] Record TDD RED evidence before behavior code.
+- [ ] Branch from merged 6.0; RED tests for authorization before Phase 3/upstream, request validation, and secret-free output/logs.
+- [ ] RED tests for permanent/timed/delete, exact `expiresAt`, source precision, Phase 3 claims/replay/conflicts, duplicate idempotency, and reconciliation.
+- [ ] Implement browser entry ID/action/idempotency/session/CSRF only; join principal allowed scopes to binding/entry and fail closed before mutation.
+- [ ] Add lifecycle persistence only as tests require; retain binding compatibility, Phase 3/4 behavior, and upstream body authority.
+- [ ] Record TDD/regression evidence; current-HEAD gate and merge before 6.2.
 
-## 2. Phase 6.1 TDD / implementation — blocked
+## 3. Phase 6.2 — completion UI
 
-- [ ] Add failing scoped authorization and adapter tests: no browser `scopeId`, unauthenticated/forbidden/cross-scope denial before upstream activity, and method/body/action/idempotency validation.
-- [ ] Add failing service/store/client tests for permanent/timed/delete state, exact validated `expiresAt`, source precision, claims/replay/conflicts, and uncertain-result reconciliation.
-- [ ] Implement only the approved authentication adapter and narrow completion path; preserve server-only credentials and public allowlisting.
-- [ ] Add additive lifecycle persistence only if validated by the prior tests; preserve existing bindings and no full body copy.
-- [ ] Record GREEN/REFACTOR/REGRESSION evidence and run focused/full Add-on Worker checks, type/lint/format/build, and required current-HEAD review gate.
-
-## 3. Phase 6.2 UI — blocked on merged 6.1
-
-- [ ] Branch from merged/refreshed 6.1; write failing chooser, cancel, destructive-confirmation, pending, result-only state movement, Archive, and no-secret tests.
-- [ ] Implement compact accessible chooser and delete confirmation; keep other Markdown tasks inert content and no optimistic lifecycle update.
-- [ ] Render permanent/timed Archive results from returned state, retaining exact `expiresAt`; do not add Phase 7 timer/restore or Phase 8 batch UI.
-- [ ] Record TDD and regression evidence; complete current-HEAD checks/review gate before an authorized merge.
+- [ ] Branch from merged 6.1; RED chooser/cancel/delete-confirm/pending/result/Archive exact-expiry/session-CSRF/a11y/no-secret tests.
+- [ ] Implement compact chooser/delete confirmation; other Markdown tasks remain content and lifecycle is not optimistic.
+- [ ] Render Archive from returned state only; do not add Phase 7 restore/timer or Phase 8 Batch Mode.
+- [ ] Record TDD/regression evidence and current-HEAD gate before merge.
 
 ## Evidence
 
 ### TDD
 
-Blocked: no RED/GREEN implementation evidence exists because continuous mode must STOP for the unresolved browser trust boundary. Planning-only review found no safe implementation increment before owner direction.
+Documentation-only §10.5 update: TDD is N/A. RED/GREEN/REFACTOR/REGRESSION evidence is required above for phases 6.0–6.2.
 
 ## Internal consistency review
 
-This checklist is implementation-sized after unblocking, preserves required phase sequencing, and does not misrepresent Phase 4's callback authentication as browser authorization. It keeps the locked action/lifecycle/security rules and makes the owner decision a hard prerequisite.
-
-Status: CONTINUOUS-MODE STOP — implementation blocked pending owner-approved browser authorization / scope resolution
-
-Implementation has NOT started.
+This TODO starts 6.0 after this PR merges, requires security negatives before lifecycle work, and preserves merged-phase dependencies. It matches owner decision, Phase 3/4 contracts, and D-030; no STOP exists.

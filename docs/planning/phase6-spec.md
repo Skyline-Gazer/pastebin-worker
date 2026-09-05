@@ -1,126 +1,95 @@
 # Phase 6 — Single completion actions SPEC
 
-Status: CONTINUOUS-MODE STOP — OWNER DIRECTION REQUIRED FOR BROWSER AUTHORIZATION / SCOPE RESOLUTION
+Status: CONTINUOUS-MODE SPEC READY AFTER INTERNAL CONSISTENCY REVIEW / IMPLEMENTATION AUTHORIZED under D-030 after this §10.5 artifact-update PR merges.
 
 Implementation has NOT started.
 
-Parent: [approved Phase 6 PLAN](phase6-plan.md). This is an in-scope D-030 continuous-execution SPEC. It does not authorize implementation because the required trusted browser authorization boundary is absent at the inspected baseline.
+Parent: [approved Phase 6 PLAN](phase6-plan.md). This is an in-scope D-030 continuous-execution SPEC. The owner-approved browser trust boundary is recorded in `docs/decisions/phase6-browser-trust-2026-09-06.md` §§1–9.
 
-## 3.1 Problem statement
+## 3.1 Problem statement and goals
 
-Phase 5 renders a managed, unchecked top-level task but deliberately makes its control inert. A user needs to complete that one managed entry task through an explicit retention decision, without exposing a Paste management password, making a checkbox click silently destructive, or allowing one browser caller to mutate another scope's Paste.
+Phase 5 renders a managed unchecked top-level task but makes it inert. Phase 6 supplies exactly `archive_permanent`, `archive_expiring`, and `delete` through an explicit chooser, with authoritative Archive results, no exposed Paste management credential, and no cross-scope mutation.
 
-## 3.2 Goals
+Browser authorization is official Feishu/Lark OAuth authorization-code → Worker callback/server-side verification and exchange → server-derived principal → Add-on session. Thereafter browser mutation uses only the Add-on session. Phase 6 preserves server-only credentials, upstream Paste-body authority, Phase 3 scoped claims/idempotency, and fail-closed reconciliation. It never accepts browser scope authority, uses a global/default scope, or infers a trusted scope from an entry ID alone.
 
-1. Offer a compact chooser with exactly `archive_permanent`, `archive_expiring`, and `delete` before a managed task mutation.
-2. Move successful archive results from Active to an authoritative-result-backed Archive list; permanent rows show `永久保留`, timed rows retain the exact server-returned `expiresAt`.
-3. Define the semantic completion path: browser `POST /api/entries/:id/complete` → Add-on Worker → Phase 3 services → Pastebin.
-4. Preserve server-only credentials, upstream Paste-body authority, scoped operation claims/idempotency, and fail-closed reconciliation.
-5. Stop rather than invent a browser session, accept browser `scopeId`, or use a global/default scope.
+## 3.2 Non-goals
 
-## 3.3 Non-goals
+No Feishu user access token is a browser-held long-lived application credential. No browser-submitted Feishu identity/scope authority, restore, countdown loop, list/pagination/read API, reconciliation UI, Batch Mode, production deployment, upstream patch/root dependency/workflow work, `upstream-sync`, or PR #5 change is in scope. No second authoritative Paste-body store, webhook receipt/idempotency table, or destructive D1 migration is permitted.
 
-No browser authentication implementation, login/session scheme, Feishu SDK trust assertion, or authorization policy is selected by this SPEC. No restore, countdown loop, list/pagination/read API, reconciliation UI, Batch Mode, production deployment/migration, upstream patch/root dependency/workflow work, or changes to `upstream-sync` or PR #5 are in scope.
+## 3.3 Current behavior
 
-## 3.4 Current behavior
+At `downstream/main` baseline `0975fa90a2b156b841dc8771f166e911a4f4fd63`, Phase 5 is fixture-only and inert. Phase 3 has internal scoped services: `EntryContext.scopeId` is for a trusted adapter, bindings/operations are scope-qualified, credentials are encrypted server-side, and per-entry claims, fingerprints, versions, success replay, and uncertain-outcome blocking apply.
 
-At `downstream/main` baseline `72046dc`, Phase 5 has a fixture-only frontend: the distinct managed checkbox opens no dialog, changes no state, and sends no request. Archive data is static fixture presentation.
+Phase 4's authenticated P2P Bot event derives a trusted Phase 3 scope. Phase 6.0 extends that trusted event path to establish/update principal-to-scope authorization metadata; it does not alter Phase 3 binding/operation authority.
 
-Phase 3 has internal scoped services only. `EntryContext.scopeId` is expressly for a trusted authenticated adapter; bindings and operations are scope-qualified, credentials are encrypted server-side, and mutations use a per-entry claim, request fingerprint, version, success replay, and uncertain-outcome blocking. Its current schema/projection supports Active/permanent/null only. It has no completion operation, archived/timed/delete persistence, expiry capture, or browser HTTP route.
+## 3.4 Desired lifecycle behavior
 
-Phase 4's sole public route is `POST /api/feishu/events`. It verifies an encrypted Feishu callback and derives a scope from configured application, allowed tenant, and P2P chat for create-message ingestion. It neither authenticates a browser request nor resolves a browser principal to an allowed scope. Reusing it as one would be a new trust model, not an approved boundary.
+1. Clicking the managed control opens a compact chooser with no mutation; Cancel is unchanged.
+2. `archive_permanent` checks only the managed source task, keeps `e=never`, then returns/persists `archived/permanent/null` after upstream success.
+3. `archive_expiring` checks that task, changes to `e=max`, validates a non-null upstream ISO `expiresAt`, then returns/persists `archived/timed/<expiresAt>`. Browser time never derives the deadline.
+4. `delete` has distinct destructive confirmation; upstream DELETE precedes binding removal and v1 stores no tombstone.
+5. Only a successful Worker result moves UI state; duplicate submission is disabled while pending. Other Markdown checkboxes remain content.
 
-## 3.5 Desired behavior
+Transitions are `ACTIVE_PERMANENT → ARCHIVED_PERMANENT`, `ACTIVE_PERMANENT → ARCHIVED_EXPIRING`, and `ACTIVE_PERMANENT → DELETED`. Persist only after confirmed upstream success; a post-dispatch unknown result is reconciliation-required, never successful.
 
-For one lifecycle-managed, unchecked top-level task in normal Active view:
+## 3.5 OAuth, session, and completion contract
 
-1. Clicking it opens a compact chooser; no content, binding, Paste, or UI state is mutated yet. Cancel closes it unchanged.
-2. `archive_permanent` changes only the managed source task to checked, keeps upstream retention `e=never`, then persists/returns `archived/permanent/null` after upstream success.
-3. `archive_expiring` changes that managed source task to checked, changes upstream retention to `e=max`, obtains a validated non-null ISO `expiresAt` from upstream response/metadata, then persists/returns `archived/timed/<expiresAt>`. The browser never derives a deadline from a duration or `MAX_EXPIRATION`.
-4. `delete` needs a distinct destructive confirmation after chooser selection. Confirmed server-side upstream DELETE precedes binding removal. Success removes the entry from Active and Archive; v1 stores no tombstone.
-5. Only a successful authoritative Worker result moves frontend state. Duplicate submission is disabled while pending. Other Markdown checkboxes remain content and cannot archive/delete an entry.
+The Worker validates OAuth state, exchanges the code server-side, retrieves identity server-side, derives a principal from `(app_id, tenant_key, open_id)`, and creates a regenerated opaque random Add-on session. Prefer a keyed/hashed derived principal ID; do not expose raw IDs in public APIs/logs. The browser never receives or stores the Feishu `user_access_token` as an Add-on API credential.
 
-Transitions are `ACTIVE_PERMANENT → ARCHIVED_PERMANENT`, `ACTIVE_PERMANENT → ARCHIVED_EXPIRING`, and `ACTIVE_PERMANENT → DELETED`. Persistence happens only after confirmed upstream success; a post-dispatch unknown result remains reconciliation-required, never reported as completed.
+Session state is server-side with an absolute eight-hour TTL. Cookie: `HttpOnly`, `Secure`, `SameSite=Lax` or stricter when compatible with verified OAuth, `Path=/`, and `__Host-` where topology permits. Logout/revocation invalidates server state. Feishu tokens retained server-side are encrypted and minimized; none are browser-accessible.
 
-## 3.6 User/API flows
-
-### Browser flow
-
-The managed control opens the chooser. Choosing archive requires one normal confirmation; choosing delete opens/uses an explicit destructive final confirmation. Cancel at either point is a no-op. On a successful response the client removes the Active row and inserts the returned archive state, except delete, which removes it. Errors retain the prior displayed state and show only a sanitized retry/status message.
-
-### Completion adapter contract — blocked precondition
-
-The semantic route is:
+Every state-changing browser request requires authenticated session, exact configured allowed `Origin`, and a server-generated CSRF token bound to that session in a request header. SameSite is not the sole CSRF control. Missing/mismatched Origin or CSRF is rejected before Phase 3/upstream activity.
 
 ```http
 POST /api/entries/:id/complete
 Content-Type: application/json
 Idempotency-Key: <bounded opaque request identity>
+X-CSRF-Token: <session-bound token>
 
 { "action": "archive_permanent" | "archive_expiring" | "delete" }
 ```
 
-`id`, method, JSON media type/body size, action enum, and idempotency identity must be validated before any service/upstream activity. The adapter must derive `EntryContext` from an already authenticated and authorized browser principal; the browser must never submit `scopeId`, Paste name, password, management URL, retention date, or source body. Scope lookup must be server-side and deny an entry outside the resolved scope before upstream activity.
+Browser sends only entry ID, action, idempotency identity, and normal session/CSRF material. It must not send `scopeId`, tenant/chat/app IDs as authority, a Feishu token, Paste password, management URL, Paste body, or retention deadline. Worker resolves server-derived principal and joins allowed scopes to binding/entry; cross-scope access fails before Phase 3/upstream mutation.
 
-On success archive returns only the allowlisted public entry state (`id`, safe public URL/name where already permitted, `visibility`, `retentionMode`, exact `expiresAt`, `version`); delete returns `204` or an equivalent secret-free success result. Invalid input, unauthenticated, forbidden, missing, stale/conflicting, and reconciliation-required outcomes use stable sanitized codes; no raw upstream error/body is returned. A repeated identical completed request replays its recorded result; same identity with different inputs conflicts; pending/ambiguous claims block a new mutation. There is no partial-success semantic for this single-entry endpoint.
+Archive success returns only allowlisted public entry state (`id`, safe public URL/name where already permitted, `visibility`, `retentionMode`, exact `expiresAt`, `version`); delete returns `204` or equivalent secret-free success. Invalid input, unauthenticated, forbidden, missing, stale/conflicting, and reconciliation-required outcomes use stable sanitized codes. Repeated identical completion replays Phase 3-recorded result; same identity with different inputs conflicts; pending/ambiguous claims block mutation.
 
-This route cannot be implemented until the authorization precondition below is resolved. Its wording locks semantics, not a permission to expose the route.
+## 3.6 Principal-to-scope lifecycle and additive migration
 
-## 3.7 Data/state model
+Only a fully authenticated/authorized Phase 4 P2P event, or equivalently authenticated server-side Feishu source, may establish/update `principal → Phase 3 scopeId`. v1 requires prior authenticated P2P Bot interaction. One principal may map to multiple scopes. No mapping fails closed with a sanitized authorization/linkage error; no default/global scope exists and browser input cannot create or choose mappings.
 
-Paste content remains authoritative upstream. The service may read it transiently to make a deterministic managed-top-level-task source transition, but D1 must not store a second full body.
+When needed, Phase 6.0 adds an additive D1 mapping table/index containing authorization metadata only: keyed/hashed derived principal ID, Phase 3 `scopeId`, timestamps, and safe maintenance metadata. It stores no full Paste body, webhook receipt/idempotency state, raw IDs where avoidable, management password, or OAuth ciphertext. Session state is server-controlled and additive. Existing Phase 3 bindings/operations stay authoritative/readable; no reset, browser-input backfill, or destructive migration.
 
-The eventual additive binding projection must represent:
+## 3.7 OAuth verification record
 
-```ts
-visibility: "active" | "archived"
-retentionMode: "permanent" | "timed"
-expiresAt: string | null
-version: number
-```
+Orchestrator verification is **PASS — no STOP**; it found no material contradiction to the owner design.
 
-Existing ready bindings remain `active/permanent/null`. Timed state requires a validated upstream ISO timestamp; permanent and active state require null. The operation record must extend the existing scoped claim model with a completion kind/action and fingerprint including scope, entry, action, expected version, and server-held request identity. It must retain only safe result snapshots, never plaintext credential/full body. Any migration is additive and cannot reset existing bindings.
+- Browser authorize: `GET https://accounts.feishu.cn/open-apis/authen/v1/authorize` with `client_id`, `response_type=code`, `redirect_uri`, `state`, optional scope/PKCE; callback has `code`/`state` or `error=access_denied`. [Obtain OAuth code](https://open.feishu.cn/document/authentication-management/access-token/obtain-oauth-code); [web SSO consent guide](https://open.feishu.cn/document/common-capabilities/sso/web-application-end-user-consent/guide).
+- Server exchange prefers `https://accounts.feishu.cn/oauth/v3/token`; documented v2 `https://open.feishu.cn/open-apis/authen/v2/oauth/token` is deprecated toward v3. Inputs: `grant_type=authorization_code`, `client_id`, `client_secret`, `code`, `redirect_uri`, optional `code_verifier`. Result includes user `access_token`, `expires_in`, optional `refresh_token`, `token_type`, scope—not `open_id`/`tenant_key`.
+- Worker calls `GET https://open.feishu.cn/open-apis/authen/v1/user_info` with bearer user token to obtain `open_id`/`tenant_key`. [user_info reference](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/authen-v1/authen/user_info).
 
-## 3.8 Security and trust boundaries
+## 3.8 Data, compatibility, and failure behavior
 
-The Paste password, credential envelope, encryption/fingerprint keys, credential-bearing URLs, raw upstream errors, and trusted scope identifiers remain backend-only. Logs and public responses are allowlisted and secret-free. Browser input is untrusted and may contain entry IDs/action/idempotency identity only after syntactic validation.
+Paste content remains authoritative upstream; a transient read may make the deterministic managed-task update, but D1 stores no second full body. Additive binding state is `visibility: "active" | "archived"`, `retentionMode: "permanent" | "timed"`, `expiresAt: string | null`, and `version`. Existing bindings remain `active/permanent/null`; timed state needs validated upstream ISO timestamp.
 
-**Resolved inspection result / STOP:** no already approved Add-on browser authentication and principal-to-scope resolver exists. The Phase 4 webhook boundary is callback-only and cannot authorize a browser mutation. Therefore the following are forbidden: unauthenticated completion, a global/default scope, scope inferred solely from an entry ID, browser-supplied `scopeId`, or repurposing Feishu webhook headers/payload as browser credentials.
+Validation/authentication/authorization failures perform no Phase 3/upstream action. Definite upstream failure leaves lifecycle state unchanged. Timeout, failed metadata verification, or post-success persistence failure is reconciliation-required: preserve evidence/claim; do not blind-retry, fabricate expiry, delete evidence, or report success. `ENTRY_NOT_FOUND` and source ambiguity are sanitized/fail-closed. Phase 3 claims/idempotency and Phase 4 webhook behavior remain compatible; generic `e=never`/`e=max` stays upstream-generic.
 
-Owner direction is required to select and approve an existing/approved Add-on browser boundary (including its credential verification, principal identity, scope-resolution rule, authorization rule, CSRF/origin policy where relevant, expiry/revocation, error policy, and testable deployment configuration). That choice changes the trust boundary and is outside this delegated SPEC. Once approved, this SPEC, PHASE/TODO, and implementation plan must be updated under §10.5 before code begins.
+## 3.9 Acceptance criteria
 
-## 3.9 Compatibility
+1. Exact chooser actions, Cancel no-op, and delete confirmation hold.
+2. OAuth/token/identity resolution and principal derivation are server-side; browser-visible responses/logs expose no secrets.
+3. Sessions are opaque, regenerated on login, server-invalidatable, eight-hour absolute TTL, and use specified secure cookie properties.
+4. Mutations require authenticated session, exact allowed Origin, and session-bound CSRF before Phase 3/upstream activity.
+5. Trusted Feishu-side event alone establishes mappings; no-scope fails closed, multi-scope works, and cross-scope mutation is denied before upstream activity.
+6. Lifecycle ordering, exact `expiresAt`, source precision, Phase 3 idempotency/reconciliation, and active/permanent compatibility hold.
+7. Browser/public/log data contains no trusted scope/identity authority, Paste secret/body/management URL, deadline, raw upstream error, OAuth/session/CSRF secret, or credential ciphertext.
+8. Migration is additive D1 metadata/session work only and does not duplicate Paste bodies or change Phase 3/4 authority.
 
-The work remains Add-on-local and uses generic upstream `e=never`/`e=max` capabilities without Feishu logic upstream. Existing Active/permanent bindings must remain readable and require no destructive reset. Phase 5 fixture behavior is replaced only after a trusted adapter exists; until then it stays fixture-only and inert. Older clients receive no new mutation endpoint absent the approved authentication boundary.
+## 3.10 Test specification
 
-## 3.10 Failure behavior
+TDD requires recorded RED/GREEN/REFACTOR/REGRESSION evidence. Before behavior code, add failing tests for: no session → `401`; invalid/expired/revoked session → `401`; principal without scope → forbidden; scope A cannot mutate scope B; browser-supplied scope cannot affect authorization; guessed entry ID cannot grant scope; invalid Origin; missing/invalid CSRF; OAuth/session secrets absent from browser-visible responses/logs; duplicate completion retaining Phase 3 idempotency; and Phase 3/4 compatibility.
 
-Validation/authentication/authorization failure performs no Phase 3 or upstream action. Definite upstream failure leaves displayed/local lifecycle state unchanged. Dispatch timeout, failed metadata verification, or local persistence failure after upstream success is reconciliation-required: preserve evidence and claim, do not blind-retry, fabricate expiry, delete a binding, or report success. Upstream missing returns sanitized `ENTRY_NOT_FOUND` and has no automatic replacement/deletion-of-evidence behavior. Source ambiguity for the required managed top-level task is a fail-closed error, not permission to choose another checkbox.
-
-## 3.11 Acceptance criteria
-
-Implementation is blocked; after owner-approved trust design, it must prove:
-
-1. The exact chooser actions, Cancel no-op, and delete final confirmation.
-2. Permanent/timed/delete transitions and only-after-upstream-success binding persistence/removal.
-3. Timed Archive state uses the exact validated returned `expiresAt`.
-4. Browser sends no management secret, scope, Paste identity beyond entry ID, source content, or calculated expiry; public results/logs expose none.
-5. A server-derived authorized scope denies cross-scope access before upstream activity; no global/default or unauthenticated mutation path exists.
-6. Duplicate, conflict, ambiguous, missing, and source-ambiguity outcomes are fail-closed and sanitized.
-7. Existing active/permanent bindings remain compatible and upstream-owned paths/patch artifacts are unchanged.
-
-## 3.12 Test specification
-
-Required RED/GREEN evidence after unblocking includes frontend chooser/cancel/pending/delete-confirm/result-state tests; service/store/client tests for transition ordering, managed-source precision, expiry metadata validation, claims/replay/conflicts and reconciliation; adapter tests for method/body/action/idempotency validation, authenticated server-derived context, cross-scope denial before upstream calls, and response/log redaction; migration compatibility tests; and Worker/frontend type/lint/build/regression suites. The new authorization boundary needs negative credential/origin/CSRF/revocation tests matching the owner-approved design.
-
-## 3.13 Open questions / owner STOP
-
-Which already approved browser authentication and server-side principal-to-scope resolution boundary authorizes `POST /api/entries/:id/complete`? No such boundary is documented or implemented. The owner must decide it; this agent must not select or create one under D-030. Implementation may not begin until that decision is recorded and the affected SPEC/PHASE/TODO artifacts pass change control.
+Also require frontend chooser/cancel/pending/delete-confirm/result/no-secret tests; service/store/client ordering, source precision, expiry validation, claims/replay/conflicts/reconciliation; adapter method/media/body/action/idempotency validation; additive migration compatibility; Worker/frontend type, lint, build, and regression suites.
 
 ## Internal consistency review
 
-Reviewed against the Phase 6 PLAN, API Contract §5, Design §§3/9, Frontend §§5/11–12, Retention Lifecycle §§3–5/9, Security §§1–2/5–7, Phase 3 SPEC §§3.4/3.8, Phase 3 services documentation, Phase 5 artifacts, and CHANGE_CONTEXT §10.1.1/10.3/10.4. The product behavior, source-of-truth, secret, lifecycle, and generic-upstream boundaries are consistent. Inspection shows the only approved authenticated boundary is the callback-only Phase 4 webhook; treating it as browser authorization would invent a trust boundary. The STOP is therefore required by §10.1.1.
-
-Status: CONTINUOUS-MODE STOP — OWNER DIRECTION REQUIRED FOR BROWSER AUTHORIZATION / SCOPE RESOLUTION
-
-Implementation has NOT started.
+Reviewed against `AGENTS.md`, D-001–D-030 (especially D-007, D-008, D-010–D-016, D-030), the Phase 6 PLAN, Phase 3 trusted-context/claim contracts, Phase 4 authenticated P2P scope derivation, Phase 5 fixture boundary, `SECURITY.md`, `API_CONTRACT.md`, `FEISHU_ADDON.md`, `DESIGN.md`, and `CHANGE_CONTEXT_AND_REVIEW.md` §10.5. The owner-approved OAuth flow resolves the former ambiguity without browser tokens/identity/scope trust, upstream changes, Paste-body duplication, or Phase 3/4 authority changes. OAuth verification in §3.7 is PASS. No residual STOP exists; implementation remains unstarted until this artifact-update PR merges.

@@ -1,6 +1,6 @@
 # Phase 6 — Single completion actions PLAN
 
-Status: CONTINUOUS-MODE PLAN READY AFTER INTERNAL CONSISTENCY REVIEW
+Status: CONTINUOUS-MODE PLAN READY AFTER INTERNAL CONSISTENCY REVIEW; browser trust boundary approved in the Phase 6 owner decision.
 
 Implementation has NOT started.
 
@@ -8,7 +8,10 @@ Implementation has NOT started.
 
 This PLAN is an in-scope planning artifact under **Owner Delegated Continuous
 Execution for roadmap Phases 5–10 (D-030)** and `docs/CHANGE_CONTEXT_AND_REVIEW.md`
-§10.1.1. It authorizes neither implementation nor a change outside roadmap Phase 6.
+§10.1.1. The browser trust boundary is now approved by
+`/workspace/pastebin-worker-owner-decisions/phase6-browser-trust-2026-09-06.md`;
+the revised SPEC/PHASE/TODO authorize Phase 6.0 after their §10.5 artifact-update
+PR merges. This PLAN does not authorize a change outside roadmap Phase 6.
 It does not authorize deployment, migration, PR #5, `upstream-sync`, or a
 `goshujin` rewrite.
 

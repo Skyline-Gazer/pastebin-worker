@@ -42,8 +42,10 @@ modules. Regression type/lint cover Phase 3/4 imports; full Worker suite remains
 
 Phase 6.1: RED coverage was added for the browser completion adapter and lifecycle service in
 `completion.spec.ts` and `service.spec.ts`. GREEN: `tsc -p downstream/addons/feishu/tsconfig.json
---noEmit` passed. The Worker-pool suite is sandbox-blocked (`listen EPERM 127.0.0.1`), so the full
-suite and current-HEAD review gate remain required before merge.
+--noEmit` passed; `vitest run --config downstream/addons/feishu/vitest.config.js` reported 37
+passed. REFACTOR extracted completion adapter helpers into `worker/completion.ts` and additive
+migration `0003_lifecycle_completion.sql`. Current-HEAD review gate (CI + Bugbot + CODEX_VERIFIED)
+and merge remain required before 6.2.
 
 ## Internal consistency review
 

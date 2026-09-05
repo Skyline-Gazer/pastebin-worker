@@ -118,8 +118,8 @@ downstream/addons/feishu/tsconfig.json`, focused Prettier check, and
 ### Phase 8.3 implementation evidence — 2026-09-05
 
 - **RED:** `node_modules/.bin/vitest run --config
-  downstream/addons/feishu/frontend/vitest.config.ts
-  downstream/addons/feishu/frontend/App.spec.tsx` failed 3 new tests because
+downstream/addons/feishu/frontend/vitest.config.ts
+downstream/addons/feishu/frontend/App.spec.tsx` failed 3 new tests because
   no Batch action toolbar or selection-level confirmation existed.
 - **GREEN:** the same focused command passed: 29 tests. It covers the exact
   three-action/count toolbar, zero-selection absence, one expiring/delete
@@ -130,7 +130,7 @@ downstream/addons/feishu/tsconfig.json`, focused Prettier check, and
   action plus Add-on entry IDs. The visible notice explicitly says Phase 9 is
   deferred and no changes were made.
 - **REGRESSION:** `node_modules/.bin/vitest run --config
-  downstream/addons/feishu/frontend/vitest.config.ts` passed (2 files, 34
+downstream/addons/feishu/frontend/vitest.config.ts` passed (2 files, 34
   tests); Add-on type check, focused Prettier check, and frontend production
   build passed. No Worker, API, request, mutation, result/retry/idempotency,
   Archive/countdown/Restore/reconciliation, secret, or expiry-authority behavior

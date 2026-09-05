@@ -65,6 +65,32 @@ async function restoreEntry(id: string, idempotencyKey: string): Promise<PublicE
   return entry as PublicEntry
 }
 
+async function reconcileEntry(id: string): Promise<PublicEntry | null> {
+  const sessionResponse = await fetch("/api/auth/session", { credentials: "include" })
+  if (!sessionResponse.ok) throw new Error("session unavailable")
+  const session: unknown = await sessionResponse.json()
+  if (!session || typeof session !== "object" || typeof (session as { csrfToken?: unknown }).csrfToken !== "string")
+    throw new Error("session unavailable")
+  const response = await fetch(`/api/entries/${encodeURIComponent(id)}/reconcile`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "X-CSRF-Token": (session as { csrfToken: string }).csrfToken },
+  })
+  if (response.status === 204) return null
+  if (!response.ok) throw new Error("reconciliation unavailable")
+  const payload: unknown = await response.json()
+  const entry = payload && typeof payload === "object" ? (payload as { entry?: unknown }).entry : undefined
+  if (!entry || typeof entry !== "object") throw new Error("reconciliation unavailable")
+  return entry as PublicEntry
+}
+
+function needsReconciliation(entry: FixtureEntry) {
+  return (
+    entry.retentionMode === "timed" &&
+    (!entry.expiresAt || !Number.isFinite(Date.parse(entry.expiresAt)) || Date.parse(entry.expiresAt) <= Date.now())
+  )
+}
+
 function applyPublicResult(
   entries: readonly FixtureEntry[],
   result: PublicEntry | null,
@@ -95,6 +121,7 @@ export function App() {
   const [completionRequestId, setCompletionRequestId] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [restorePendingId, setRestorePendingId] = useState<string | null>(null)
+  const [reconciliationPendingId, setReconciliationPendingId] = useState<string | null>(null)
   const [error, setError] = useState(false)
   const completionTriggerRef = useRef<HTMLButtonElement | null>(null)
   const completionDialogRef = useRef<HTMLDivElement | null>(null)
@@ -156,6 +183,20 @@ export function App() {
     }
   }
 
+  async function submitReconciliation(entry: FixtureEntry) {
+    if (reconciliationPendingId) return
+    setReconciliationPendingId(entry.id)
+    setError(false)
+    try {
+      const result = await reconcileEntry(entry.id)
+      setEntries((current) => applyPublicResult(current, result, entry.id))
+    } catch {
+      setError(true)
+    } finally {
+      setReconciliationPendingId(null)
+    }
+  }
+
   return (
     <main aria-label="Feishu Pastebin" className="page-shell">
       <section className="content-panel" aria-labelledby="page-title">
@@ -208,6 +249,15 @@ export function App() {
                 ) : (
                   <>
                     <ArchiveStatus expiresAt={entry.expiresAt} retentionMode={entry.retentionMode} />
+                    {needsReconciliation(entry) && (
+                      <button
+                        type="button"
+                        disabled={reconciliationPendingId !== null}
+                        onClick={() => void submitReconciliation(entry)}
+                      >
+                        {reconciliationPendingId === entry.id ? "Reconciling…" : "Reconcile archive"}
+                      </button>
+                    )}
                     {(entry.retentionMode === "permanent" || entry.retentionMode === "timed") && (
                       <button
                         type="button"

@@ -67,19 +67,19 @@ do not start a dependent phase from an unmerged branch.
 
 ## 4. Phase 7.4 — confirmed-absence reconciliation
 
-- [ ] After 7.3 merges, refresh `downstream/main`; inspect durable-operation
+- [x] After 7.3 merges, refresh `downstream/main`; inspect durable-operation
       coordination and server error classification; start RED-first.
-- [ ] Add RED service/store/adapter tests for classified definitive upstream
+- [x] Add RED service/store/adapter tests for classified definitive upstream
       missing/expired removal and Archive-list omission only for an archived
       binding.
-- [ ] Add RED negative tests for transport outage, ambiguous 404-like result,
+- [x] Add RED negative tests for transport outage, ambiguous 404-like result,
       invalid metadata, credential/auth failure, pending restore claim, and local
       persistence failure: each retains the binding and returns a stable sanitized
       retryable or `RECONCILIATION_REQUIRED` outcome.
-- [ ] Add RED frontend tests for confirmed-absence row removal, retained stale
+- [x] Add RED frontend tests for confirmed-absence row removal, retained stale
       row/retry messaging otherwise, authorized request metadata, and secret-free
       UI error output.
-- [ ] Implement only the SPEC §3.6 narrow reconciliation contract; do not
+- [x] Implement only the SPEC §3.6 narrow reconciliation contract; do not
       introduce polling, local deletion authority, tombstones, Batch Mode, or a
       route/API/state/security change without §10.5 STOP and owner re-approval.
 - [ ] Record GREEN/REFACTOR/REGRESSION evidence; run focused and Phase 3–6
@@ -154,6 +154,31 @@ downstream/addons/feishu/frontend/tsconfig.json`, and `node_modules/.bin/prettie
 downstream/addons/feishu/vitest.config.js downstream/addons/feishu/tests/service.spec.ts
 downstream/addons/feishu/tests/restore.spec.ts` could not start because sandbox
   policy denied the Cloudflare runtime's required `127.0.0.1` listener (`EPERM`).
+  It is not recorded as passing. Current-HEAD CI and the required AI Review Bot
+  Phase Review Gate remain required before merge.
+
+Phase 7.4 implementation evidence (2026-09-05):
+
+- RED: reconciliation service/store/adapter and stale-row frontend assertions
+  were added before implementation. The Worker runtime cannot execute in this
+  sandbox (see limitation below), so no unobserved Worker RED result is claimed.
+- GREEN: `node_modules/.bin/vitest run --config
+downstream/addons/feishu/frontend/vitest.config.ts` passed: 2 files, 26 tests,
+  including confirmed-absence row removal and authorized CSRF-bearing request
+  metadata. Worker tests cover archived-only classified missing removal, outage
+  retention, invalid metadata, pending restore-claim preservation, and failed
+  local absence persistence retention.
+- REFACTOR: the narrow reconciliation adapter shares the existing browser
+  session/Origin/CSRF and stored-scope authorization boundary; it accepts no
+  body or browser deletion authority.
+- REGRESSION: `node_modules/.bin/tsc --noEmit -p
+downstream/addons/feishu/tsconfig.json`, `node_modules/.bin/tsc --noEmit -p
+downstream/addons/feishu/frontend/tsconfig.json`, `node_modules/.bin/prettier
+--check` for changed files, and `git diff --check` passed.
+- Limitation: `node_modules/.bin/vitest run --config
+downstream/addons/feishu/vitest.config.js downstream/addons/feishu/tests/service.spec.ts
+downstream/addons/feishu/tests/reconcile.spec.ts` could not start because the
+  sandbox denied the Cloudflare runtime's required `127.0.0.1` listener (`EPERM`).
   It is not recorded as passing. Current-HEAD CI and the required AI Review Bot
   Phase Review Gate remain required before merge.
 

@@ -12,6 +12,11 @@ export type EntryResult =
   | { ok: true; entry: PublicEntry; content?: string }
   | { ok: false; code: string; retryable: boolean; correlationId: string }
 
+export type ReconciliationResult =
+  | { ok: true; entry: PublicEntry }
+  | { ok: true; absent: true }
+  | { ok: false; code: string; retryable: boolean; correlationId: string }
+
 /** Only a trusted, authenticated adapter may construct this context. */
 export interface EntryContext {
   scopeId: string

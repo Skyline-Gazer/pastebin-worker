@@ -313,4 +313,24 @@ export class BindingStore {
     ])
     if (results.some((row) => row.meta.changes !== 1)) throw new Error("STATE_CONFLICT")
   }
+
+  /** D-011 reconciliation removes only a verified archived binding.  Completed
+   * operation records are no longer useful once the binding is gone; pending
+   * records are deliberately excluded by the caller before this transaction. */
+  async removeConfirmedAbsentArchived(id: string, version: number): Promise<void> {
+    const results = await this.db.batch([
+      this.db
+        .prepare("DELETE FROM feishu_operations WHERE entry_id = ? AND status IN ('succeeded', 'failed')")
+        .bind(id),
+      this.db
+        .prepare(
+          `DELETE FROM feishu_bindings WHERE id = ? AND version = ? AND visibility = 'archived'
+          AND ((retention_mode = 'permanent' AND expires_at IS NULL) OR retention_mode = 'timed')`,
+        )
+        .bind(id, version),
+    ])
+    // A binding can legitimately have no completed operation (for example a
+    // migrated archive), so only the binding delete is a required change.
+    if (results[1].meta.changes !== 1) throw new Error("STATE_CONFLICT")
+  }
 }

@@ -436,6 +436,115 @@ describe("persistent internal entry services", () => {
     })
   })
 
+  it("reconciles only a confirmed missing archived Paste and retains every uncertain case", async () => {
+    const { service, store, transport } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] archived" })
+    if (!created.ok) throw new Error("create failed")
+    await service.completeEntry(context, {
+      entryId: created.entry.id,
+      requestId: "archive-for-reconciliation",
+      action: "archive_permanent",
+    })
+    transport.mockClear().mockResolvedValue(new Response(null, { status: 404 }))
+    expect(await service.reconcileArchivedAbsence(context, { entryId: created.entry.id })).toEqual({
+      ok: true,
+      absent: true,
+    })
+    expect(await store.get(context.scopeId, created.entry.id)).toBeNull()
+
+    const { service: persistenceService, store: persistenceStore, transport: persistenceTransport } = await setup()
+    const persistence = await persistenceService.createEntry(context, {
+      ...input,
+      recordKey: "persistence",
+      requestId: "persistence",
+      content: "- [ ] persistence",
+    })
+    if (!persistence.ok) throw new Error("create failed")
+    await persistenceService.completeEntry(context, {
+      entryId: persistence.entry.id,
+      requestId: "archive-persistence",
+      action: "archive_permanent",
+    })
+    persistenceTransport.mockClear().mockResolvedValue(new Response(null, { status: 404 }))
+    vi.spyOn(persistenceStore, "removeConfirmedAbsentArchived").mockRejectedValueOnce(new Error("storage unavailable"))
+    expect(await persistenceService.reconcileArchivedAbsence(context, { entryId: persistence.entry.id })).toMatchObject(
+      {
+        ok: false,
+        code: "RECONCILIATION_REQUIRED",
+      },
+    )
+    expect(await persistenceStore.get(context.scopeId, persistence.entry.id)).not.toBeNull()
+
+    const { service: retainedService, store: retainedStore, transport: retainedTransport } = await setup()
+    const retained = await retainedService.createEntry(context, {
+      ...input,
+      recordKey: "retained",
+      requestId: "retained",
+      content: "- [ ] retained",
+    })
+    if (!retained.ok) throw new Error("create failed")
+    await retainedService.completeEntry(context, {
+      entryId: retained.entry.id,
+      requestId: "archive-retained",
+      action: "archive_permanent",
+    })
+    retainedTransport.mockRejectedValueOnce(new Error("credential=never-visible"))
+    expect(await retainedService.reconcileArchivedAbsence(context, { entryId: retained.entry.id })).toMatchObject({
+      ok: false,
+      code: "UPSTREAM_UNCERTAIN",
+      retryable: true,
+    })
+    expect(await retainedStore.get(context.scopeId, retained.entry.id)).not.toBeNull()
+    expect(
+      JSON.stringify(await retainedService.reconcileArchivedAbsence(context, { entryId: retained.entry.id })),
+    ).not.toContain("never-visible")
+  })
+
+  it("does not reconcile active, invalid, pending restore, or locally unpersisted bindings away", async () => {
+    const { service, store, transport, credentials } = await setup()
+    const active = await service.createEntry(context, { ...input, content: "- [ ] invalid" })
+    if (!active.ok) throw new Error("create failed")
+    expect(await service.reconcileArchivedAbsence(context, { entryId: active.entry.id })).toMatchObject({
+      ok: false,
+      code: "INVALID_LIFECYCLE_STATE",
+    })
+    expect(
+      await service.completeEntry(context, {
+        entryId: active.entry.id,
+        requestId: "archive-invalid",
+        action: "archive_expiring",
+      }),
+    ).toMatchObject({ ok: true, entry: { retentionMode: "timed" } })
+    await db.prepare("UPDATE feishu_bindings SET expires_at = 'not-a-date' WHERE id = ?").bind(active.entry.id).run()
+    expect(await service.reconcileArchivedAbsence(context, { entryId: active.entry.id })).toMatchObject({
+      ok: false,
+      code: "RECONCILIATION_REQUIRED",
+    })
+    await db
+      .prepare("UPDATE feishu_bindings SET retention_mode = 'permanent', expires_at = NULL WHERE id = ?")
+      .bind(active.entry.id)
+      .run()
+    const pending: Operation = {
+      id: "restore-pending",
+      scope_id: context.scopeId,
+      request_id: "restore-pending",
+      entry_id: active.entry.id,
+      kind: "restore_permanent",
+      fingerprint: "f",
+      content_fingerprint: await credentials.fingerprint(""),
+      expected_version: 2,
+      status: "reserved",
+      result: null,
+    }
+    expect(await store.reservePermanentRestore(pending)).toBe(true)
+    transport.mockClear()
+    expect(await service.reconcileArchivedAbsence(context, { entryId: active.entry.id })).toMatchObject({
+      ok: false,
+      code: "RECONCILIATION_REQUIRED",
+    })
+    expect(transport).not.toHaveBeenCalled()
+  })
+
   it("preserves a missing Paste error while reading completion source before reservation", async () => {
     const { service, transport } = await setup()
     const created = await service.createEntry(context, { ...input, content: "- [ ] missing" })

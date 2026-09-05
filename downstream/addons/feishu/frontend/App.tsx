@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import type { BatchResult } from "../shared/batch"
 import type { PublicEntry } from "../shared/entries"
 import { fixtureEntries, type FixtureEntry } from "./fixtures"
 import { ArchiveStatus } from "./ArchiveStatus"
@@ -15,6 +16,65 @@ type CompletionAction = "archive_permanent" | "archive_expiring" | "delete"
 export interface BatchActionIntent {
   action: BatchAction
   entryIds: readonly string[]
+}
+
+function isBatchResult(value: unknown, ids: readonly string[]): value is BatchResult {
+  if (!value || typeof value !== "object") return false
+  const candidate = value as Partial<BatchResult>
+  if (
+    candidate.requested !== ids.length ||
+    typeof candidate.succeeded !== "number" ||
+    typeof candidate.failed !== "number" ||
+    !Number.isInteger(candidate.succeeded) ||
+    !Number.isInteger(candidate.failed) ||
+    candidate.succeeded + candidate.failed !== ids.length ||
+    !Array.isArray(candidate.results) ||
+    candidate.results.length !== ids.length
+  )
+    return false
+  let succeeded = 0
+  let failed = 0
+  const validItems = candidate.results.every((item, index) => {
+    if (!item || typeof item !== "object" || item.id !== ids[index]) return false
+    const result = item
+    if (result.status === "failed") {
+      failed += 1
+      return typeof result.code === "string" && typeof result.retryable === "boolean"
+    }
+    if (result.status !== "ok") return false
+    succeeded += 1
+    if ("deleted" in result) return result.deleted === true
+    return (
+      result.state.visibility === "archived" &&
+      (result.state.retentionMode === "permanent" || result.state.retentionMode === "timed") &&
+      (result.state.retentionMode === "permanent"
+        ? result.state.expiresAt === null
+        : typeof result.state.expiresAt === "string")
+    )
+  })
+  return validItems && succeeded === candidate.succeeded && failed === candidate.failed
+}
+
+async function executeBatch(intent: BatchActionIntent, idempotencyKey: string): Promise<BatchResult> {
+  const sessionResponse = await fetch("/api/auth/session", { credentials: "include" })
+  if (!sessionResponse.ok) throw new Error("batch unavailable")
+  const session: unknown = await sessionResponse.json()
+  if (!session || typeof session !== "object" || typeof (session as { csrfToken?: unknown }).csrfToken !== "string")
+    throw new Error("batch unavailable")
+  const response = await fetch("/api/batch", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey,
+      "X-CSRF-Token": (session as { csrfToken: string }).csrfToken,
+    },
+    body: JSON.stringify({ action: intent.action, ids: intent.entryIds }),
+  })
+  if (!response.ok) throw new Error("batch unavailable")
+  const payload: unknown = await response.json()
+  if (!isBatchResult(payload, intent.entryIds)) throw new Error("batch unavailable")
+  return payload
 }
 
 export function deriveVisibleEligibleActiveIds(entries: readonly FixtureEntry[], tab: Tab): ReadonlySet<string> | null {
@@ -145,19 +205,15 @@ function applyPublicResult(
   )
 }
 
-export function App({
-  initialEntries = fixtureEntries,
-  onDeferredBatchActionIntent,
-}: {
-  initialEntries?: readonly FixtureEntry[]
-  onDeferredBatchActionIntent?: (intent: BatchActionIntent) => void
-}) {
+export function App({ initialEntries = fixtureEntries }: { initialEntries?: readonly FixtureEntry[] }) {
   const [theme, setTheme] = useState<Theme>("light")
   const [tab, setTab] = useState<Tab>("active")
   const [batchMode, setBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set())
   const [batchAction, setBatchAction] = useState<BatchAction | null>(null)
-  const [deferredBatchIntent, setDeferredBatchIntent] = useState<BatchActionIntent | null>(null)
+  const [batchResult, setBatchResult] = useState<BatchResult | null>(null)
+  const [retryIntent, setRetryIntent] = useState<BatchActionIntent | null>(null)
+  const [batchPending, setBatchPending] = useState(false)
   const [entries, setEntries] = useState<FixtureEntry[]>(() => [...initialEntries])
   const [action, setAction] = useState<CompletionAction | null>(null)
   const [completionEntryId, setCompletionEntryId] = useState<string | null>(null)
@@ -227,20 +283,55 @@ export function App({
     setSelectedIds(visibleEligibleIds ? new Set(visibleEligibleIds) : new Set())
   }
 
-  function handoffDeferredBatchIntent(nextAction: BatchAction) {
+  async function submitBatchIntent(intent: BatchActionIntent) {
+    if (batchPending || intent.entryIds.length === 0) return
+    setBatchPending(true)
+    setBatchResult(null)
+    setRetryIntent(null)
+    setError(false)
+    try {
+      const result = await executeBatch(intent, requestIdentity())
+      const successful = new Map(result.results.filter((item) => item.status === "ok").map((item) => [item.id, item]))
+      const failedIds = result.results.filter((item) => item.status === "failed").map((item) => item.id)
+      setEntries((current) =>
+        current.flatMap((entry) => {
+          const item = successful.get(entry.id)
+          if (!item) return [entry]
+          if ("deleted" in item) return []
+          return [
+            {
+              ...entry,
+              visibility: item.state.visibility,
+              retentionMode: item.state.retentionMode,
+              expiresAt: item.state.expiresAt,
+              managedTask: { state: "checked" },
+            },
+          ]
+        }),
+      )
+      setSelectedIds(new Set(failedIds))
+      setBatchResult(result)
+      setRetryIntent(failedIds.length > 0 ? { action: intent.action, entryIds: failedIds } : null)
+    } catch {
+      setError(true)
+    } finally {
+      setBatchPending(false)
+    }
+  }
+
+  function handoffBatchIntent(nextAction: BatchAction) {
     const intent: BatchActionIntent = { action: nextAction, entryIds: [...prunedSelectedIds] }
     if (intent.entryIds.length === 0) return
-    setDeferredBatchIntent(intent)
-    onDeferredBatchActionIntent?.(intent)
     setBatchAction(null)
     batchActionTriggerRef.current?.focus()
+    void submitBatchIntent(intent)
   }
 
   function beginBatchAction(nextAction: BatchAction, trigger: HTMLButtonElement) {
     if (prunedSelectedIds.size === 0) return
     batchActionTriggerRef.current = trigger
     if (nextAction === "archive_permanent") {
-      handoffDeferredBatchIntent(nextAction)
+      handoffBatchIntent(nextAction)
       return
     }
     setBatchAction(nextAction)
@@ -356,10 +447,20 @@ export function App({
           {batchMode && tab === "active" && (
             <BatchActionBar
               count={prunedSelectedIds.size}
+              disabled={batchPending}
               onAction={(nextAction) => beginBatchAction(nextAction, document.activeElement as HTMLButtonElement)}
             />
           )}
-          {deferredBatchIntent && <p role="status">Batch action deferred to Phase 9. No changes were made.</p>}
+          {batchResult && (
+            <p role="status">
+              已处理 {batchResult.succeeded} 项，{batchResult.failed} 项失败
+            </p>
+          )}
+          {retryIntent && !batchPending && (
+            <button type="button" onClick={() => void submitBatchIntent(retryIntent)}>
+              Retry failed items
+            </button>
+          )}
           {error && <p role="alert">Unable to update entry. Please try again.</p>}
           <section id="fixture-panel" aria-label={tab === "active" ? "进行中" : "归档"} role="tabpanel">
             {visibleEntries.map((entry) => (
@@ -466,7 +567,7 @@ export function App({
           action={batchAction}
           count={prunedSelectedIds.size}
           onCancel={closeBatchAction}
-          onConfirm={() => handoffDeferredBatchIntent(batchAction)}
+          onConfirm={() => handoffBatchIntent(batchAction)}
         />
       )}
     </main>

@@ -25,11 +25,17 @@ describe("Feishu fixture rendering", () => {
     expect(screen.queryByRole("toolbar", { name: "Batch actions" })).not.toBeInTheDocument()
   })
 
-  it("confirms a batch action once, traps and restores focus, and hands off only a safe deferred intent", async () => {
+  it("confirms one protected batch request from the intent and disables duplicate actions in flight", async () => {
     const user = userEvent.setup()
-    const handoff = vi.fn()
-    const fetchMock = vi.spyOn(globalThis, "fetch")
-    render(<App onDeferredBatchActionIntent={handoff} />)
+    let finish: ((response: Response) => void) | undefined
+    const pendingBatch = new Promise<Response>((resolve) => {
+      finish = resolve
+    })
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
+      .mockReturnValueOnce(pendingBatch)
+    render(<App />)
 
     await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
     await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
@@ -48,21 +54,76 @@ describe("Feishu fixture rendering", () => {
     expect(fetchMock).not.toHaveBeenCalled()
 
     await user.click(expiring)
-    await user.click(screen.getByRole("button", { name: "Confirm deferred action" }))
-    expect(handoff).toHaveBeenCalledWith({ action: "archive_expiring", entryIds: ["active-fixture"] })
-    expect(fetchMock).not.toHaveBeenCalled()
+    await user.click(screen.getByRole("button", { name: "Confirm batch action" }))
+    expect(screen.getByRole("button", { name: "永久归档" })).toBeDisabled()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1]).toMatchObject([
+      "/api/batch",
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "csrf-test",
+        },
+        body: JSON.stringify({ action: "archive_expiring", ids: ["active-fixture"] }),
+      },
+    ])
+    const firstKey = (fetchMock.mock.calls[1][1]?.headers as Record<string, string>)["Idempotency-Key"]
+    expect(firstKey).toEqual(expect.any(String))
+    await user.click(screen.getByRole("button", { name: "限期归档" }))
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    finish!(
+      new Response(
+        JSON.stringify({
+          requested: 1,
+          succeeded: 0,
+          failed: 1,
+          results: [{ id: "active-fixture", status: "failed", code: "UNAVAILABLE", retryable: true }],
+        }),
+      ),
+    )
+    expect(await screen.findByRole("status")).toHaveTextContent("已处理 0 项，1 项失败")
     expect(screen.getByText("Active fixture")).toBeVisible()
     expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeChecked()
-    expect(screen.getByText("Batch action deferred to Phase 9. No changes were made.")).toBeVisible()
     fetchMock.mockRestore()
   })
 
-  it("uses one destructive count-bearing confirmation without per-item mutation or unsafe intent data", async () => {
+  it("applies only matching successful rows and retries retained failures with a fresh key", async () => {
     const user = userEvent.setup()
-    const handoff = vi.fn()
-    const fetchMock = vi.spyOn(globalThis, "fetch")
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            requested: 2,
+            succeeded: 1,
+            failed: 1,
+            results: [
+              {
+                id: "active-fixture",
+                status: "ok",
+                state: { visibility: "archived", retentionMode: "timed", expiresAt: "2031-01-02T03:04:05.000Z" },
+              },
+              { id: "safe-entry-id", status: "failed", code: "UNAVAILABLE", retryable: true },
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            requested: 1,
+            succeeded: 1,
+            failed: 0,
+            results: [{ id: "safe-entry-id", status: "ok", deleted: true }],
+          }),
+        ),
+      )
     const entry = { ...fixtureEntries[0], id: "safe-entry-id", pasteName: "Safe fixture" }
-    render(<App initialEntries={[fixtureEntries[0], entry]} onDeferredBatchActionIntent={handoff} />)
+    render(<App initialEntries={[fixtureEntries[0], entry]} />)
 
     await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
     await user.click(screen.getByRole("button", { name: "全选" }))
@@ -71,14 +132,52 @@ describe("Feishu fixture rendering", () => {
     expect(dialog).toHaveTextContent("2 项")
     expect(dialog).toHaveTextContent("permanently")
     expect(screen.getAllByRole("dialog")).toHaveLength(1)
-    await user.click(within(dialog).getByRole("button", { name: "Confirm deferred action" }))
-
-    expect(handoff).toHaveBeenCalledWith({ action: "delete", entryIds: ["active-fixture", "safe-entry-id"] })
-    expect(JSON.stringify(handoff.mock.calls)).not.toMatch(/password|token|scope|content|expiresAt|https?:/i)
-    expect(fetchMock).not.toHaveBeenCalled()
-    expect(screen.getByText("Active fixture")).toBeVisible()
+    await user.click(within(dialog).getByRole("button", { name: "Confirm batch action" }))
+    expect(await screen.findByRole("status")).toHaveTextContent("已处理 1 项，1 项失败")
+    expect(screen.queryByText("Active fixture")).not.toBeInTheDocument()
     expect(screen.getByText("Safe fixture")).toBeVisible()
-    expect(screen.getByRole("toolbar", { name: "Batch actions" })).toHaveTextContent("已选择 2 项")
+    expect(screen.getByRole("toolbar", { name: "Batch actions" })).toHaveTextContent("已选择 1 项")
+    await user.click(screen.getByRole("button", { name: "Retry failed items" }))
+    expect(fetchMock.mock.calls[3][1]).toMatchObject({
+      body: JSON.stringify({ action: "delete", ids: ["safe-entry-id"] }),
+    })
+    expect((fetchMock.mock.calls[1][1]?.headers as Record<string, string>)["Idempotency-Key"]).not.toBe(
+      (fetchMock.mock.calls[3][1]?.headers as Record<string, string>)["Idempotency-Key"],
+    )
+    expect(screen.queryByText("Safe fixture")).not.toBeInTheDocument()
+    fetchMock.mockRestore()
+  })
+
+  it("retains selection and claims no success when a batch result is unreadable", async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ requested: 1, succeeded: 1, failed: 0, results: [] })))
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
+    await user.click(screen.getByRole("button", { name: "永久归档" }))
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to update entry. Please try again.")
+    expect(screen.getByText("Active fixture")).toBeVisible()
+    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeChecked()
+    fetchMock.mockRestore()
+  })
+
+  it.each([
+    ["authentication", () => Promise.resolve(new Response(null, { status: 401 }))],
+    ["transport", () => Promise.reject(new Error("network unavailable"))],
+  ])("retains selection and claims no success on %s failure", async (_kind, response) => {
+    const user = userEvent.setup()
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementationOnce(response)
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
+    await user.click(screen.getByRole("button", { name: "永久归档" }))
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to update entry. Please try again.")
+    expect(screen.queryByRole("status")).not.toBeInTheDocument()
+    expect(screen.getByText("Active fixture")).toBeVisible()
+    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeChecked()
     fetchMock.mockRestore()
   })
 

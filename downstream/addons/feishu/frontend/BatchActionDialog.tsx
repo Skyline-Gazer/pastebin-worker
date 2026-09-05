@@ -45,15 +45,14 @@ export function BatchActionDialog({
       <p>
         {isDelete
           ? `This permanently deletes ${count} 项. This cannot be undone.`
-          : `Archive ${count} 项 with the deployment retention period when Phase 9 execution is available.`}
+          : `Archive ${count} 项 with the deployment retention period.`}
       </p>
-      <p>Batch execution is deferred to Phase 9. No changes will be made here.</p>
       <div className="completion-actions">
         <button onClick={onCancel} type="button">
           Cancel
         </button>
         <button onClick={onConfirm} type="button">
-          Confirm deferred action
+          Confirm batch action
         </button>
       </div>
     </div>

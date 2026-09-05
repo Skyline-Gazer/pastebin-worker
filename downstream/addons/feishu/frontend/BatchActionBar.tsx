@@ -6,13 +6,21 @@ const labels: Record<BatchAction, string> = {
   delete: "删除",
 }
 
-export function BatchActionBar({ count, onAction }: { count: number; onAction: (action: BatchAction) => void }) {
+export function BatchActionBar({
+  count,
+  disabled = false,
+  onAction,
+}: {
+  count: number
+  disabled?: boolean
+  onAction: (action: BatchAction) => void
+}) {
   if (count === 0) return null
   return (
     <div aria-label="Batch actions" className="batch-action-bar" role="toolbar">
       <span>已选择 {count} 项</span>
       {(Object.keys(labels) as BatchAction[]).map((action) => (
-        <button key={action} onClick={() => onAction(action)} type="button">
+        <button disabled={disabled} key={action} onClick={() => onAction(action)} type="button">
           {labels[action]}
         </button>
       ))}

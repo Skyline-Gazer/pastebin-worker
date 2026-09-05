@@ -60,16 +60,16 @@ from an unmerged predecessor.
 
 ## 4. Phase 9.4 — Phase 8 intent execution and mixed-result retry UX
 
-- [ ] Only after 9.3 merges, refresh `downstream/main`; write RED frontend tests
+- [x] Only after 9.3 merges, refresh `downstream/main`; write RED frontend tests
       for one safe request from `BatchActionIntent`, fresh opaque key, existing
       CSRF/session use, and in-flight duplicate-action disable.
-- [ ] Add RED mixed-result tests for matching successful-row updates, failed-ID
+- [x] Add RED mixed-result tests for matching successful-row updates, failed-ID
       selection retention, concise accessible aggregate summary, and retry of
       only failed IDs with a new key.
-- [ ] Add RED failure-boundary tests proving transport/auth/validation/unreadable
+- [x] Add RED failure-boundary tests proving transport/auth/validation/unreadable
       result failures retain selection and claim no item success; preserve Phase
       8 selectors/confirmation/lock and Phase 6/7 behavior.
-- [ ] Replace only the deferred seam with the approved adapter/result UX; do not
+- [x] Replace only the deferred seam with the approved adapter/result UX; do not
       redesign Batch Mode, use serial single-entry calls, expose secrets/raw
       errors, or construct expiry deadlines in the browser.
 - [ ] Record observed GREEN/REFACTOR/REGRESSION evidence, focused frontend and
@@ -128,6 +128,22 @@ REFACTOR isolates HTTP serialization in `createBatchDispatch`, keeps raw
 lifecycle evidence server-side, and uses additive migration `0007` for only the
 sanitized completed response. REGRESSION/CI/review gate remain for the
 orchestrator.
+
+Phase 9.4 evidence (local branch `feat/feishu-batch-results`): RED: the new
+frontend tests failed against the Phase 8 deferred dialog because no protected
+request, result application, retry control, or unreadable-result boundary
+existed. GREEN: `node_modules/.bin/tsc --noEmit -p
+downstream/addons/feishu/frontend/tsconfig.json` and
+`node_modules/.bin/vitest run --config
+downstream/addons/feishu/frontend/vitest.config.ts
+downstream/addons/feishu/frontend/App.spec.tsx` passed (32 tests);
+`node_modules/.bin/tsc --noEmit -p downstream/addons/feishu/tsconfig.json`,
+targeted Prettier, and the frontend Vite build also passed. REFACTOR:
+the adapter consumes the existing Phase 9.3 public request/result types, makes
+one session/CSRF-protected `POST /api/batch`, validates the complete processed
+result before mutating rows, and retains only failed IDs for fresh-key retry;
+it exposes neither raw errors nor expiry calculations. REGRESSION/CI/review
+gate remain for the orchestrator.
 
 ### Regression and review
 

@@ -4,6 +4,7 @@ import migration from "../migrations/0001_bindings.sql?raw"
 import migration3 from "../migrations/0003_lifecycle_completion.sql?raw"
 import migration4 from "../migrations/0004_permanent_restore.sql?raw"
 import migration5 from "../migrations/0005_timed_restore.sql?raw"
+import migration6 from "../migrations/0006_batch_operations.sql?raw"
 import { Credentials } from "../worker/credentials"
 import { PasteClient } from "../worker/paste-client"
 import { BindingStore, type Operation } from "../worker/store"
@@ -39,14 +40,52 @@ async function setup() {
 }
 
 beforeEach(async () => {
-  await db.exec("DROP TABLE IF EXISTS feishu_operations; DROP TABLE IF EXISTS feishu_bindings;")
-  for (const statement of `${migration}\n${migration3}\n${migration4}\n${migration5}`
+  await db.exec(
+    "DROP TABLE IF EXISTS feishu_batch_items; DROP TABLE IF EXISTS feishu_batch_operations; DROP TABLE IF EXISTS feishu_operations; DROP TABLE IF EXISTS feishu_bindings;",
+  )
+  for (const statement of `${migration}\n${migration3}\n${migration4}\n${migration5}\n${migration6}`
     .split(";")
     .filter((part) => part.trim()))
     await db.prepare(statement).run()
 })
 
 describe("persistent internal entry services", () => {
+  it("persists additive batch evidence without coupling it to a binding lifetime", async () => {
+    const { store } = await setup()
+    const batch = await store.reserveBatch({
+      principalKey: "principal-a",
+      requestId: "browser-key",
+      action: "delete",
+      ids: ["deleted-entry", "unavailable-entry"],
+    })
+    await store.recordBatchItem({
+      batchId: batch.id,
+      entryId: "deleted-entry",
+      requestId: `${batch.id}:0:deleted-entry`,
+      scopeId: "scope-a",
+      outcome: "succeeded",
+      code: null,
+    })
+    await store.recordBatchItem({
+      batchId: batch.id,
+      entryId: "unavailable-entry",
+      requestId: `${batch.id}:1:unavailable-entry`,
+      scopeId: null,
+      outcome: "failed",
+      code: "ENTRY_UNAVAILABLE",
+    })
+    await store.reconcileBatch(batch.id)
+    expect(await db.prepare("SELECT status FROM feishu_batch_operations WHERE id = ?").bind(batch.id).first()).toEqual({
+      status: "reconciliation_required",
+    })
+    expect(
+      (await db
+        .prepare("SELECT count(*) AS n FROM feishu_batch_items WHERE batch_id = ?")
+        .bind(batch.id)
+        .first<{ n: number }>())!.n,
+    ).toBe(2)
+  })
+
   it("creates permanent bindings, encrypts secrets and retries known success without POST", async () => {
     const { service, transport, credentials } = await setup()
     const first = await service.createEntry(context, input)

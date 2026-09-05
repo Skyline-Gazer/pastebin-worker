@@ -24,6 +24,15 @@ export interface Operation {
   result: string | null
 }
 
+export interface BatchOperation {
+  id: string
+  principal_key: string
+  request_id: string
+  action: "archive_permanent" | "archive_expiring" | "delete"
+  fingerprint: string
+  status: "dispatched" | "reconciliation_required"
+}
+
 export class BindingStore {
   constructor(private readonly db: D1Database) {}
 
@@ -43,6 +52,62 @@ export class BindingStore {
       .prepare("SELECT * FROM feishu_operations WHERE scope_id = ? AND request_id = ?")
       .bind(scope, requestId)
       .first<Operation>()
+  }
+
+  /** Batch rows are additive evidence. Per-entry lifecycle state remains in
+   * feishu_operations and is created only by EntryService. */
+  async reserveBatch(input: {
+    principalKey: string
+    requestId: string
+    action: BatchOperation["action"]
+    ids: string[]
+  }): Promise<{ id: string }> {
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    await this.db
+      .prepare(
+        `INSERT INTO feishu_batch_operations
+        (id, principal_key, request_id, action, fingerprint, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'dispatched', ?, ?)`,
+      )
+      .bind(id, input.principalKey, input.requestId, input.action, JSON.stringify([input.action, input.ids]), now, now)
+      .run()
+    return { id }
+  }
+
+  async recordBatchItem(input: {
+    batchId: string
+    entryId: string
+    requestId: string
+    scopeId: string | null
+    outcome: "succeeded" | "failed"
+    code: string | null
+  }): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO feishu_batch_items
+        (batch_id, entry_id, request_id, scope_id, outcome, code, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        input.batchId,
+        input.entryId,
+        input.requestId,
+        input.scopeId,
+        input.outcome,
+        input.code,
+        new Date().toISOString(),
+      )
+      .run()
+  }
+
+  async reconcileBatch(id: string): Promise<void> {
+    await this.db
+      .prepare(
+        "UPDATE feishu_batch_operations SET status = 'reconciliation_required', updated_at = ? WHERE id = ? AND status = 'dispatched'",
+      )
+      .bind(new Date().toISOString(), id)
+      .run()
   }
 
   pending(id: string): Promise<Operation | null> {

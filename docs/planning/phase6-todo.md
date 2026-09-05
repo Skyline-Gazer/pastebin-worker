@@ -15,10 +15,10 @@ Implementation has NOT started. Active checklist for [Phase 6](phase6-spec.md).
 
 ## 2. Phase 6.1 — lifecycle completion backend
 
-- [ ] Branch from merged 6.0; RED tests for authorization before Phase 3/upstream, request validation, and secret-free output/logs.
-- [ ] RED tests for permanent/timed/delete, exact `expiresAt`, source precision, Phase 3 claims/replay/conflicts, duplicate idempotency, and reconciliation.
-- [ ] Implement browser entry ID/action/idempotency/session/CSRF only; join principal allowed scopes to binding/entry and fail closed before mutation.
-- [ ] Add lifecycle persistence only as tests require; retain binding compatibility, Phase 3/4 behavior, and upstream body authority.
+- [x] Branch from merged 6.0; RED tests for authorization before Phase 3/upstream, request validation, and secret-free output/logs.
+- [x] RED tests for permanent/timed/delete, exact `expiresAt`, source precision, Phase 3 claims/replay/conflicts, duplicate idempotency, and reconciliation.
+- [x] Implement browser entry ID/action/idempotency/session/CSRF only; join principal allowed scopes to binding/entry and fail closed before mutation.
+- [x] Add lifecycle persistence only as tests require; retain binding compatibility, Phase 3/4 behavior, and upstream body authority.
 - [ ] Record TDD/regression evidence; current-HEAD gate and merge before 6.2.
 
 ## 3. Phase 6.2 — completion UI
@@ -39,6 +39,11 @@ recorded by Worker TypeScript and lint success. The Worker-pool suite could not 
 sandbox because it is denied a loopback listener (`listen EPERM 127.0.0.1`); it remains required
 in CI before merge. REFACTOR split OAuth/session/store/principal concerns into focused Worker
 modules. Regression type/lint cover Phase 3/4 imports; full Worker suite remains CI-required.
+
+Phase 6.1: RED coverage was added for the browser completion adapter and lifecycle service in
+`completion.spec.ts` and `service.spec.ts`. GREEN: `tsc -p downstream/addons/feishu/tsconfig.json
+--noEmit` passed. The Worker-pool suite is sandbox-blocked (`listen EPERM 127.0.0.1`), so the full
+suite and current-HEAD review gate remain required before merge.
 
 ## Internal consistency review
 

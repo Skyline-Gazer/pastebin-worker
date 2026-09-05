@@ -30,9 +30,9 @@ export class EntryService {
       id: binding.id,
       pasteName: binding.paste_name,
       publicUrl: this.client.publicUrl(binding.paste_name),
-      visibility: "active",
-      retentionMode: "permanent",
-      expiresAt: null,
+      visibility: binding.visibility,
+      retentionMode: binding.retention_mode,
+      expiresAt: binding.expires_at,
       version,
     }
   }
@@ -48,7 +48,7 @@ export class EntryService {
     scope: string,
     request: string,
     entry: string,
-    kind: "create" | "update",
+    kind: Operation["kind"],
     fingerprint: string,
     content: string,
     version: number,
@@ -64,6 +64,126 @@ export class EntryService {
       expected_version: version,
       status: "reserved",
       result: null,
+    }
+  }
+
+  /** Phase 5 creates exactly one managed top-level unchecked task.  Refuse a
+   * source with zero or multiple candidates instead of guessing among GFM. */
+  private completeManagedTask(source: string): string | null {
+    const candidates: number[] = []
+    let offset = 0
+    let fence: "`" | "~" | null = null
+    for (const line of source.split(/(?<=\n)/)) {
+      const fenceMatch = /^ {0,3}([`~])\1\1/.exec(line)
+      if (fenceMatch) {
+        if (!fence) fence = fenceMatch[1] as "`" | "~"
+        else if (fence === fenceMatch[1]) fence = null
+      } else if (!fence) {
+        const task = /^(?:[-+*]|\d+[.)])\s+\[ \]/.exec(line)
+        if (task) candidates.push(offset + task[0].indexOf("["))
+      }
+      offset += line.length
+    }
+    if (candidates.length !== 1) return null
+    const candidate = candidates[0]
+    return `${source.slice(0, candidate)}[x]${source.slice(candidate + 3)}`
+  }
+
+  async completeEntry(
+    context: EntryContext,
+    input: { entryId: string; requestId: string; action: "archive_permanent" | "archive_expiring" | "delete" },
+  ): Promise<EntryResult | { ok: true; deleted: true }> {
+    if (!identifier(context.scopeId) || !identifier(input.entryId) || !identifier(input.requestId))
+      return this.error("INVALID_INPUT")
+    try {
+      const fingerprint = await this.credentials.fingerprint(
+        JSON.stringify(["complete", context.scopeId, input.entryId, input.action]),
+      )
+      const previous = await this.store.operation(context.scopeId, input.requestId)
+      if (previous) {
+        if (previous.fingerprint !== fingerprint) return this.error("REQUEST_CONFLICT", previous.id)
+        if (previous.status !== "succeeded") return this.error("RECONCILIATION_REQUIRED", previous.id)
+        return input.action === "delete" ? { ok: true, deleted: true } : this.duplicate(previous, fingerprint)
+      }
+      const binding = await this.store.get(context.scopeId, input.entryId)
+      if (!binding) return this.error("ENTRY_NOT_FOUND")
+      const password = await this.credentials.open(binding.id, binding.credential)
+      const source = input.action === "delete" ? "" : await this.client.read(binding.paste_name!)
+      const content = input.action === "delete" ? "" : this.completeManagedTask(source)
+      if (input.action !== "delete" && content === null) return this.error("MANAGED_TASK_AMBIGUOUS")
+      const kind: Operation["kind"] =
+        input.action === "archive_permanent"
+          ? "complete_permanent"
+          : input.action === "archive_expiring"
+            ? "complete_expiring"
+            : "delete"
+      const op = await this.operation(
+        context.scopeId,
+        input.requestId,
+        input.entryId,
+        kind,
+        fingerprint,
+        content!,
+        binding.version,
+      )
+      try {
+        if (!(await this.store.reserveCompletion(op))) return this.error("VERSION_CONFLICT", op.id)
+      } catch {
+        const raced = await this.store.operation(context.scopeId, input.requestId)
+        return raced
+          ? raced.fingerprint === fingerprint
+            ? this.duplicate(raced, fingerprint)
+            : this.error("REQUEST_CONFLICT", raced.id)
+          : this.error("MUTATION_CONFLICT", op.id)
+      }
+      if (!(await this.store.dispatch(op.id))) return this.error("MUTATION_CONFLICT", op.id)
+      try {
+        if (input.action === "delete") {
+          await this.client.remove(binding.paste_name!, password)
+          await this.store.finishDelete(op)
+          return { ok: true, deleted: true }
+        }
+        const expiresAt = await this.client.update(
+          binding.paste_name!,
+          password,
+          content!,
+          input.action === "archive_expiring" ? "max" : "never",
+        )
+        if (input.action === "archive_expiring" && (!expiresAt || !Number.isFinite(Date.parse(expiresAt))))
+          throw new PasteError("UPSTREAM_INVALID")
+        const archived: Binding = {
+          ...binding,
+          visibility: "archived",
+          retention_mode: input.action === "archive_expiring" ? "timed" : "permanent",
+          expires_at: input.action === "archive_expiring" ? expiresAt : null,
+        }
+        const entry = this.project(archived, op.expected_version + 1)
+        await this.store.finishCompletion(
+          op,
+          JSON.stringify(entry),
+          "archived",
+          archived.retention_mode,
+          archived.expires_at,
+        )
+        return { ok: true, entry }
+      } catch (error) {
+        if (error instanceof PasteError && (error.code === "UPSTREAM_REJECTED" || error.code === "ENTRY_NOT_FOUND")) {
+          try {
+            await this.store.fail(op.id)
+          } catch {
+            /* preserve fail-closed evidence */
+          }
+          return this.error(error.code, op.id)
+        }
+        try {
+          await this.store.uncertain(op.id)
+        } catch {
+          /* fail closed */
+        }
+        return this.error("RECONCILIATION_REQUIRED", op.id)
+      }
+    } catch {
+      return this.error("STORAGE_OR_CREDENTIAL_UNAVAILABLE", undefined, true)
     }
   }
 
@@ -92,6 +212,9 @@ export class EntryService {
         record_key: input.recordKey,
         credential: await this.credentials.seal(id, password),
         paste_name: null,
+        visibility: "active",
+        retention_mode: "permanent",
+        expires_at: null,
         version: 0,
       }
       const op = await this.operation(context.scopeId, input.requestId, id, "create", fingerprint, input.content, 0)

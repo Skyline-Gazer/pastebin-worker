@@ -90,7 +90,11 @@ export async function authorizeBrowserMutation(
   if (!(await store.scopes(session.principalKey)).includes(entryScopeId)) throw new BrowserAuthError("FORBIDDEN", 403)
   return session
 }
-function requireBrowserRequestProtection(request: Request, env: BrowserAuthEnvironment, session: BrowserSession) {
+export function requireBrowserRequestProtection(
+  request: Request,
+  env: BrowserAuthEnvironment,
+  session: BrowserSession,
+) {
   const origins = env.FEISHU_ALLOWED_ORIGINS.split(",")
     .map((v) => v.trim())
     .filter(Boolean)

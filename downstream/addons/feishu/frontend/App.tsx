@@ -12,7 +12,10 @@ import { RenderedMarkdown } from "./RenderedMarkdown"
 type Theme = "light" | "dark"
 type Tab = "active" | "archived"
 type CompletionAction = "archive_permanent" | "archive_expiring" | "delete"
-export type BatchActionIntent = { action: BatchAction; entryIds: readonly string[] }
+export interface BatchActionIntent {
+  action: BatchAction
+  entryIds: readonly string[]
+}
 
 export function deriveVisibleEligibleActiveIds(entries: readonly FixtureEntry[], tab: Tab): ReadonlySet<string> | null {
   if (tab !== "active") return new Set()

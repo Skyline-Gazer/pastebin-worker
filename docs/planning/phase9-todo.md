@@ -46,13 +46,13 @@ from an unmerged predecessor.
 
 ## 3. Phase 9.3 — Authoritative partial result and safe idempotent replay
 
-- [ ] Only after 9.2 merges, refresh `downstream/main`; write RED tests for
+- [x] Only after 9.2 merges, refresh `downstream/main`; write RED tests for
       count/cardinality/order invariants, public success shapes, stable failure
       codes/retryability, and processed `200` all-success/mixed/all-failed results.
-- [ ] Add RED tests for principal-scoped key plus canonical action/ordered-ID
+- [x] Add RED tests for principal-scoped key plus canonical action/ordered-ID
       fingerprint: completed same-key replay with no upstream call, changed-key
       conflict, in-progress conflict, and ambiguous delete/update safety.
-- [ ] Implement result serialization and durable reserve/complete/replay rules;
+- [x] Implement result serialization and durable reserve/complete/replay rules;
       retain raw upstream, credential, scope, and operation details server-side.
 - [ ] Run RED/GREEN/REFACTOR/REGRESSION checks including Phase 3/6/7 idempotency
       and security regressions; record exact results and complete current-HEAD
@@ -113,6 +113,21 @@ only resolves server-side binding/scope facts and records batch evidence.
 REGRESSION/CI/review gate remain for the orchestrator. Migration 0006 is
 additive and does not add a Paste-body store, batch Restore, or client expiry
 authority.
+
+Phase 9.3 evidence (local branch `feat/feishu-batch-idempotency`): RED was
+observed as TypeScript failures for the absent authoritative `result` field on
+the lifecycle execution. The new tests cover ordered/cardinal public results,
+all-success/mixed/all-failed `200` serialization, completed replay without a
+second lifecycle call, and conflict/in-progress/reconciliation rejection before
+dispatch. GREEN: `node_modules/.bin/tsc --noEmit -p
+downstream/addons/feishu/tsconfig.json`, targeted Prettier check, and `git diff
+--check` passed. The focused Worker test command remains blocked in this Codex
+sandbox by the Cloudflare Worker-pool loopback restriction (`listen EPERM` on
+`127.0.0.1`) and requires orchestrator execution outside the sandbox.
+REFACTOR isolates HTTP serialization in `createBatchDispatch`, keeps raw
+lifecycle evidence server-side, and uses additive migration `0007` for only the
+sanitized completed response. REGRESSION/CI/review gate remain for the
+orchestrator.
 
 ### Regression and review
 

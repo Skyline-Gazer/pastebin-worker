@@ -5,6 +5,7 @@ import migration3 from "../migrations/0003_lifecycle_completion.sql?raw"
 import migration4 from "../migrations/0004_permanent_restore.sql?raw"
 import migration5 from "../migrations/0005_timed_restore.sql?raw"
 import migration6 from "../migrations/0006_batch_operations.sql?raw"
+import migration7 from "../migrations/0007_batch_completed_results.sql?raw"
 import { Credentials } from "../worker/credentials"
 import { PasteClient } from "../worker/paste-client"
 import { BindingStore, type Operation } from "../worker/store"
@@ -41,9 +42,9 @@ async function setup() {
 
 beforeEach(async () => {
   await db.exec(
-    "DROP TABLE IF EXISTS feishu_batch_items; DROP TABLE IF EXISTS feishu_batch_operations; DROP TABLE IF EXISTS feishu_operations; DROP TABLE IF EXISTS feishu_bindings;",
+    "DROP TABLE IF EXISTS feishu_batch_results; DROP TABLE IF EXISTS feishu_batch_items; DROP TABLE IF EXISTS feishu_batch_operations; DROP TABLE IF EXISTS feishu_operations; DROP TABLE IF EXISTS feishu_bindings;",
   )
-  for (const statement of `${migration}\n${migration3}\n${migration4}\n${migration5}\n${migration6}`
+  for (const statement of `${migration}\n${migration3}\n${migration4}\n${migration5}\n${migration6}\n${migration7}`
     .split(";")
     .filter((part) => part.trim()))
     await db.prepare(statement).run()

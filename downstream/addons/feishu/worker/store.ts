@@ -61,18 +61,59 @@ export class BindingStore {
     requestId: string
     action: BatchOperation["action"]
     ids: string[]
-  }): Promise<{ id: string }> {
+  }): Promise<
+    | { kind: "created"; id: string }
+    | { kind: "completed"; id: string; fingerprint: string; result: string }
+    | { kind: "existing"; id: string; fingerprint: string; status: BatchOperation["status"]; result: null }
+  > {
     const id = crypto.randomUUID()
     const now = new Date().toISOString()
-    await this.db
-      .prepare(
-        `INSERT INTO feishu_batch_operations
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO feishu_batch_operations
         (id, principal_key, request_id, action, fingerprint, status, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, 'dispatched', ?, ?)`,
-      )
-      .bind(id, input.principalKey, input.requestId, input.action, JSON.stringify([input.action, input.ids]), now, now)
+        )
+        .bind(
+          id,
+          input.principalKey,
+          input.requestId,
+          input.action,
+          JSON.stringify([input.action, input.ids]),
+          now,
+          now,
+        )
+        .run()
+      return { kind: "created", id }
+    } catch {
+      const existing = await this.db
+        .prepare(
+          `SELECT operation.id, operation.fingerprint, operation.status, completed.result
+           FROM feishu_batch_operations operation
+           LEFT JOIN feishu_batch_results completed ON completed.batch_id = operation.id
+           WHERE operation.principal_key = ? AND operation.request_id = ?`,
+        )
+        .bind(input.principalKey, input.requestId)
+        .first<{ id: string; fingerprint: string; status: BatchOperation["status"]; result: string | null }>()
+      if (!existing) throw new Error("BATCH_RESERVATION_UNAVAILABLE")
+      return existing.result !== null
+        ? { kind: "completed", id: existing.id, fingerprint: existing.fingerprint, result: existing.result }
+        : {
+            kind: "existing",
+            id: existing.id,
+            fingerprint: existing.fingerprint,
+            status: existing.status,
+            result: null,
+          }
+    }
+  }
+
+  async completeBatch(id: string, result: string): Promise<void> {
+    await this.db
+      .prepare("INSERT INTO feishu_batch_results (batch_id, result, created_at) VALUES (?, ?, ?)")
+      .bind(id, result, new Date().toISOString())
       .run()
-    return { id }
   }
 
   async recordBatchItem(input: {

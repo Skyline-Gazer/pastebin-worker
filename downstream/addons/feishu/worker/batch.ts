@@ -6,6 +6,7 @@ import {
 } from "./browser-auth"
 import type { BrowserSession, BrowserTrustStore } from "./browser-store"
 import { batchActions, type BatchAction, type BatchRequest } from "../shared/batch"
+import type { BatchItemResult, BatchResult } from "../shared/batch"
 import type { EntryService } from "./service"
 import type { BindingStore } from "./store"
 
@@ -25,12 +26,17 @@ export type BatchDispatchGate = (
 /** Server-only durable evidence used by Phase 9.2.  Phase 9.3 owns public
  * result serialization, idempotent replay, and aggregate response semantics. */
 export interface BatchEvidenceStore {
-  reserveBatch(input: {
-    principalKey: string
-    requestId: string
-    action: BatchAction
-    ids: string[]
-  }): Promise<{ id: string }>
+  reserveBatch(input: { principalKey: string; requestId: string; action: BatchAction; ids: string[] }): Promise<
+    | { kind: "created"; id: string }
+    | { kind: "completed"; id: string; fingerprint?: string; result: string }
+    | {
+        kind: "existing"
+        id: string
+        fingerprint: string
+        status: "dispatched" | "reconciliation_required"
+        result: null
+      }
+  >
   recordBatchItem(input: {
     batchId: string
     entryId: string
@@ -40,6 +46,7 @@ export interface BatchEvidenceStore {
     code: string | null
   }): Promise<void>
   reconcileBatch(id: string): Promise<void>
+  completeBatch(id: string, result: string): Promise<void>
 }
 
 export interface BatchLifecycleItem {
@@ -54,6 +61,7 @@ export interface BatchLifecycleItem {
 export interface BatchLifecycleExecution {
   batchId: string
   items: BatchLifecycleItem[]
+  result: BatchResult
 }
 
 const publicFailureCodes = new Set([
@@ -61,9 +69,67 @@ const publicFailureCodes = new Set([
   "VERSION_CONFLICT",
   "MUTATION_CONFLICT",
   "UPSTREAM_REJECTED",
+  "UPSTREAM_UPDATE_FAILED",
+  "UPSTREAM_DELETE_FAILED",
   "RECONCILIATION_REQUIRED",
   "STORAGE_OR_CREDENTIAL_UNAVAILABLE",
 ])
+
+export class BatchReplayError extends Error {
+  constructor(readonly code: "REQUEST_CONFLICT" | "BATCH_IN_PROGRESS") {
+    super(code)
+  }
+}
+
+/** Converts only the already-sanitized coordinator result to the public HTTP
+ * contract.  Reservation/replay errors intentionally disclose stable codes. */
+export function createBatchDispatch(coordinator: Pick<BatchLifecycleCoordinator, "execute">): BatchDispatchGate {
+  return async (request, session, scopes, requestId) => {
+    try {
+      return Response.json((await coordinator.execute(request, session, scopes, requestId)).result)
+    } catch (error) {
+      if (error instanceof BatchReplayError) return Response.json({ code: error.code }, { status: 409 })
+      return Response.json({ code: "STORAGE_OR_CREDENTIAL_UNAVAILABLE" }, { status: 503 })
+    }
+  }
+}
+
+const fingerprint = (request: BatchRequest) => JSON.stringify([request.action, request.ids])
+function validResult(value: unknown, request: BatchRequest): value is BatchResult {
+  if (!value || typeof value !== "object") return false
+  const result = value as BatchResult
+  return (
+    result.requested === request.ids.length &&
+    result.succeeded + result.failed === result.requested &&
+    Array.isArray(result.results) &&
+    result.results.length === request.ids.length &&
+    result.results.every((item, index) => item?.id === request.ids[index])
+  )
+}
+function serialize(items: BatchLifecycleItem[]): BatchResult {
+  const results: BatchItemResult[] = items.map((item) => {
+    if (item.outcome === "succeeded") {
+      if (item.deleted) return { id: item.id, status: "ok", deleted: true }
+      return {
+        id: item.id,
+        status: "ok",
+        state: {
+          visibility: "archived",
+          retentionMode: item.expiresAt ? "timed" : "permanent",
+          expiresAt: item.expiresAt ?? null,
+        },
+      }
+    }
+    return {
+      id: item.id,
+      status: "failed",
+      code: item.code ?? "STORAGE_OR_CREDENTIAL_UNAVAILABLE",
+      retryable: !!item.retryable,
+    }
+  })
+  const succeeded = results.filter((item) => item.status === "ok").length
+  return { requested: results.length, succeeded, failed: results.length - succeeded, results }
+}
 
 /**
  * This coordinator deliberately resolves only binding/scope facts. Password
@@ -83,12 +149,23 @@ export class BatchLifecycleCoordinator {
     allowedScopes: string[],
     requestId: string,
   ): Promise<BatchLifecycleExecution> {
+    const requestFingerprint = fingerprint(request)
     const batch = await this.batches.reserveBatch({
       principalKey: session.principalKey,
       requestId,
       action: request.action,
       ids: request.ids,
     })
+    if (batch.kind === "completed") {
+      if (batch.fingerprint && batch.fingerprint !== requestFingerprint) throw new BatchReplayError("REQUEST_CONFLICT")
+      const result: unknown = JSON.parse(batch.result)
+      if (!validResult(result, request)) throw new BatchReplayError("BATCH_IN_PROGRESS")
+      return { batchId: batch.id, items: [], result }
+    }
+    if (batch.kind === "existing") {
+      if (batch.fingerprint !== requestFingerprint) throw new BatchReplayError("REQUEST_CONFLICT")
+      throw new BatchReplayError("BATCH_IN_PROGRESS")
+    }
     const items: BatchLifecycleItem[] = []
     let requiresReconciliation = false
     for (const [index, id] of request.ids.entries()) {
@@ -109,7 +186,14 @@ export class BatchLifecycleCoordinator {
           else if (result.ok) item = { id, outcome: "succeeded", expiresAt: result.entry.expiresAt }
           else {
             const code = publicFailureCodes.has(result.code) ? result.code : "STORAGE_OR_CREDENTIAL_UNAVAILABLE"
-            item = { id, outcome: "failed", code, retryable: result.retryable }
+            // An uncertain lifecycle dispatch is deliberately not browser-retryable:
+            // replay is held until reconciliation has durable safe evidence.
+            item = {
+              id,
+              outcome: "failed",
+              code,
+              retryable: code === "RECONCILIATION_REQUIRED" ? false : result.retryable,
+            }
             requiresReconciliation ||= code === "RECONCILIATION_REQUIRED"
           }
         }
@@ -138,8 +222,20 @@ export class BatchLifecycleCoordinator {
       }
       items.push(item)
     }
-    if (requiresReconciliation) await this.batches.reconcileBatch(batch.id)
-    return { batchId: batch.id, items }
+    if (requiresReconciliation) {
+      await this.batches.reconcileBatch(batch.id)
+      // Do not turn ambiguous delete/update evidence into a completed replay
+      // record. A later retry must wait for reconciliation rather than dispatch.
+      throw new BatchReplayError("BATCH_IN_PROGRESS")
+    }
+    const result = serialize(items)
+    try {
+      await this.batches.completeBatch(batch.id, JSON.stringify(result))
+    } catch {
+      await this.batches.reconcileBatch(batch.id)
+      throw new Error("BATCH_EVIDENCE_UNAVAILABLE")
+    }
+    return { batchId: batch.id, items, result }
   }
 }
 

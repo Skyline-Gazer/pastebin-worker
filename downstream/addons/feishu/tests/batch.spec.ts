@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { BatchLifecycleCoordinator, createBatchHandler } from "../worker/batch"
+import { BatchLifecycleCoordinator, createBatchDispatch, createBatchHandler } from "../worker/batch"
 
 const env = {
   FEISHU_APP_ID: "a",
@@ -107,9 +107,10 @@ describe("batch lifecycle delegation", () => {
   function createCoordinator() {
     const bindings = { getById: vi.fn() }
     const batches = {
-      reserveBatch: vi.fn().mockResolvedValue({ id: "batch-1" }),
+      reserveBatch: vi.fn().mockResolvedValue({ kind: "created", id: "batch-1" }),
       recordBatchItem: vi.fn().mockResolvedValue(undefined),
       reconcileBatch: vi.fn().mockResolvedValue(undefined),
+      completeBatch: vi.fn().mockResolvedValue(undefined),
     }
     const service = { completeEntry: vi.fn() }
     return {
@@ -227,13 +228,14 @@ describe("batch lifecycle delegation", () => {
       retryable: true,
       correlationId: "internal",
     })
-    const first = await uncertain.coordinator.execute(
-      { ids: ["entry-a"], action: "delete" },
-      { principalKey: "principal-a" },
-      ["scope-a"],
-      "opaque-browser-key",
-    )
-    expect(first.items[0]).toMatchObject({ outcome: "failed", code: "RECONCILIATION_REQUIRED" })
+    await expect(
+      uncertain.coordinator.execute(
+        { ids: ["entry-a"], action: "delete" },
+        { principalKey: "principal-a" },
+        ["scope-a"],
+        "opaque-browser-key",
+      ),
+    ).rejects.toMatchObject({ code: "BATCH_IN_PROGRESS" })
     expect(uncertain.batches.reconcileBatch).toHaveBeenCalled()
 
     const persistence = createCoordinator()
@@ -249,5 +251,114 @@ describe("batch lifecycle delegation", () => {
       ),
     ).rejects.toThrow("BATCH_EVIDENCE_UNAVAILABLE")
     expect(persistence.batches.reconcileBatch).toHaveBeenCalled()
+  })
+
+  it("serializes every processed result in input order with exact public aggregates", async () => {
+    const { bindings, service, coordinator } = createCoordinator()
+    bindings.getById.mockImplementation((id: string) => (id === "missing" ? null : binding(id)))
+    service.completeEntry
+      .mockResolvedValueOnce({ ok: true, entry: entry("entry-a", "permanent", null) })
+      .mockResolvedValueOnce({ ok: false, code: "untrusted-detail", retryable: true })
+    const execution = await coordinator.execute(
+      { ids: ["entry-a", "missing", "entry-b"], action: "archive_permanent" },
+      { principalKey: "principal-a" },
+      ["scope-a"],
+      "result-key",
+    )
+    expect(execution.result).toEqual({
+      requested: 3,
+      succeeded: 1,
+      failed: 2,
+      results: [
+        { id: "entry-a", status: "ok", state: { visibility: "archived", retentionMode: "permanent", expiresAt: null } },
+        { id: "missing", status: "failed", code: "ENTRY_UNAVAILABLE", retryable: false },
+        { id: "entry-b", status: "failed", code: "STORAGE_OR_CREDENTIAL_UNAVAILABLE", retryable: true },
+      ],
+    })
+  })
+
+  it("replays a completed matching principal key without a second lifecycle call", async () => {
+    const { bindings, batches, service, coordinator } = createCoordinator()
+    const saved = {
+      requested: 1,
+      succeeded: 1,
+      failed: 0,
+      results: [{ id: "entry-a", status: "ok" as const, deleted: true as const }],
+    }
+    batches.reserveBatch.mockResolvedValueOnce({ kind: "completed", id: "batch-1", result: JSON.stringify(saved) })
+    const execution = await coordinator.execute(
+      { ids: ["entry-a"], action: "delete" },
+      { principalKey: "principal-a" },
+      ["scope-a"],
+      "replay-key",
+    )
+    expect(execution.result).toEqual(saved)
+    expect(bindings.getById).not.toHaveBeenCalled()
+    expect(service.completeEntry).not.toHaveBeenCalled()
+  })
+
+  it("rejects conflicting, in-progress, and reconciliation-required replays before lifecycle dispatch", async () => {
+    const { bindings, batches, service, coordinator } = createCoordinator()
+    for (const stored of [
+      { kind: "existing", id: "batch-1", fingerprint: "different", status: "completed", result: "{}" },
+      {
+        kind: "existing",
+        id: "batch-1",
+        fingerprint: JSON.stringify(["delete", ["entry-a"]]),
+        status: "dispatched",
+        result: null,
+      },
+      {
+        kind: "existing",
+        id: "batch-1",
+        fingerprint: JSON.stringify(["delete", ["entry-a"]]),
+        status: "reconciliation_required",
+        result: null,
+      },
+    ]) {
+      batches.reserveBatch.mockResolvedValueOnce(stored)
+      await expect(
+        coordinator.execute(
+          { ids: ["entry-a"], action: "delete" },
+          { principalKey: "principal-a" },
+          ["scope-a"],
+          "key",
+        ),
+      ).rejects.toMatchObject({ code: stored.fingerprint === "different" ? "REQUEST_CONFLICT" : "BATCH_IN_PROGRESS" })
+    }
+    expect(bindings.getById).not.toHaveBeenCalled()
+    expect(service.completeEntry).not.toHaveBeenCalled()
+  })
+
+  it("returns processed 200 JSON for all-success, mixed, and all-failed batches", async () => {
+    const cases = [
+      { requested: 1, succeeded: 1, failed: 0, results: [{ id: "a", status: "ok", deleted: true }] },
+      {
+        requested: 2,
+        succeeded: 1,
+        failed: 1,
+        results: [
+          { id: "a", status: "ok", deleted: true },
+          { id: "b", status: "failed", code: "ENTRY_UNAVAILABLE", retryable: false },
+        ],
+      },
+      {
+        requested: 1,
+        succeeded: 0,
+        failed: 1,
+        results: [{ id: "a", status: "failed", code: "ENTRY_UNAVAILABLE", retryable: false }],
+      },
+    ]
+    for (const result of cases) {
+      const coordinator = { execute: vi.fn().mockResolvedValue({ result }) }
+      const response = await createBatchDispatch(coordinator as never)(
+        { ids: result.results.map((item) => item.id), action: "delete" },
+        session,
+        ["scope-a"],
+        "key",
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual(result)
+    }
   })
 })

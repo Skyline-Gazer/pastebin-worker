@@ -1,10 +1,10 @@
 # Phase 4 — Feishu webhook foundation PHASE decomposition
 
-Status: PHASE DECOMPOSITION READY FOR OWNER REVIEW
+Status: OWNER APPROVED / EXECUTION AUTHORIZED (2026-09-05)
 
 Parent: [owner-approved SPEC](phase4-spec.md). Active implementation checklist: [phase4-todo.md](phase4-todo.md).
 
-This document is the durable PHASE decomposition required by `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.4 after SPEC approval. It does **not** authorize implementation. Owner approval of this PHASE decomposition and the active TODO is required before coding, PR creation, deployment, or migration.
+This document is the durable PHASE decomposition required by `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.4 after SPEC approval. **Owner approved this PHASE decomposition and the active TODO on 2026-09-05 — EXECUTION AUTHORIZED.** Implementation may proceed on `codex/phase4-webhook-foundation` from refreshed `downstream/main`.
 
 ## Baseline and ownership
 

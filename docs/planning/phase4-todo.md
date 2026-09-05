@@ -1,10 +1,10 @@
 # Phase 4 execution TODO
 
-Status: TODO READY FOR OWNER REVIEW — NOT EXECUTION AUTHORIZED.
+Status: OWNER APPROVED / EXECUTION AUTHORIZED (2026-09-05)
 
 Parent: [approved SPEC](phase4-spec.md) · [PHASE decomposition](phase4-phases.md).
 
-Owner approved the Phase 4 SPEC on 2026-09-05. This TODO is the durable active checklist for the single Phase 4 delivery milestone. It does **not** authorize implementation until the owner explicitly approves this PHASE/TODO pair. Silence is not approval.
+Owner approved the Phase 4 SPEC on 2026-09-05. This TODO is the durable active checklist for the single Phase 4 delivery milestone. **Owner approved this PHASE/TODO pair on 2026-09-05 — EXECUTION AUTHORIZED.** Implementation may proceed.
 
 ## Delivery milestone
 
@@ -14,7 +14,7 @@ Goal: Feishu webhook foundation — verified encrypted `im.message.receive_v1` P
 
 ### 0. Preflight (before implementation branch / first RED)
 
-- [ ] Confirm owner approval of this PHASE decomposition and TODO (STOP if not explicit).
+- [x] Confirm owner approval of this PHASE decomposition and TODO (STOP if not explicit).
 - [ ] Refresh `downstream/main` (`fetch` + `--ff-only`); verify clean tree and tip descends from / equals `09148c96cad01af4a5938e5d74f3b3a33823e348` or a later merge that still contains Phase 3 services.
 - [ ] Confirm Node 22.x and pnpm 10.x available; confirm Add-on Vitest/tsc/eslint/vite tooling paths.
 - [ ] Confirm PR #5 remains OPEN / UNMERGED / REVIEW ONLY.

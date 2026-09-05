@@ -225,11 +225,7 @@ export class EntryService {
       if (previous) return this.duplicate(previous, fingerprint)
       const binding = await this.store.get(context.scopeId, input.entryId)
       if (!binding) return this.error("ENTRY_NOT_FOUND")
-      if (
-        binding.visibility !== "archived" ||
-        binding.retention_mode !== "permanent" ||
-        binding.expires_at !== null
-      )
+      if (binding.visibility !== "archived" || binding.retention_mode !== "permanent" || binding.expires_at !== null)
         return this.error("INVALID_LIFECYCLE_STATE")
       return this.restoreEntry(context, input)
     } catch (error) {

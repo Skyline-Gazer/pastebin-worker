@@ -15,6 +15,8 @@ PLAN
 → implementation
 ```
 
+Normal mode above remains the default. The owner may explicitly authorize the bounded Owner Delegated Continuous Execution exception for existing Phases 5–10 only: PLAN → internal consistency review → SPEC → internal consistency review → PHASE/TODO → implementation → CI/review/merge → next roadmap Phase, without routine owner pauses inside the delegated roadmap. This does not make the project queue empty when one Phase merges: Phases 5–10 remain queued until each is complete. The exception never authorizes work beyond those phases, silent observable/API/security SPEC drift, or the stop conditions in `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.1.1.
+
 - PLAN/SPEC/PHASE/TODO chapter requirements and the mandatory interaction sequence: `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.
 - TDD evidence requirements (including test-first exceptions): `docs/TESTING.md` §1.
 - Each approved artifact MUST be persisted to a durable, reviewable location before the next workflow stage advances: `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.7.

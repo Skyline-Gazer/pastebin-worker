@@ -234,3 +234,17 @@ Costs:
 - TDD applies to behavioral changes; valid test-first exceptions (docs-only, formatting, mechanical metadata) are recorded per `docs/TESTING.md`. TDD/test-first exceptions apply only to TDD evidence and do NOT exempt PLAN/SPEC/PHASE/TODO artifacts; planning-artifact exemption is limited to genuinely trivial changes and the documented one-time governance bootstrap exception.
 - Approved planning artifacts MUST be persisted to a durable, reviewable location before the next workflow stage advances (§10.7 persistence checkpoint); a PR opened after coding cannot retroactively prove pre-implementation planning.
 - This governance change is a bootstrap exception: it predates the durable-artifact workflow it introduces, so its owner-approved planning context is accepted as the bootstrap source; the new workflow applies prospectively after this policy merges. The exception is limited to this change and is not a general bypass.
+
+## D-030 — Owner Delegated Continuous Execution for roadmap Phases 5–10
+
+### Decision
+
+The owner explicitly authorizes Owner Delegated Continuous Execution for the existing roadmap Phases 5–10 in `docs/IMPLEMENTATION_ORDER.md`. This is a bounded exception to D-029's routine owner-approval pauses, not a global replacement for the normal workflow.
+
+Within that delegation, work proceeds as: explicit owner authorization → PLAN → internal consistency review → SPEC → internal consistency review → PHASE/TODO → implementation → CI/Phase Review Gate/merge → next roadmap Phase. There are no routine owner pauses while the work remains within the delegated roadmap. The project queue is not empty merely because one Phase merges; it remains queued until each applicable Phase 5–10 is complete under `docs/IMPLEMENTATION_ORDER.md`.
+
+### Boundary
+
+Continuous execution does not authorize silent SPEC drift, new product scope, or changes outside the delegated Phases 5–10. It must stop for a real owner decision on unresolved product ambiguity; work beyond the roadmap; security/API/trust-boundary changes outside the applicable SPEC; destructive migrations; production deployment; anything involving PR #5, `upstream-sync`, or a `goshujin` rewrite; bot-unavailable overrides or blocking-finding dispositions requiring owner authority; and change control that alters observable behavior, API, security, or acceptance criteria beyond the delegated roadmap/SPEC.
+
+The owner message that authorized this decision also authorizes this governance documentation change as a policy bootstrap. The rule applies prospectively after this policy merges. Details and operational requirements are in `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.1.1 and `AGENTS.md` §18.

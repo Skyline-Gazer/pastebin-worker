@@ -680,6 +680,8 @@ If the issue/task contains only a title or lacks acceptance criteria, agents MUS
 
 For every non-trivial change, the approved planning artifacts (PLAN → owner approval → SPEC → owner approval → PHASE decomposition → TODO → owner approval) MUST exist before implementation starts, with durable reviewable references (`docs/CHANGE_CONTEXT_AND_REVIEW.md` §10); each approved artifact MUST be persisted to its durable location before the next workflow stage advances (§10.7 persistence checkpoint). Behavioral changes MUST record TDD evidence per `docs/TESTING.md` §1.1.
 
+The normal owner-approval workflow remains the default. Owner Delegated Continuous Execution is a bounded exception only for the already-defined roadmap Phases 5–10 in `docs/IMPLEMENTATION_ORDER.md`, and only after explicit owner authorization. Within that delegation, internal consistency review replaces routine owner pauses for PLAN, SPEC, and PHASE/TODO artifacts; it does not authorize silent behavior/API/security drift, work outside Phases 5–10, or any stop condition in `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.1.1. A phase merge does not empty the project queue while any of Phases 5–10 remain incomplete.
+
 1. Read `AGENTS.md`.
 2. Read `DECISIONS.md`.
 3. Read relevant docs.
@@ -758,4 +760,5 @@ A change is not complete until all applicable items pass:
 - [ ] Dependent next-phase work starts only after the previous phase/PR merged and the target branch was refreshed.
 - [ ] Approved PLAN/SPEC/PHASE/TODO artifacts exist with durable references, persisted before the next workflow stage advanced (exemptions limited to genuinely trivial changes and the recorded governance bootstrap exception; TDD/test-first exceptions do NOT exempt planning artifacts).
 - [ ] Owner approval of planning artifacts was explicit (not implied by silence).
+- [ ] If continuous mode was used, explicit owner authorization, the applicable Phase 5–10 scope, internal consistency reviews, and any stop-condition escalation are recorded per `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.1.1.
 - [ ] TDD evidence (RED/GREEN/REFACTOR/REGRESSION) recorded per `docs/TESTING.md` §1.1, or `TDD: N/A` with reason and alternative verification.

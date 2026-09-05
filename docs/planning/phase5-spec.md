@@ -135,16 +135,16 @@ Missing/expired/deleted live records, restore failures, duplicate requests, reco
 
 ## 3.12 Test specification
 
-| Behavior | Required evidence |
-| --- | --- |
-| Fixture-only boundary | Unit/component test spies on browser transport and proves initial render/tab changes make no request; static review confirms no browser route. |
-| Tabs and fixture filtering | Testing Library tests for default Active, selected semantics, Archive switch, and no cross-view fixture leakage/mutation. |
-| GFM tasks | Rendering tests for unchecked, `[x]`, `[X]`, nested tasks, and semantic checkbox output. |
-| Safe Markdown | Negative tests for fenced task text remaining code and malicious HTML/event-handler/unsafe-link payloads being absent or inert. |
-| Managed control | Accessible-name/distinction test plus activation test proving no dialog/action, no fixture/Markdown/tab mutation, and no request. |
-| Archive display | Tests for permanent label and timed label/value sourced from fixture `expiresAt`, with no restore/action control. |
-| D-005/a11y baseline | Focused DOM/class/token assertions for compact local light/dark baseline and accessible tab/control names; no dashboard/client chrome markers. |
-| Regression | Add-on Worker suite, TypeScript, lint/format, and production frontend build after frontend configuration is added. |
+| Behavior                   | Required evidence                                                                                                                              |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fixture-only boundary      | Unit/component test spies on browser transport and proves initial render/tab changes make no request; static review confirms no browser route. |
+| Tabs and fixture filtering | Testing Library tests for default Active, selected semantics, Archive switch, and no cross-view fixture leakage/mutation.                      |
+| GFM tasks                  | Rendering tests for unchecked, `[x]`, `[X]`, nested tasks, and semantic checkbox output.                                                       |
+| Safe Markdown              | Negative tests for fenced task text remaining code and malicious HTML/event-handler/unsafe-link payloads being absent or inert.                |
+| Managed control            | Accessible-name/distinction test plus activation test proving no dialog/action, no fixture/Markdown/tab mutation, and no request.              |
+| Archive display            | Tests for permanent label and timed label/value sourced from fixture `expiresAt`, with no restore/action control.                              |
+| D-005/a11y baseline        | Focused DOM/class/token assertions for compact local light/dark baseline and accessible tab/control names; no dashboard/client chrome markers. |
+| Regression                 | Add-on Worker suite, TypeScript, lint/format, and production frontend build after frontend configuration is added.                             |
 
 Behavior implementation must record genuine RED, GREEN, REFACTOR, and REGRESSION evidence in `docs/planning/phase5-todo.md` under `docs/TESTING.md` §1.1. Planning-only work is TDD N/A.
 

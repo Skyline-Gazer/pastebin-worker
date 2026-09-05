@@ -2,9 +2,12 @@ import { Credentials } from "./credentials"
 import { PasteClient } from "./paste-client"
 import { EntryService } from "./service"
 import { BindingStore } from "./store"
+import { BrowserTrustStore } from "./browser-store"
+import { createBrowserAuthHandler, type BrowserAuthEnvironment } from "./browser-auth"
+import { derivePrincipalKey } from "./principal"
 import { consumeFeishuMessages, createFeishuWebhookHandler, type FeishuWebhookEnvironment } from "./webhook"
 
-export interface Phase4Environment extends FeishuWebhookEnvironment {
+export interface Phase4Environment extends FeishuWebhookEnvironment, BrowserAuthEnvironment {
   FEISHU_BINDINGS_DB: D1Database
   FEISHU_CREDENTIAL_KEY_ID: string
   FEISHU_CREDENTIAL_ENCRYPTION_KEY: string
@@ -25,9 +28,13 @@ export async function createPhase4Worker(env: Phase4Environment) {
     credentials,
     new PasteClient(env.PASTEBIN_ORIGIN, fetch, env.PASTEBIN_AUTHORIZATION),
   )
-  const handler = createFeishuWebhookHandler(env)
+  const trustStore = new BrowserTrustStore(env.FEISHU_BINDINGS_DB)
+  const handler = createFeishuWebhookHandler(env, trustStore, (appId, tenantKey, openId) =>
+    derivePrincipalKey(env.FEISHU_PRINCIPAL_KEY, appId, tenantKey, openId),
+  )
+  const browser = createBrowserAuthHandler(env, trustStore)
   return {
-    fetch: (request: Request) => handler.fetch(request),
+    fetch: async (request: Request) => (await browser.fetch(request)) ?? handler.fetch(request),
     queue: (batch: Parameters<typeof consumeFeishuMessages>[0]) =>
       consumeFeishuMessages(batch, service, undefined, env.FEISHU_INGRESS_DLQ_CONFIGURED === "true"),
   }
@@ -44,6 +51,9 @@ export { EntryService } from "./service"
 export { BindingStore } from "./store"
 export { Credentials } from "./credentials"
 export { PasteClient } from "./paste-client"
+export { BrowserTrustStore } from "./browser-store"
+export { authorizeBrowserMutation, createBrowserAuthHandler, requireBrowserSession } from "./browser-auth"
+export { derivePrincipalKey } from "./principal"
 export type { EntryContext, EntryResult, PublicEntry } from "../shared/entries"
 export {
   consumeFeishuMessages,

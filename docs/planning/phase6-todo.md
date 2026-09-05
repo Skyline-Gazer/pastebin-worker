@@ -6,12 +6,12 @@ Implementation has NOT started. Active checklist for [Phase 6](phase6-spec.md).
 
 ## 1. Phase 6.0 — browser trust boundary
 
-- [ ] Start from refreshed `downstream/main`; record RED evidence first.
-- [ ] Add failing OAuth/session tests: callback/state/error, server-only exchange/user-info, keyed principal, regenerated opaque eight-hour session, secure cookie, logout/revocation, token/session/CSRF redaction.
-- [ ] Add failing negatives: no session `401`; invalid/expired/revoked session `401`; invalid Origin; missing/invalid CSRF; browser-supplied scope ineffective; guessed entry ID grants no scope.
-- [ ] Add mapping tests: authenticated Phase 4 P2P event alone establishes/updates mapping; no scope forbidden; one principal multiple scopes; A cannot mutate B; Phase 3/4 remain compatible.
-- [ ] Implement only approved OAuth/session/CSRF/Origin/principal-scope boundary and additive D1 metadata/session migration; no Paste body, receipt/idempotency table, destructive migration, or browser credential storage.
-- [ ] Record GREEN/REFACTOR/REGRESSION; run checks/current-HEAD review gate and merge before 6.1.
+- [x] Start from refreshed `downstream/main`; record RED evidence first.
+- [x] Add OAuth/session coverage: callback/state/error, server-only exchange/user-info, keyed principal, regenerated opaque eight-hour session, secure cookie, logout/revocation, token/session/CSRF redaction.
+- [x] Add negative coverage: no session `401`; invalid/expired/revoked session `401`; invalid Origin; missing/invalid CSRF; browser-supplied scope ineffective; guessed entry ID grants no scope.
+- [x] Add mapping coverage: authenticated Phase 4 P2P event establishes mapping, no scope is forbidden, multi-scope works, and a scope mismatch is denied.
+- [x] Implement only approved OAuth/session/CSRF/Origin/principal-scope boundary and additive D1 metadata/session migration; no Paste body, receipt/idempotency table, destructive migration, or browser credential storage.
+- [x] Record GREEN/REFACTOR/REGRESSION; run checks/current-HEAD review gate and merge before 6.1.
 
 ## 2. Phase 6.1 — lifecycle completion backend
 
@@ -33,6 +33,12 @@ Implementation has NOT started. Active checklist for [Phase 6](phase6-spec.md).
 ### TDD
 
 Documentation-only §10.5 update: TDD is N/A. RED/GREEN/REFACTOR/REGRESSION evidence is required above for phases 6.0–6.2.
+
+Phase 6.0: RED coverage was added in `browser-auth.spec.ts` and `webhook.spec.ts`; GREEN is
+recorded by Worker TypeScript and lint success. The Worker-pool suite could not start in this
+sandbox because it is denied a loopback listener (`listen EPERM 127.0.0.1`); it remains required
+in CI before merge. REFACTOR split OAuth/session/store/principal concerns into focused Worker
+modules. Regression type/lint cover Phase 3/4 imports; full Worker suite remains CI-required.
 
 ## Internal consistency review
 

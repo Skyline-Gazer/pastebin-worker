@@ -26,7 +26,7 @@ function event(overrides: Record<string, unknown> = {}) {
       token: "verification-token",
     },
     event: {
-      sender: { sender_type: "user" },
+      sender: { sender_type: "user", sender_id: { open_id: "ou_1" } },
       message: {
         chat_type: "p2p",
         message_type: "text",
@@ -167,6 +167,12 @@ describe("Feishu webhook protocol and authorization", () => {
         secrets,
       ),
     ).resolves.toBeNull()
+    await expect(
+      normalizeAuthorizedEvent(
+        event({ event: { sender: { sender_type: "user" }, message: { ...event().event.message } } }),
+        secrets,
+      ),
+    ).rejects.toMatchObject({ code: "MALFORMED" })
   })
 
   it("enforces schema and every event allowlist, content limits, and fixed identity vectors", async () => {
@@ -176,22 +182,38 @@ describe("Feishu webhook protocol and authorization", () => {
     for (const variant of [
       event({ header: { ...event().header, event_type: "other" } }),
       event({ event: { sender: { sender_type: "app" }, message: { ...event().event.message } } }),
-      event({ event: { sender: { sender_type: "user" }, message: { ...event().event.message, chat_type: "group" } } }),
       event({
-        event: { sender: { sender_type: "user" }, message: { ...event().event.message, message_type: "image" } },
+        event: {
+          sender: { sender_type: "user", sender_id: { open_id: "ou_1" } },
+          message: { ...event().event.message, chat_type: "group" },
+        },
+      }),
+      event({
+        event: {
+          sender: { sender_type: "user", sender_id: { open_id: "ou_1" } },
+          message: { ...event().event.message, message_type: "image" },
+        },
       }),
     ])
       await expect(normalizeAuthorizedEvent(variant, secrets)).resolves.toBeNull()
     await expect(
       normalizeAuthorizedEvent(
-        event({ event: { sender: { sender_type: "user" }, message: { ...event().event.message, content: "{" } } }),
+        event({
+          event: {
+            sender: { sender_type: "user", sender_id: { open_id: "ou_1" } },
+            message: { ...event().event.message, content: "{" },
+          },
+        }),
         secrets,
       ),
     ).rejects.toMatchObject({ code: "MALFORMED" })
     await expect(
       normalizeAuthorizedEvent(
         event({
-          event: { sender: { sender_type: "user" }, message: { ...event().event.message, content: '{"text":""}' } },
+          event: {
+            sender: { sender_type: "user", sender_id: { open_id: "ou_1" } },
+            message: { ...event().event.message, content: '{"text":""}' },
+          },
         }),
         secrets,
       ),
@@ -200,7 +222,7 @@ describe("Feishu webhook protocol and authorization", () => {
       normalizeAuthorizedEvent(
         event({
           event: {
-            sender: { sender_type: "user" },
+            sender: { sender_type: "user", sender_id: { open_id: "ou_1" } },
             message: { ...event().event.message, content: JSON.stringify({ text: "x".repeat(100_001) }) },
           },
         }),
@@ -243,15 +265,19 @@ describe("Feishu webhook ingress", () => {
 
   it("authenticates exact raw signed encrypted events, never enqueues failed gates, and fails closed on Queue errors", async () => {
     const send = vi.fn().mockResolvedValue(undefined)
+    const upsertPrincipalScope = vi.fn().mockResolvedValue(undefined)
     const env: FeishuWebhookEnvironment = {
       ...secrets,
       FEISHU_INGRESS_QUEUE: { send },
       FEISHU_INGRESS_DLQ_CONFIGURED: "true",
     }
     const envelope = { encrypt: await encrypted(event()) }
-    const handler = createFeishuWebhookHandler(env)
+    const handler = createFeishuWebhookHandler(env, { upsertPrincipalScope }, (_appId, _tenantKey, openId) =>
+      Promise.resolve(`keyed:${openId}`),
+    )
     expect((await handler.fetch(await signedRequest(envelope, env))).status).toBe(200)
     expect(send).toHaveBeenCalledTimes(1)
+    expect(upsertPrincipalScope).toHaveBeenCalledWith("keyed:ou_1", expect.stringMatching(/^feishu:v1:scope:/))
     expect(send.mock.calls[0][0]).toMatchObject({ schema: "feishu.message-create.v1", content: " hello\nworld " })
     const queued: unknown = send.mock.calls[0][0]
     if (!queued || typeof queued !== "object") throw new Error("expected Queue payload")

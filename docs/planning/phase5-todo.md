@@ -85,6 +85,10 @@ All commands used `PATH="/home/box/.local/bin:/home/box/.local/node-v22/bin:$PAT
 
 Final scope review found only `downstream/addons/feishu/frontend/` plus this TODO evidence changed. No upstream-owned source, root manifest/lockfile, migration, patch-series, network client, API route, fixture data, or secret-bearing browser state was added.
 
+### Bugbot follow-up
+
+PR #14 Bugbot Medium finding: frontend Vite and Vitest configuration roots now use `fileURLToPath(new URL(".", import.meta.url))`, so filesystem paths with percent-encoded characters resolve correctly. `emptyOutDir: true` remains safe because `outDir` is still the explicit sibling `../dist/frontend` path. Focused frontend test/typecheck/build and Worker config-suite regression commands were rerun for the amended HEAD.
+
 ### Planning validation
 
 - Read and reconciled the approved `docs/planning/phase5-plan.md`, `AGENTS.md`, `DECISIONS.md` (including D-030), `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10, `docs/IMPLEMENTATION_ORDER.md` Phase 5, `docs/FRONTEND.md`, `docs/DESIGN.md`, `docs/API_CONTRACT.md`, `docs/SECURITY.md`, Phase 3/4 SPECs/contracts, and existing Add-on configuration.

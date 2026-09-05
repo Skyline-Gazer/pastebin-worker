@@ -180,7 +180,9 @@ describe("batch lifecycle delegation", () => {
       ["scope-a"],
       "opaque-browser-key-delete",
     )
-    expect(deleteExecution.items).toEqual([expect.objectContaining({ id: "entry-a", outcome: "succeeded", deleted: true })])
+    expect(deleteExecution.items).toEqual([
+      expect.objectContaining({ id: "entry-a", outcome: "succeeded", deleted: true }),
+    ])
     expect(service.completeEntry).toHaveBeenNthCalledWith(
       4,
       { scopeId: "scope-a" },

@@ -16,6 +16,11 @@ export interface FeishuMessageCreateV1 {
   correlationId: string
 }
 
+export interface AuthorizedFeishuEvent extends Omit<FeishuMessageCreateV1, "schema" | "correlationId"> {
+  /** Internal only: keyed identity used to establish browser authorization metadata. */
+  principalKey: string
+}
+
 export interface FeishuWebhookEnvironment {
   FEISHU_ENCRYPT_KEY: string
   FEISHU_VERIFICATION_TOKEN: string
@@ -31,6 +36,9 @@ export interface EntryCreator {
     context: { scopeId: string },
     input: { recordKey: string; requestId: string; content: string },
   ): Promise<EntryResult>
+}
+export interface PrincipalScopeRecorder {
+  upsertPrincipalScope(principalKey: string, scopeId: string): Promise<void>
 }
 
 export interface QueueMessageLike<T> {
@@ -182,13 +190,15 @@ export async function normalizeAuthorizedEvent(
     FeishuWebhookEnvironment,
     "FEISHU_ENCRYPT_KEY" | "FEISHU_VERIFICATION_TOKEN" | "FEISHU_APP_ID" | "FEISHU_ALLOWED_TENANT_KEYS"
   >,
-): Promise<Omit<FeishuMessageCreateV1, "schema" | "correlationId"> | null> {
+  principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
+): Promise<AuthorizedFeishuEvent | null> {
   const checked = config(env)
   if (!value || typeof value !== "object") throw new WebhookError("MALFORMED", 400)
   const root = object(value)
   const header = object(root?.header)
   const event = object(root?.event)
   const sender = object(event?.sender)
+  const senderId = object(sender?.sender_id)
   const message = object(event?.message)
   if (root?.schema !== "2.0" || !header || !event || !message) throw new WebhookError("MALFORMED", 400)
   if (typeof header.token !== "string" || !equal(header.token, checked.FEISHU_VERIFICATION_TOKEN))
@@ -217,10 +227,15 @@ export async function normalizeAuthorizedEvent(
     bytes(content.text).byteLength > TEXT_LIMIT
   )
     throw new WebhookError("UNSUPPORTED", 400)
+  // A supported P2P event establishes browser authorization only when Feishu supplied
+  // a sender open_id. Missing identity is deliberately fail-closed, never queued.
+  if (!boundedIdentity(senderId?.open_id)) throw new WebhookError("MALFORMED", 400)
+  const principalKey = principal ? await principal(checked.FEISHU_APP_ID, header.tenant_key, senderId.open_id) : ""
   return {
     ...(await deriveMessageIdentity(checked.FEISHU_APP_ID, header.tenant_key, message.chat_id, message.message_id)),
     sourceMessageId: message.message_id,
     content: content.text,
+    principalKey,
   }
 }
 
@@ -249,7 +264,11 @@ function response(code: string, correlationId: string, status: number) {
   return Response.json({ code, correlationId }, { status })
 }
 
-export function createFeishuWebhookHandler(env: FeishuWebhookEnvironment) {
+export function createFeishuWebhookHandler(
+  env: FeishuWebhookEnvironment,
+  recorder?: PrincipalScopeRecorder,
+  principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
+) {
   return {
     async fetch(request: Request): Promise<Response> {
       const correlationId = crypto.randomUUID()
@@ -300,9 +319,15 @@ export function createFeishuWebhookHandler(env: FeishuWebhookEnvironment) {
         const normalized = await normalizeAuthorizedEvent(
           await decrypt((envelope as { encrypt: string }).encrypt, env.FEISHU_ENCRYPT_KEY),
           env,
+          principal,
         )
         if (!normalized) return new Response(null, { status: 200 })
-        const item: FeishuMessageCreateV1 = { schema: "feishu.message-create.v1", correlationId, ...normalized }
+        if (recorder) {
+          if (!normalized.principalKey) throw new WebhookError("UNAVAILABLE", 503)
+          await recorder.upsertPrincipalScope(normalized.principalKey, normalized.scopeId)
+        }
+        const { principalKey: _principalKey, ...queueSafe } = normalized
+        const item: FeishuMessageCreateV1 = { schema: "feishu.message-create.v1", correlationId, ...queueSafe }
         if (bytes(JSON.stringify(item)).byteLength > QUEUE_LIMIT) throw new WebhookError("TOO_LARGE", 413)
         try {
           await env.FEISHU_INGRESS_QUEUE.send(item)

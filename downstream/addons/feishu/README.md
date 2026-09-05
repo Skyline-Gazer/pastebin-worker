@@ -65,3 +65,10 @@ Markdown or fixture state, open the Phase 6 chooser, select a retention action, 
 The Worker now exposes only `POST /api/feishu/events` through the explicit Phase 4 adapter.
 It is an encrypted Feishu callback-to-Queue boundary, not a public Paste management API. See
 the [webhook configuration and DLQ recovery runbook](docs/phase4-webhook.md).
+
+## Phase 6.0 browser trust boundary
+
+OAuth, opaque sessions, CSRF/Origin validation, and trusted principal-to-scope metadata are now
+available for future browser mutations. The Phase 6.0 routes/configuration and migration order are
+documented in [browser trust boundary](docs/phase6-browser-trust.md). No completion endpoint or UI
+is included in this phase.

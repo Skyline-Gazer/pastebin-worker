@@ -54,6 +54,11 @@ Implementation has NOT started. Before coding in a later turn, refresh `downstre
 - [ ] Close remaining secret-boundary, a11y, token/layout, full-suite, build, and scope-diff evidence without adding Phase 6 behavior.
 - [ ] Complete Phase 5 documentation/TDD evidence and independent review gate.
 
+
+### CI workflow note
+
+Extending `.github/workflows/feishu-phase3.yml` with frontend vitest/tsc/vite steps is prepared and validated locally, but pushing workflow-file changes requires a GitHub token with the `workflow` scope. Until that is available, keep frontend validation local via the README `node_modules/.bin` commands; do not treat missing CI frontend steps as a SPEC failure for this increment.
+
 ## Evidence
 
 ### RED

@@ -44,3 +44,9 @@ of upstream PR Tests. The build produces an internal ES module, not a deployed m
 The frontend build is a typecheck prerequisite: the reused root Cloudflare declarations import
 upstream Worker page modules that depend on the generated SSR manifest. A pre-existing local
 `dist/` must not be mistaken for a clean-checkout prerequisite being satisfied in CI.
+
+## Phase 4 webhook foundation
+
+The Worker now exposes only `POST /api/feishu/events` through the explicit Phase 4 adapter.
+It is an encrypted Feishu callback-to-Queue boundary, not a public Paste management API. See
+the [webhook configuration and DLQ recovery runbook](docs/phase4-webhook.md).

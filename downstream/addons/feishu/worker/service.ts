@@ -224,8 +224,8 @@ export class EntryService {
       const previous = await this.store.operation(context.scopeId, input.requestId)
       if (previous) return this.duplicate(previous, fingerprint)
       const binding = await this.store.get(context.scopeId, input.entryId)
+      if (!binding) return this.error("ENTRY_NOT_FOUND")
       if (
-        !binding ||
         binding.visibility !== "archived" ||
         binding.retention_mode !== "permanent" ||
         binding.expires_at !== null

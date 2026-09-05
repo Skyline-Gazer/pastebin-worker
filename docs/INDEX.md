@@ -15,8 +15,11 @@
 - [`REPO_AND_GIT.md`](REPO_AND_GIT.md) — branch roles, patch promotion, release refs, commit/PR workflow.
 - [`CHANGE_CONTEXT_AND_REVIEW.md`](CHANGE_CONTEXT_AND_REVIEW.md) — business context, acceptance criteria, commit-body and AI-review requirements; canonical home of the mandatory Phase Review Gate and the PLAN/SPEC/PHASE/TODO development workflow.
 - [`IMPLEMENTATION_ORDER.md`](IMPLEMENTATION_ORDER.md) — TDD-oriented implementation order.
+- [`DEVELOPMENT_FREEZE.md`](DEVELOPMENT_FREEZE.md) — current frozen project state and resume rules.
 
 ## Operational scaffold
+
+- [`job-transfer/README.md`](job-transfer/README.md) — chronological execution and recovery checkpoint archive.
 
 - `downstream/release.example.json` — release manifest template; copy to `downstream/release.json` and pin an exact upstream SHA.
 - `downstream/patches/series` — authoritative patch replay order.

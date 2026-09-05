@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import type { PublicEntry } from "../shared/entries"
 import { fixtureEntries, type FixtureEntry } from "./fixtures"
+import { ArchiveStatus } from "./ArchiveStatus"
 import { ManagedTaskCheckbox } from "./ManagedTaskCheckbox"
 import { RenderedMarkdown } from "./RenderedMarkdown"
 
@@ -12,10 +13,6 @@ const actionLabels: Record<CompletionAction, string> = {
   archive_permanent: "永久归档",
   archive_expiring: "限期归档",
   delete: "删除",
-}
-
-function archiveLabel(entry: FixtureEntry) {
-  return entry.retentionMode === "permanent" ? "永久归档" : `限期归档：${entry.expiresAt}`
 }
 
 function requestIdentity() {
@@ -175,7 +172,7 @@ export function App() {
                     }}
                   />
                 ) : (
-                  <p className="archive-label">{archiveLabel(entry)}</p>
+                  <ArchiveStatus expiresAt={entry.expiresAt} retentionMode={entry.retentionMode} />
                 )}
                 <RenderedMarkdown content={entry.content} />
               </article>

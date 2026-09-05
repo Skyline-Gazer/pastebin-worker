@@ -9,15 +9,15 @@ do not start a dependent phase from an unmerged branch.
 
 ## 1. Phase 7.1 — countdown presentation
 
-- [ ] Refresh `downstream/main`; inspect Phase 6 public projection and trust
+- [x] Refresh `downstream/main`; inspect Phase 6 public projection and trust
       reuse points; record RED tests before implementation.
-- [ ] Add frozen-time frontend RED tests for valid authoritative timed ISO,
+- [x] Add frozen-time frontend RED tests for valid authoritative timed ISO,
       permanent no-timer state, compact accessible formatting, coarse refresh and
       cleanup, elapsed/invalid non-negative stale status, and no tick-driven fetch.
-- [ ] Implement display-only countdown state derived solely from returned
+- [x] Implement display-only countdown state derived solely from returned
       `expiresAt`; never derive/store/change a deadline from duration or browser
       receipt time.
-- [ ] Keep elapsed/invalid rows archived and use only the approved
+- [x] Keep elapsed/invalid rows archived and use only the approved
       authenticated reconciliation pathway; STOP before adding a route or changing
       the public contract outside SPEC §3.6.
 - [ ] Record GREEN/REFACTOR/REGRESSION evidence; run focused frontend/type/
@@ -95,6 +95,21 @@ RED/GREEN/REFACTOR/REGRESSION evidence is required in the applicable checklist
 items before every Phase 7 implementation PR is merged. Use deterministic or
 frozen time for countdown tests. Do not mark an unavailable sandbox test as
 passing; record the limitation and retain the check for CI.
+
+Phase 7.1 implementation evidence (2026-09-05):
+
+- RED: `node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts ArchiveStatus.spec.tsx`
+  failed because `./ArchiveStatus` did not yet exist.
+- GREEN: `node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts`
+  passed: 2 files, 22 tests. It covers frozen valid ISO formatting, permanent no-timer,
+  minute-only refresh and cleanup, elapsed/invalid stale state, and no tick-driven fetch.
+- REFACTOR: the same focused suite remained green after integrating `ArchiveStatus` into `App`.
+- REGRESSION: `node_modules/.bin/tsc --noEmit -p downstream/addons/feishu/frontend/tsconfig.json`
+  passed; `node_modules/.bin/prettier --check` passed for the changed frontend files. Current-HEAD CI
+  and the required AI Review Bot Phase Review Gate remain required before merge.
+- Limitation: the Phase 3–6 Worker suite command
+  `node_modules/.bin/vitest run --config downstream/addons/feishu/vitest.config.js` could not start
+  because the sandbox denied its required `127.0.0.1` listener (`EPERM`). It is not recorded as passing.
 
 ### Regression and review
 

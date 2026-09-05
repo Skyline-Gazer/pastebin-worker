@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { App } from "./App"
@@ -52,12 +52,12 @@ describe("Feishu fixture rendering", () => {
     expect(document.querySelector('input[type="text"]')).not.toBeInTheDocument()
   })
 
-  it("shows static Archive retention labels from fixture expiresAt only", async () => {
+  it("shows Archive retention labels without restore controls", async () => {
     const user = userEvent.setup()
     render(<App />)
     await user.click(screen.getByRole("tab", { name: "归档" }))
     expect(screen.getByText("永久归档")).toBeVisible()
-    expect(screen.getByText("限期归档：2030-01-02T03:04:05.000Z")).toBeVisible()
+    expect(screen.getByRole("status", { name: /限期归档，剩余/ })).toBeVisible()
     expect(screen.queryByRole("button", { name: /restore/i })).not.toBeInTheDocument()
   })
 
@@ -146,7 +146,9 @@ describe("Feishu fixture rendering", () => {
     })
     await user.click(screen.getByRole("tab", { name: "归档" }))
     expect(screen.getByText("Authoritative archive")).toBeVisible()
-    expect(screen.getByText("限期归档：2031-02-03T04:05:06.000Z")).toBeVisible()
+    const archive = screen.getByText("Authoritative archive").closest("article")
+    if (!archive) throw new Error("expected authoritative archive row")
+    expect(within(archive).getByRole("status", { name: /限期归档，剩余/ })).toBeVisible()
     fetchMock.mockRestore()
   })
 

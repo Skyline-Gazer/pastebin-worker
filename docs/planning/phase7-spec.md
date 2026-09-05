@@ -304,15 +304,15 @@ authoritative row until an authoritative success/confirmed-absence response.
 Record RED → GREEN → REFACTOR → REGRESSION evidence in the eventual Phase 7
 TODO. Use deterministic/frozen time for frontend timer tests.
 
-| Behavior | Required tests |
-| --- | --- |
-| Countdown | Timed valid ISO format; permanent no timer; no duration-derived deadline; coarse cadence/cleanup; elapsed no-negative accessible stale state; no tick-driven fetch/upstream call. |
-| Restore UI | Restore visible only for archived entry; pending disables duplicate; no optimistic tab move/countdown clear; success moves returned entry to Active; failure/uncertain leaves row unchanged. |
-| Permanent restore | Service/client/store proves checked-to-unchecked source precision, upstream ordering, final `active/permanent/null`, version/result persistence, replay/conflict. |
-| Timed restore | Proves `e=never` confirmed before source/final state, exact prior deadline retained on failure, null only after success, ambiguous post-dispatch is reconciliation-required. |
-| Reconciliation | Confirmed classified missing/expired removes archived binding/list row; transient/outage/ambiguous read, malformed expiry, pending claim, and persistence failure retain it with safe outcome. |
-| Browser boundary | No/invalid/revoked session `401`; invalid Origin/CSRF, no scope, cross-scope/guessed ID, and browser scope/expiry/credential fields fail before service/Paste call; public responses/logs are secret-free. |
-| Regression | Existing Phase 3 claims, Phase 4 mappings, Phase 6 completion/public projection, Active-permanent behavior, TypeScript/lint/format/frontend build, Worker and frontend suites remain green. |
+| Behavior          | Required tests                                                                                                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Countdown         | Timed valid ISO format; permanent no timer; no duration-derived deadline; coarse cadence/cleanup; elapsed no-negative accessible stale state; no tick-driven fetch/upstream call.                          |
+| Restore UI        | Restore visible only for archived entry; pending disables duplicate; no optimistic tab move/countdown clear; success moves returned entry to Active; failure/uncertain leaves row unchanged.               |
+| Permanent restore | Service/client/store proves checked-to-unchecked source precision, upstream ordering, final `active/permanent/null`, version/result persistence, replay/conflict.                                          |
+| Timed restore     | Proves `e=never` confirmed before source/final state, exact prior deadline retained on failure, null only after success, ambiguous post-dispatch is reconciliation-required.                               |
+| Reconciliation    | Confirmed classified missing/expired removes archived binding/list row; transient/outage/ambiguous read, malformed expiry, pending claim, and persistence failure retain it with safe outcome.             |
+| Browser boundary  | No/invalid/revoked session `401`; invalid Origin/CSRF, no scope, cross-scope/guessed ID, and browser scope/expiry/credential fields fail before service/Paste call; public responses/logs are secret-free. |
+| Regression        | Existing Phase 3 claims, Phase 4 mappings, Phase 6 completion/public projection, Active-permanent behavior, TypeScript/lint/format/frontend build, Worker and frontend suites remain green.                |
 
 ## 3.13 Open questions
 

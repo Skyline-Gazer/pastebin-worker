@@ -90,30 +90,52 @@ downstream/addons/feishu/tsconfig.json`, focused Prettier check, and
 
 ## 3. Phase 8.3 — action bar, confirmation, and deferred Phase 9 seam
 
-- [ ] Only after 8.2 merges, refresh/verify clean `downstream/main`; create
+- [x] Only after 8.2 merges, refresh/verify clean `downstream/main`; create
       the dedicated 8.3 feature branch and begin RED-first.
-- [ ] Add RED tests for a compact sticky-capable bar only with nonempty
+- [x] Add RED tests for a compact sticky-capable bar only with nonempty
       selection, exact count, and exactly permanent archive, expiring archive,
       and delete actions; no enabled action at zero selection.
-- [ ] Add RED tests for exactly one count-bearing expiring confirmation, one
+- [x] Add RED tests for exactly one count-bearing expiring confirmation, one
       destructive count-bearing delete confirmation, no per-item confirmation,
       focus trap/restoration, and Cancel preserving selection/state/network.
-- [ ] Add RED boundary tests spying on fetch and Phase 6 single-item adapters:
+- [x] Add RED boundary tests spying on fetch and Phase 6 single-item adapters:
       confirm creates only local deferred intent, does not call `/api/batch` or
       serial mutations, alter rows/Markdown/countdown, create expiry, claim
       success, clear selection as success, or show partial-result/retry UX.
-- [ ] Add RED secret/trust tests for safe intent/fixture/output/log values;
+- [x] Add RED secret/trust tests for safe intent/fixture/output/log values;
       ensure they contain only action and Add-on entry IDs, never passwords,
       management URLs, tokens, scopes, Paste bodies, raw errors, or client
       expiry deadlines.
-- [ ] Implement the compact bar, selection-level dialogs, focus handling, and
+- [x] Implement the compact bar, selection-level dialogs, focus handling, and
       visibly deferred local intent seam only. Do not add a Worker route,
       request/response contract, server operation, result state, retry,
       idempotency, or optimistic lifecycle behavior.
-- [ ] Record GREEN/REFACTOR/REGRESSION evidence; run focused frontend,
+- [x] Record GREEN/REFACTOR/REGRESSION evidence; run focused frontend,
       type/format/build, and Phase 5–7 regression checks; update durable
       developer docs only if needed within the SPEC; complete current-HEAD CI
       and AI Review Bot Phase Review Gate before merge.
+
+### Phase 8.3 implementation evidence — 2026-09-05
+
+- **RED:** `node_modules/.bin/vitest run --config
+downstream/addons/feishu/frontend/vitest.config.ts
+downstream/addons/feishu/frontend/App.spec.tsx` failed 3 new tests because
+  no Batch action toolbar or selection-level confirmation existed.
+- **GREEN:** the same focused command passed: 29 tests. It covers the exact
+  three-action/count toolbar, zero-selection absence, one expiring/delete
+  confirmation, focus trap/restoration, cancellation, safe local intent handoff,
+  and no request or visible lifecycle change.
+- **REFACTOR:** isolated `BatchActionBar` and `BatchActionDialog`; the exported
+  frontend-local `BatchActionIntent` and optional handoff callback carry only an
+  action plus Add-on entry IDs. The visible notice explicitly says Phase 9 is
+  deferred and no changes were made.
+- **REGRESSION:** `node_modules/.bin/vitest run --config
+downstream/addons/feishu/frontend/vitest.config.ts` passed (2 files, 34
+  tests); Add-on type check, focused Prettier check, and frontend production
+  build passed. No Worker, API, request, mutation, result/retry/idempotency,
+  Archive/countdown/Restore/reconciliation, secret, or expiry-authority behavior
+  changed. Current-HEAD CI and the AI Review Bot Phase Review Gate remain
+  required before merge.
 
 ## Evidence
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import type { BatchItemResult, BatchResult } from "../shared/batch"
+import type { BatchResult } from "../shared/batch"
 import type { PublicEntry } from "../shared/entries"
 import { fixtureEntries, type FixtureEntry } from "./fixtures"
 import { ArchiveStatus } from "./ArchiveStatus"
@@ -35,8 +35,8 @@ function isBatchResult(value: unknown, ids: readonly string[]): value is BatchRe
   let succeeded = 0
   let failed = 0
   const validItems = candidate.results.every((item, index) => {
-    if (!item || typeof item !== "object" || (item as BatchItemResult).id !== ids[index]) return false
-    const result = item as BatchItemResult
+    if (!item || typeof item !== "object" || item.id !== ids[index]) return false
+    const result = item
     if (result.status === "failed") {
       failed += 1
       return typeof result.code === "string" && typeof result.retryable === "boolean"

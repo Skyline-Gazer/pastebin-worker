@@ -57,14 +57,17 @@ describe("Feishu fixture rendering", () => {
     await user.click(screen.getByRole("button", { name: "Confirm batch action" }))
     expect(screen.getByRole("button", { name: "永久归档" })).toBeDisabled()
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[1]).toEqual([
+    expect(fetchMock.mock.calls[1]).toMatchObject([
       "/api/batch",
-      expect.objectContaining({
+      {
         method: "POST",
         credentials: "include",
-        headers: expect.objectContaining({ "Content-Type": "application/json", "X-CSRF-Token": "csrf-test" }),
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "csrf-test",
+        },
         body: JSON.stringify({ action: "archive_expiring", ids: ["active-fixture"] }),
-      }),
+      },
     ])
     const firstKey = (fetchMock.mock.calls[1][1]?.headers as Record<string, string>)["Idempotency-Key"]
     expect(firstKey).toEqual(expect.any(String))

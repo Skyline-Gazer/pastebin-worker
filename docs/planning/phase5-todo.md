@@ -67,7 +67,7 @@ Owner Delegated Continuous Execution under D-030 authorizes the in-scope Phase 5
 
 ### 4. 5B review gate
 
-- [ ] Commit with required structured Conventional Commit body and Phase 5B/D-030/planning references.
+- [x] Commit with required structured Conventional Commit body and Phase 5B/D-030/planning references (`f32a1f7`).
 - [ ] Obtain current-HEAD CI and completed AI Review Bot review; fix/disposition findings under the gate rules and re-review every changed HEAD.
 - [ ] Do not open or merge a PR in this increment; hand off the committed branch for authorized review.
 

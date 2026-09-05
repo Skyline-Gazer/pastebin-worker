@@ -8,20 +8,20 @@ from an unmerged predecessor.
 
 ## NEXT — Phase 9.1: Protected batch route, public types, and strict dispatch gate
 
-- [ ] After this artifact-update PR and Phase 8 merge, refresh and verify clean
+- [x] After this artifact-update PR and Phase 8 merge, refresh and verify clean
       `downstream/main`; inspect the Phase 6 protection helper and Phase 8.3
       `BatchActionIntent` seam before creating `feat/feishu-batch-route`.
-- [ ] Write RED Worker tests for POST-only, JSON-only, exact request shape,
+- [x] Write RED Worker tests for POST-only, JSON-only, exact request shape,
       valid opaque key, 16 KiB body limit, 50 unique ordered IDs, ID length,
       and exactly the three allowed actions.
 - [ ] Write RED trust tests proving no/invalid/revoked session, wrong Origin,
       missing/invalid CSRF, no-scope/cross-scope/guessed IDs, and browser
       credentials/scopes/Paste data/expiry fields reject before binding,
       credential, lifecycle, or Paste activity.
-- [ ] Implement only public-safe request/result types, strict validation, and
+- [x] Implement only public-safe request/result types, strict validation, and
       the Phase 6 trust gate for `POST /api/batch`; do not dispatch a lifecycle
       action, add browser authority, or alter Phase 6 protections.
-- [ ] Record observed GREEN/REFACTOR/REGRESSION evidence; run focused Worker,
+- [x] Record observed GREEN/REFACTOR/REGRESSION evidence; run focused Worker,
       type/format, and Phase 6–8 regressions; document limitations honestly;
       obtain current-HEAD CI and AI Review Bot Phase Review Gate before merge.
 
@@ -84,6 +84,21 @@ Documentation-only §10.5 artifact update: TDD is N/A for this commit.
 RED/GREEN/REFACTOR/REGRESSION evidence is mandatory and must be recorded with
 each Phase 9 implementation PR; do not claim an unrun or sandbox-blocked check
 passed.
+
+Phase 9.1 evidence (local branch `feat/feishu-batch-route`): RED contract
+tests were added in `downstream/addons/feishu/tests/batch.spec.ts` before the
+route/types; they cover no session, Origin/CSRF, no scope, and rejected
+browser-authority fields. GREEN: `node_modules/.bin/tsc --noEmit -p
+downstream/addons/feishu/tsconfig.json` passed; targeted Prettier check passed.
+Codex sandbox observed Worker-pool `listen EPERM` on `127.0.0.1`; orchestrator
+re-ran `node_modules/.bin/vitest run --config downstream/addons/feishu/vitest.config.js
+downstream/addons/feishu/tests/batch.spec.ts` outside that sandbox and recorded
+GREEN (3/3). Targeted ESLint also passed. REFACTOR kept Phase 6 helpers unchanged and made
+the dispatch seam structurally incapable of accessing bindings, credentials,
+lifecycle, or Paste services. REGRESSION/CI/review gate remain for the
+orchestrator. Phase 9.2 must add per-ID binding/scope resolution; Phase 9.1
+only proves an authenticated principal has at least one server-derived scope
+and never treats an ID as scope authority.
 
 ### Regression and review
 

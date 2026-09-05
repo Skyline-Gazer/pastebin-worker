@@ -1,8 +1,8 @@
 # Phase 4 — Feishu webhook foundation SPEC
 
-Status: SPEC READY FOR OWNER REVIEW
+Status: SPEC APPROVED on 2026-09-05; persisted before PHASE/TODO.
 
-Parent: [owner-approved Phase 4 PLAN](phase4-plan.md).
+Parent: [owner-approved Phase 4 PLAN](phase4-plan.md). The owner explicitly approved this SPEC in the current owner conversation (“Phase 4 SPEC” approval / Phase 4 SPEC APPROVED instruction). This artifact authorizes production of the PHASE decomposition and active TODO only. It does **not** authorize implementation, deployment, migration, merge, or reuse of the Phase 3 review override. Proposal wording below is retained as the approved contract, not an outstanding approval request.
 
 ## 3.1 Problem statement
 
@@ -210,6 +210,6 @@ No unresolved product decision remains for SPEC review. Implementation-phase dec
 
 If official schema verification, Worker runtime tests or Queue integration demonstrate that any field, security rule, size limit, durability claim or failure classification is invalid, STOP and revise this SPEC for owner approval. Do not silently alter Phase 3 or add D1 receipt state.
 
-Status: SPEC READY FOR OWNER REVIEW
+Status: SPEC APPROVED
 
-Implementation has NOT started.
+Implementation has NOT started. PHASE/TODO must be owner-approved before coding.

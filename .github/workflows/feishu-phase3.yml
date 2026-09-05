@@ -27,3 +27,6 @@ jobs:
       - run: pnpm exec tsc --noEmit -p downstream/addons/feishu/tsconfig.json
       - run: pnpm exec vitest run --config downstream/addons/feishu/vitest.config.js
       - run: pnpm exec vite build --config downstream/addons/feishu/vite.config.js
+      - run: pnpm exec vitest run --config downstream/addons/feishu/frontend/vitest.config.ts
+      - run: pnpm exec tsc --noEmit -p downstream/addons/feishu/frontend/tsconfig.json
+      - run: pnpm exec vite build --config downstream/addons/feishu/frontend/vite.config.ts

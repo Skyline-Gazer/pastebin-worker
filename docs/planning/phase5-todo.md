@@ -36,8 +36,8 @@ Implementation has NOT started. Before coding in a later turn, refresh `downstre
 
 ### 4. 5A review gate
 
-- [ ] Update Add-on-local documentation only if the new frontend build/test target needs durable operator/developer instructions; otherwise record `Docs: N/A — planning artifacts cover behavior and no durable runbook changes were introduced` in the commit.
-- [ ] Commit with the required structured Conventional Commit body and planning references.
+- [x] Update Add-on-local documentation with the frontend-local test/typecheck/build commands.
+- [x] Commit with the required structured Conventional Commit body and planning references.
 - [ ] Obtain current-HEAD CI and completed AI Review Bot review; fix/disposition findings under the gate rules and re-review every changed HEAD.
 - [ ] Merge only with authorized human process; then refresh `downstream/main` before beginning 5B.
 

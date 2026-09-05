@@ -39,6 +39,14 @@ pnpm exec vitest run --config downstream/addons/feishu/vitest.config.js
 pnpm exec vite build --config downstream/addons/feishu/vite.config.js
 ```
 
+For the frontend-local checks, invoke the installed binaries from the repository root:
+
+```sh
+node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts
+node_modules/.bin/tsc --noEmit -p downstream/addons/feishu/frontend/tsconfig.json
+node_modules/.bin/vite build --config downstream/addons/feishu/frontend/vite.config.ts
+```
+
 The downstream-only `Feishu internal services` workflow runs these checks independently
 of upstream PR Tests. The build produces an internal ES module, not a deployed management endpoint.
 The frontend build is a typecheck prerequisite: the reused root Cloudflare declarations import

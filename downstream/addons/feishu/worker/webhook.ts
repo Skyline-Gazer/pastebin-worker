@@ -264,6 +264,23 @@ export function createFeishuWebhookHandler(env: FeishuWebhookEnvironment) {
         const envelope = json(decoder.decode(raw))
         if (envelope && typeof envelope === "object" && (envelope as { type?: unknown }).type === "url_verification")
           return Response.json({ challenge: await verifyFeishuChallenge(envelope, env) })
+        // Encrypted URL verification has no clear discriminator or ordinary-event
+        // signature. A successfully decrypted, token-verified challenge is the only
+        // envelope accepted on this branch; all other envelopes continue to raw-body
+        // signature verification below.
+        if (
+          envelope &&
+          typeof envelope === "object" &&
+          typeof (envelope as { encrypt?: unknown }).encrypt === "string"
+        ) {
+          try {
+            const clear = await decrypt((envelope as { encrypt: string }).encrypt, env.FEISHU_ENCRYPT_KEY)
+            if (object(clear)?.type === "url_verification")
+              return Response.json({ challenge: await verifyFeishuChallenge(envelope, env) })
+          } catch {
+            // Ordinary events are deliberately authenticated from the exact raw body.
+          }
+        }
         const timestamp = request.headers.get("x-lark-request-timestamp")
         const nonce = request.headers.get("x-lark-request-nonce")
         const signature = request.headers.get("x-lark-signature")

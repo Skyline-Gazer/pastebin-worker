@@ -29,33 +29,33 @@ Goal: Feishu webhook foundation — verified encrypted `im.message.receive_v1` P
 
 ### 2. TDD RED — protocol and authorization
 
-- [ ] Write failing protocol tests: clear/encrypted URL verification challenge; exact raw-body signature vectors; tampering; invalid token; base64/AES/padding/UTF-8 failures; missing secrets; timing-safe comparison guards.
-- [ ] Write failing normalization/authorization tests: schema/event/app/tenant/actor/chat/message allowlists; bot/system sender; group chat; non-text types; malformed/empty/oversized text; deterministic `scopeId`/`recordKey`/`requestId` vectors excluding `event_id`.
-- [ ] Record genuine RED evidence per `docs/TESTING.md` section 1.1 (no fabricated RED).
+- [x] Write failing protocol tests: clear/encrypted URL verification challenge; exact raw-body signature vectors; tampering; invalid token; base64/AES/padding/UTF-8 failures; missing secrets; timing-safe comparison guards.
+- [x] Write failing normalization/authorization tests: schema/event/app/tenant/actor/chat/message allowlists; bot/system sender; group chat; non-text types; malformed/empty/oversized text; deterministic `scopeId`/`recordKey`/`requestId` vectors excluding `event_id`.
+- [x] Record genuine RED evidence per `docs/TESTING.md` section 1.1 (no fabricated RED).
 
 ### 3. TDD RED — fetch handler and Queue publish
 
-- [ ] Write failing fetch-handler tests: method/media/body limits; zero mutation before all gates; authenticated unsupported no-op 200; Queue `send` awaited before HTTP 200; Queue rejection/throw returns 503; sanitized error bodies/logs; challenge never enqueues.
-- [ ] Record RED evidence.
+- [x] Write failing fetch-handler tests: method/media/body limits; zero mutation before all gates; authenticated unsupported no-op 200; Queue `send` awaited before HTTP 200; Queue rejection/throw returns 503; sanitized error bodies/logs; challenge never enqueues.
+- [x] Record RED evidence.
 
 ### 4. TDD RED — consumer and Phase 3 integration
 
-- [ ] Write failing consumer tests: confirmed success; known-success replay; duplicate/concurrent stable deliveries; safe transient retry; reconciliation/permanent disposition matrix; invalid internal payload; per-message ack/retry isolation; DLQ configuration validation failure closed.
-- [ ] Write failing integration tests with Phase 3 store mocks/contracts: duplicate callback + duplicate Queue delivery yields one binding/Paste; content absent from D1; crash points before publication, before reservation, and after Phase 3 success remain recoverable without a second upstream POST.
-- [ ] Record RED evidence.
+- [x] Write failing consumer tests: confirmed success; known-success replay; duplicate/concurrent stable deliveries; safe transient retry; reconciliation/permanent disposition matrix; invalid internal payload; per-message ack/retry isolation; DLQ configuration validation failure closed.
+- [x] Write failing integration tests with Phase 3 store mocks/contracts: duplicate callback + duplicate Queue delivery yields one binding/Paste; content absent from D1; crash points before publication, before reservation, and after Phase 3 success remain recoverable without a second upstream POST.
+- [x] Record RED evidence.
 
 ### 5. Implement smallest GREEN for ingress
 
-- [ ] Implement verification/decryption/authorization/normalization modules and identity derivation exactly per SPEC §3.5-§3.6.
-- [ ] Implement `POST /api/feishu/events` with challenge handling and ordinary-event path; await Queue durable acceptance before 200.
-- [ ] Wire Worker secrets/bindings/config validation fail-closed (`FEISHU_ENCRYPT_KEY`, `FEISHU_VERIFICATION_TOKEN`, `FEISHU_APP_ID`, `FEISHU_ALLOWED_TENANT_KEYS`, `FEISHU_INGRESS_QUEUE`, mandatory DLQ).
-- [ ] Turn ingress RED tests GREEN without broadening allowlists or truncating oversized input.
+- [x] Implement verification/decryption/authorization/normalization modules and identity derivation exactly per SPEC §3.5-§3.6.
+- [x] Implement `POST /api/feishu/events` with challenge handling and ordinary-event path; await Queue durable acceptance before 200.
+- [x] Wire Worker secrets/bindings/config validation fail-closed (`FEISHU_ENCRYPT_KEY`, `FEISHU_VERIFICATION_TOKEN`, `FEISHU_APP_ID`, `FEISHU_ALLOWED_TENANT_KEYS`, `FEISHU_INGRESS_QUEUE`, mandatory DLQ).
+- [x] Turn ingress RED tests GREEN without broadening allowlists or truncating oversized input.
 
 ### 6. Implement smallest GREEN for consumer
 
-- [ ] Implement Queue consumer validating `FeishuMessageCreateV1` and calling only `createEntry({scopeId}, {recordKey, requestId, content})`.
-- [ ] Implement SPEC §3.6 classification: ack / retry / fail-closed disposition; never invent a new business identity; never blind-retry post-dispatch ambiguity as a new Paste mutation.
-- [ ] Turn consumer/integration RED tests GREEN.
+- [x] Implement Queue consumer validating `FeishuMessageCreateV1` and calling only `createEntry({scopeId}, {recordKey, requestId, content})`.
+- [x] Implement SPEC §3.6 classification: ack / retry / fail-closed disposition; never invent a new business identity; never blind-retry post-dispatch ambiguity as a new Paste mutation.
+- [x] Turn consumer/integration RED tests GREEN.
 
 ### 7. Hardening, docs, CI, regression
 
@@ -90,6 +90,22 @@ REFACTOR (2026-09-05):
 REGRESSION (2026-09-05):
 
 - `pnpm exec vitest run --config downstream/addons/feishu/vitest.config.js` passed `21` tests in `4` files; `pnpm exec tsc --noEmit -p downstream/addons/feishu/tsconfig.json` passed; Vite build passed. Final lint/format and complete test-matrix validation remain in the active TODO.
+
+RED (2026-09-05, adversarial matrix):
+
+- `node_modules/.bin/vitest run --config downstream/addons/feishu/vitest.config.js downstream/addons/feishu/tests/webhook.spec.ts` failed 3 of 10 expanded tests: encrypted verification was rejected before challenge handling, an unsupported-schema fixture exposed the malformed/unsupported boundary, and the initial tamper fixture did not preserve the original signature. These observations drove the narrowly scoped encrypted-challenge routing and corrected raw-body tamper vector.
+
+GREEN (2026-09-05, adversarial matrix):
+
+- The focused command passed all `10` webhook protocol, authorization, ingress, and Queue-consumer tests. It covers encrypted challenge fixture, signed encrypted event, raw-body tampering, secret/token/base64/AES failures, stable identity vector, allowlists, Queue failure, no-op/challenge behavior, poison payloads, disposition and DLQ fail-closed behavior.
+
+REFACTOR (2026-09-05, adversarial matrix):
+
+- `node_modules/.bin/prettier --write downstream/addons/feishu/tests/webhook.spec.ts downstream/addons/feishu/worker/webhook.ts` completed; the focused suite remained green.
+
+REGRESSION (2026-09-05, adversarial matrix):
+
+- `node_modules/.bin/eslint downstream/addons/feishu/worker/webhook.ts downstream/addons/feishu/tests/webhook.spec.ts`, `node_modules/.bin/tsc --noEmit -p downstream/addons/feishu/tsconfig.json`, and `node_modules/.bin/vitest run --config downstream/addons/feishu/vitest.config.js` passed (`26` tests in `4` files).
 
 ## Explicit non-authorization
 

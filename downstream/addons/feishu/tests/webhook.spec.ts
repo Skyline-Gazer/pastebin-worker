@@ -39,6 +39,42 @@ function event(overrides: Record<string, unknown> = {}) {
   }
 }
 
+async function encrypted(value: unknown, keyText = secrets.FEISHU_ENCRYPT_KEY) {
+  const iv = crypto.getRandomValues(new Uint8Array(16))
+  const key = await crypto.subtle.importKey(
+    "raw",
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(keyText)),
+    "AES-CBC",
+    false,
+    ["encrypt"],
+  )
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-CBC", iv },
+    key,
+    new TextEncoder().encode(JSON.stringify(value)),
+  )
+  return btoa(String.fromCharCode(...iv, ...new Uint8Array(cipher)))
+}
+
+async function signedRequest(value: unknown, env: FeishuWebhookEnvironment, mutate?: (raw: string) => string) {
+  const raw = mutate?.(JSON.stringify(value)) ?? JSON.stringify(value)
+  const timestamp = "1700000000"
+  const nonce = "nonce-vector"
+  const signed = new Uint8Array(new TextEncoder().encode(timestamp + nonce + env.FEISHU_ENCRYPT_KEY + raw))
+  const hash = await crypto.subtle.digest("SHA-256", signed)
+  const signature = Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, "0")).join("")
+  return new Request("https://worker/api/feishu/events", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-lark-request-timestamp": timestamp,
+      "x-lark-request-nonce": nonce,
+      "x-lark-signature": signature,
+    },
+    body: raw,
+  })
+}
+
 describe("Feishu webhook protocol and authorization", () => {
   it("returns an exact clear URL verification challenge without business work", async () => {
     await expect(
@@ -47,6 +83,30 @@ describe("Feishu webhook protocol and authorization", () => {
         secrets,
       ),
     ).resolves.toBe("challenge-1")
+  })
+
+  it("accepts encrypted verification and rejects invalid tokens, encoding, padding, UTF-8, and missing secrets", async () => {
+    await expect(
+      verifyFeishuChallenge(
+        { encrypt: await encrypted({ type: "url_verification", token: "verification-token", challenge: "encrypted" }) },
+        secrets,
+      ),
+    ).resolves.toBe("encrypted")
+    await expect(
+      verifyFeishuChallenge({ type: "url_verification", token: "wrong", challenge: "x" }, secrets),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" })
+    await expect(verifyFeishuChallenge({ encrypt: "not-base64!" }, secrets)).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    })
+    await expect(verifyFeishuChallenge({ encrypt: btoa("short") }, secrets)).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    })
+    await expect(
+      verifyFeishuChallenge(
+        { type: "url_verification", token: "verification-token", challenge: "x" },
+        { ...secrets, FEISHU_ENCRYPT_KEY: "" },
+      ),
+    ).rejects.toMatchObject({ code: "UNAVAILABLE" })
   })
 
   it("derives stable identities without event id and preserves decoded text exactly", async () => {
@@ -108,6 +168,51 @@ describe("Feishu webhook protocol and authorization", () => {
       ),
     ).resolves.toBeNull()
   })
+
+  it("enforces schema and every event allowlist, content limits, and fixed identity vectors", async () => {
+    await expect(normalizeAuthorizedEvent(event({ schema: "1.0" }), secrets)).rejects.toMatchObject({
+      code: "MALFORMED",
+    })
+    for (const variant of [
+      event({ header: { ...event().header, event_type: "other" } }),
+      event({ event: { sender: { sender_type: "app" }, message: { ...event().event.message } } }),
+      event({ event: { sender: { sender_type: "user" }, message: { ...event().event.message, chat_type: "group" } } }),
+      event({
+        event: { sender: { sender_type: "user" }, message: { ...event().event.message, message_type: "image" } },
+      }),
+    ])
+      await expect(normalizeAuthorizedEvent(variant, secrets)).resolves.toBeNull()
+    await expect(
+      normalizeAuthorizedEvent(
+        event({ event: { sender: { sender_type: "user" }, message: { ...event().event.message, content: "{" } } }),
+        secrets,
+      ),
+    ).rejects.toMatchObject({ code: "MALFORMED" })
+    await expect(
+      normalizeAuthorizedEvent(
+        event({
+          event: { sender: { sender_type: "user" }, message: { ...event().event.message, content: '{"text":""}' } },
+        }),
+        secrets,
+      ),
+    ).rejects.toMatchObject({ code: "UNSUPPORTED" })
+    await expect(
+      normalizeAuthorizedEvent(
+        event({
+          event: {
+            sender: { sender_type: "user" },
+            message: { ...event().event.message, content: JSON.stringify({ text: "x".repeat(100_001) }) },
+          },
+        }),
+        secrets,
+      ),
+    ).rejects.toMatchObject({ code: "UNSUPPORTED" })
+    await expect(deriveMessageIdentity("cli_phase4", "tenant-a", "oc_1", "om_1")).resolves.toEqual({
+      scopeId: "feishu:v1:scope:oahJvvZzh_xvRysoaDYOpGL1K8NVFlfYcu8xkUEbAAk",
+      recordKey: "feishu:v1:message:JFBNfXEbkZ1yKrtxVVC5IjiO8_rAoSyhK6SAGlHRGrg",
+      requestId: "feishu:v1:create:Yi9j1Hjze3d57zHvw8a5hd2j9HSHbseUXoSzF3qlcqs",
+    })
+  })
 })
 
 describe("Feishu webhook ingress", () => {
@@ -134,6 +239,61 @@ describe("Feishu webhook ingress", () => {
     expect(send).not.toHaveBeenCalled()
     released = true
     // Authentication-specific fixture coverage is added with the crypto implementation.
+  })
+
+  it("authenticates exact raw signed encrypted events, never enqueues failed gates, and fails closed on Queue errors", async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    const envelope = { encrypt: await encrypted(event()) }
+    const handler = createFeishuWebhookHandler(env)
+    expect((await handler.fetch(await signedRequest(envelope, env))).status).toBe(200)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0][0]).toMatchObject({ schema: "feishu.message-create.v1", content: " hello\nworld " })
+    const signed = await signedRequest(envelope, env)
+    const tampered = new Request(signed.url, {
+      method: "POST",
+      headers: signed.headers,
+      body: (await signed.text()).replace("encrypt", "Encrypt"),
+    })
+    expect((await handler.fetch(tampered)).status).toBe(401)
+    expect(send).toHaveBeenCalledTimes(1)
+    send.mockRejectedValueOnce(new Error("queue down"))
+    expect((await handler.fetch(await signedRequest(envelope, env))).status).toBe(503)
+    expect((await handler.fetch(new Request("https://worker/api/feishu/events", { method: "GET" }))).status).toBe(405)
+    expect(
+      (
+        await handler.fetch(
+          new Request("https://worker/api/feishu/events", {
+            method: "POST",
+            headers: { "content-type": "text/plain" },
+          }),
+        )
+      ).status,
+    ).toBe(415)
+  })
+
+  it("handles encrypted challenges without signature or Queue publication", async () => {
+    const send = vi.fn()
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    const result = await createFeishuWebhookHandler(env).fetch(
+      new Request("https://worker/api/feishu/events", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          encrypt: await encrypted({ type: "url_verification", token: "verification-token", challenge: "yes" }),
+        }),
+      }),
+    )
+    expect(await result.json()).toEqual({ challenge: "yes" })
+    expect(send).not.toHaveBeenCalled()
   })
 })
 
@@ -179,5 +339,43 @@ describe("Feishu Queue consumer", () => {
       { scopeId: item.scopeId },
       expect.objectContaining({ requestId: "ambiguous", content: "body" }),
     )
+  })
+
+  it("isolates invalid and permanent messages, and only a durable reporter permits acknowledgement", async () => {
+    const actions: string[] = []
+    const valid = {
+      schema: "feishu.message-create.v1" as const,
+      scopeId: "scope",
+      recordKey: "record",
+      requestId: "request",
+      sourceMessageId: "source",
+      content: "body",
+      correlationId: "corr",
+    }
+    const service = {
+      createEntry: vi
+        .fn()
+        .mockResolvedValue({ ok: false, code: "INVALID_INPUT", retryable: false, correlationId: "op" }),
+    }
+    await consumeFeishuMessages(
+      {
+        messages: [
+          { body: { nope: true }, ack: () => actions.push("bad-ack"), retry: () => actions.push("bad-retry") },
+          { body: valid, ack: () => actions.push("permanent-ack"), retry: () => actions.push("permanent-retry") },
+        ],
+      },
+      service,
+      () => Promise.resolve(true),
+      true,
+    )
+    expect(actions).toEqual(["bad-ack", "permanent-ack"])
+    expect(service.createEntry).toHaveBeenCalledTimes(1)
+    await consumeFeishuMessages(
+      { messages: [{ body: valid, ack: () => actions.push("dlq-ack"), retry: () => actions.push("dlq-retry") }] },
+      service,
+      undefined,
+      false,
+    )
+    expect(actions).toContain("dlq-retry")
   })
 })

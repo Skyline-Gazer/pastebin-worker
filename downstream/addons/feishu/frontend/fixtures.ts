@@ -12,7 +12,29 @@ export interface FixtureEntry {
   managedTask: { state: "unchecked" | "checked" }
 }
 
-export const fixtureEntries: readonly FixtureEntry[] = [
+function isValidIsoTimestamp(value: string | null): value is string {
+  return (
+    value !== null && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) && !Number.isNaN(Date.parse(value))
+  )
+}
+
+export function validateFixtureEntries(entries: readonly FixtureEntry[]) {
+  for (const entry of entries) {
+    if (entry.visibility === "active" && (entry.retentionMode !== "permanent" || entry.expiresAt !== null)) {
+      throw new Error("Active fixtures must be permanent with no expiresAt")
+    }
+
+    if (entry.visibility === "archived" && entry.retentionMode === "permanent" && entry.expiresAt !== null) {
+      throw new Error("Permanent archive fixtures must not have expiresAt")
+    }
+
+    if (entry.visibility === "archived" && entry.retentionMode === "timed" && !isValidIsoTimestamp(entry.expiresAt)) {
+      throw new Error("Timed archive fixtures require a valid ISO expiresAt")
+    }
+  }
+}
+
+const entries: readonly FixtureEntry[] = [
   {
     id: "active-fixture",
     pasteName: "Active fixture",
@@ -52,3 +74,7 @@ export const fixtureEntries: readonly FixtureEntry[] = [
     managedTask: { state: "checked" },
   },
 ]
+
+validateFixtureEntries(entries)
+
+export const fixtureEntries = entries

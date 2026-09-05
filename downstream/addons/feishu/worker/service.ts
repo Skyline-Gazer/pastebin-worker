@@ -1,4 +1,4 @@
-import type { EntryContext, EntryResult, PublicEntry } from "../shared/entries"
+import type { EntryContext, EntryResult, PublicEntry, ReconciliationResult } from "../shared/entries"
 import type { Credentials } from "./credentials"
 import { PasteError } from "./paste-client"
 import type { PasteClient } from "./paste-client"
@@ -485,6 +485,45 @@ export class EntryService {
       )
     } catch (error) {
       return this.error(error instanceof PasteError ? error.code : "STORAGE_OR_CREDENTIAL_UNAVAILABLE", undefined, true)
+    }
+  }
+
+  /** Reconcile D-011 absence only after the server has classified metadata
+   * lookup as definitely missing.  This is intentionally not a browser delete
+   * and never clears an outstanding lifecycle claim. */
+  async reconcileArchivedAbsence(context: EntryContext, input: { entryId: string }): Promise<ReconciliationResult> {
+    if (!identifier(context.scopeId) || !identifier(input.entryId)) return this.error("INVALID_INPUT")
+    try {
+      const binding = await this.store.get(context.scopeId, input.entryId)
+      if (!binding) return this.error("ENTRY_NOT_FOUND")
+      const archivedPermanent =
+        binding.visibility === "archived" && binding.retention_mode === "permanent" && binding.expires_at === null
+      const archivedTimed =
+        binding.visibility === "archived" &&
+        binding.retention_mode === "timed" &&
+        typeof binding.expires_at === "string" &&
+        Number.isFinite(Date.parse(binding.expires_at))
+      if (!archivedPermanent && !archivedTimed)
+        return this.error(binding.visibility === "archived" ? "RECONCILIATION_REQUIRED" : "INVALID_LIFECYCLE_STATE")
+      if (await this.store.pending(binding.id)) return this.error("RECONCILIATION_REQUIRED")
+      // Decrypting is a server-only credential integrity check.  It is never
+      // passed to metadata lookup or returned to the caller.
+      await this.credentials.open(binding.id, binding.credential)
+      try {
+        await this.client.permanent(binding.paste_name!, archivedTimed ? binding.expires_at : null)
+      } catch (error) {
+        if (!(error instanceof PasteError) || error.code !== "ENTRY_NOT_FOUND") throw error
+        await this.store.removeConfirmedAbsentArchived(binding.id, binding.version)
+        return { ok: true, absent: true }
+      }
+      if (await this.store.pending(binding.id)) return this.error("RECONCILIATION_REQUIRED")
+      const current = await this.store.get(context.scopeId, input.entryId)
+      if (!current || current.version !== binding.version) return this.error("RECONCILIATION_REQUIRED")
+      return { ok: true, entry: this.project(current) }
+    } catch (error) {
+      if (error instanceof PasteError && error.code === "UPSTREAM_UNCERTAIN")
+        return this.error("UPSTREAM_UNCERTAIN", undefined, true)
+      return this.error("RECONCILIATION_REQUIRED")
     }
   }
 }

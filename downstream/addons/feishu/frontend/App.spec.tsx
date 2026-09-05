@@ -86,6 +86,23 @@ describe("Feishu fixture rendering", () => {
     fetchMock.mockRestore()
   })
 
+  it("removes an expired Archive row only after confirmed authenticated reconciliation and retains it on failure", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(new Date("2031-01-01T00:00:00.000Z").getTime())
+    const user = userEvent.setup()
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    render(<App />)
+    await user.click(screen.getByRole("tab", { name: "归档" }))
+    await user.click(screen.getByRole("button", { name: "Reconcile archive" }))
+    expect(screen.queryByText("Timed archive fixture")).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "POST", credentials: "include" })
+    expect((fetchMock.mock.calls[1][1]?.headers as Record<string, string>)["X-CSRF-Token"]).toBe("csrf-test")
+    fetchMock.mockRestore()
+    now.mockRestore()
+  })
+
   it("keeps a permanent Archive row in place while restore is pending, then moves it only from the response", async () => {
     const user = userEvent.setup()
     let finish: ((response: Response) => void) | undefined

@@ -6,6 +6,7 @@ import { BrowserTrustStore } from "./browser-store"
 import { createBrowserAuthHandler, type BrowserAuthEnvironment } from "./browser-auth"
 import { createCompletionHandler } from "./completion"
 import { createRestoreHandler } from "./restore"
+import { createReconciliationHandler } from "./reconcile"
 import { derivePrincipalKey } from "./principal"
 import { consumeFeishuMessages, createFeishuWebhookHandler, type FeishuWebhookEnvironment } from "./webhook"
 
@@ -38,11 +39,13 @@ export async function createPhase4Worker(env: Phase4Environment) {
   const browser = createBrowserAuthHandler(env, trustStore)
   const completion = createCompletionHandler(env, trustStore, bindings, service)
   const restore = createRestoreHandler(env, trustStore, bindings, service)
+  const reconciliation = createReconciliationHandler(env, trustStore, bindings, service)
   return {
     fetch: async (request: Request) =>
       (await browser.fetch(request)) ??
       (await completion.fetch(request)) ??
       (await restore.fetch(request)) ??
+      (await reconciliation.fetch(request)) ??
       handler.fetch(request),
     queue: (batch: Parameters<typeof consumeFeishuMessages>[0]) =>
       consumeFeishuMessages(batch, service, undefined, env.FEISHU_INGRESS_DLQ_CONFIGURED === "true"),
@@ -64,6 +67,7 @@ export { BrowserTrustStore } from "./browser-store"
 export { authorizeBrowserMutation, createBrowserAuthHandler, requireBrowserSession } from "./browser-auth"
 export { createCompletionHandler } from "./completion"
 export { createRestoreHandler } from "./restore"
+export { createReconciliationHandler } from "./reconcile"
 export { derivePrincipalKey } from "./principal"
 export type { EntryContext, EntryResult, PublicEntry } from "../shared/entries"
 export {

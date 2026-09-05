@@ -24,16 +24,16 @@ describe("ArchiveStatus", () => {
     expect(screen.getByRole("status")).not.toHaveTextContent("剩余")
   })
 
-  it("refreshes only at a coarse cadence and cleans up its timer", () => {
+  it("refreshes only at a coarse cadence and cleans up its timer", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"))
     const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval")
     const { unmount } = render(<ArchiveStatus retentionMode="timed" expiresAt="2030-01-01T00:02:00.000Z" />)
 
     expect(screen.getByRole("status")).toHaveTextContent("剩余 2m")
-    act(() => vi.advanceTimersByTime(59_000))
+    await act(() => vi.advanceTimersByTime(59_000))
     expect(screen.getByRole("status")).toHaveTextContent("剩余 2m")
-    act(() => vi.advanceTimersByTime(1_000))
+    await act(() => vi.advanceTimersByTime(1_000))
     expect(screen.getByRole("status")).toHaveTextContent("剩余 1m")
     unmount()
     expect(clearIntervalSpy).toHaveBeenCalled()
@@ -50,13 +50,13 @@ describe("ArchiveStatus", () => {
     expect(screen.getByRole("status")).toHaveTextContent("限期归档：等待确认过期状态")
   })
 
-  it("does not fetch when its display timer advances", () => {
+  it("does not fetch when its display timer advances", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"))
     const fetchMock = vi.spyOn(globalThis, "fetch")
     render(<ArchiveStatus retentionMode="timed" expiresAt="2030-01-01T00:03:00.000Z" />)
 
-    act(() => vi.advanceTimersByTime(120_000))
+    await act(() => vi.advanceTimersByTime(120_000))
     expect(fetchMock).not.toHaveBeenCalled()
     fetchMock.mockRestore()
   })

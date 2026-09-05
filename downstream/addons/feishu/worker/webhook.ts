@@ -273,13 +273,14 @@ export function createFeishuWebhookHandler(env: FeishuWebhookEnvironment) {
           typeof envelope === "object" &&
           typeof (envelope as { encrypt?: unknown }).encrypt === "string"
         ) {
+          let clear: unknown
           try {
-            const clear = await decrypt((envelope as { encrypt: string }).encrypt, env.FEISHU_ENCRYPT_KEY)
-            if (object(clear)?.type === "url_verification")
-              return Response.json({ challenge: await verifyFeishuChallenge(envelope, env) })
+            clear = await decrypt((envelope as { encrypt: string }).encrypt, env.FEISHU_ENCRYPT_KEY)
           } catch {
             // Ordinary events are deliberately authenticated from the exact raw body.
           }
+          if (object(clear)?.type === "url_verification")
+            return Response.json({ challenge: await verifyFeishuChallenge(envelope, env) })
         }
         const timestamp = request.headers.get("x-lark-request-timestamp")
         const nonce = request.headers.get("x-lark-request-nonce")

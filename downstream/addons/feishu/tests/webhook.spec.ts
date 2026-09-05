@@ -295,6 +295,28 @@ describe("Feishu webhook ingress", () => {
     expect(await result.json()).toEqual({ challenge: "yes" })
     expect(send).not.toHaveBeenCalled()
   })
+
+  it("reports invalid configuration for encrypted challenges instead of falling through to signature authentication", async () => {
+    const send = vi.fn()
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      FEISHU_APP_ID: "",
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    const result = await createFeishuWebhookHandler(env).fetch(
+      new Request("https://worker/api/feishu/events", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          encrypt: await encrypted({ type: "url_verification", token: "verification-token", challenge: "yes" }),
+        }),
+      }),
+    )
+    expect(result.status).toBe(503)
+    expect(await result.json()).toMatchObject({ code: "UNAVAILABLE" })
+    expect(send).not.toHaveBeenCalled()
+  })
 })
 
 describe("Feishu Queue consumer", () => {

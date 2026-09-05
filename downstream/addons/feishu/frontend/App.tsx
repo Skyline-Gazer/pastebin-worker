@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react"
 import type { PublicEntry } from "../shared/entries"
 import { fixtureEntries, type FixtureEntry } from "./fixtures"
 import { ArchiveStatus } from "./ArchiveStatus"
+import { BatchModeToggle } from "./BatchModeToggle"
+import { BatchSelector } from "./BatchSelector"
 import { ManagedTaskCheckbox } from "./ManagedTaskCheckbox"
 import { RenderedMarkdown } from "./RenderedMarkdown"
 
@@ -115,6 +117,8 @@ function applyPublicResult(
 export function App() {
   const [theme, setTheme] = useState<Theme>("light")
   const [tab, setTab] = useState<Tab>("active")
+  const [batchMode, setBatchMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set())
   const [entries, setEntries] = useState<FixtureEntry[]>(() => [...fixtureEntries])
   const [action, setAction] = useState<CompletionAction | null>(null)
   const [completionEntryId, setCompletionEntryId] = useState<string | null>(null)
@@ -142,6 +146,25 @@ export function App() {
     setCompletionRequestId(null)
     setError(false)
     completionTriggerRef.current?.focus()
+  }
+
+  function toggleBatchMode() {
+    if (batchMode) {
+      setBatchMode(false)
+      setSelectedIds(new Set())
+      return
+    }
+    setSelectedIds(new Set())
+    setBatchMode(true)
+  }
+
+  function toggleBatchSelection(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   function selectCompletionAction(nextAction: CompletionAction) {
@@ -230,22 +253,32 @@ export function App() {
               归档
             </button>
           </div>
+          {tab === "active" && <BatchModeToggle batchMode={batchMode} onToggle={toggleBatchMode} />}
           {error && <p role="alert">Unable to update entry. Please try again.</p>}
           <section id="fixture-panel" aria-label={tab === "active" ? "进行中" : "归档"} role="tabpanel">
             {visibleEntries.map((entry) => (
               <article className="fixture-entry" key={entry.id}>
                 <h2>{entry.pasteName}</h2>
                 {tab === "active" ? (
-                  <ManagedTaskCheckbox
-                    checked={entry.managedTask.state === "checked"}
-                    disabled={pending}
-                    onComplete={(control) => {
-                      completionTriggerRef.current = control
-                      setCompletionEntryId(entry.id)
-                      setError(false)
-                      selectCompletionAction("archive_permanent")
-                    }}
-                  />
+                  <div className="active-entry-controls">
+                    {batchMode && (
+                      <BatchSelector
+                        checked={selectedIds.has(entry.id)}
+                        entryName={entry.pasteName}
+                        onToggle={() => toggleBatchSelection(entry.id)}
+                      />
+                    )}
+                    <ManagedTaskCheckbox
+                      checked={entry.managedTask.state === "checked"}
+                      disabled={pending}
+                      onComplete={(control) => {
+                        completionTriggerRef.current = control
+                        setCompletionEntryId(entry.id)
+                        setError(false)
+                        selectCompletionAction("archive_permanent")
+                      }}
+                    />
+                  </div>
                 ) : (
                   <>
                     <ArchiveStatus expiresAt={entry.expiresAt} retentionMode={entry.retentionMode} />

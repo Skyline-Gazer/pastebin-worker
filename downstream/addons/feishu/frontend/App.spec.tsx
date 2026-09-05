@@ -6,6 +6,52 @@ import { fixtureEntries, validateFixtureEntries } from "./fixtures"
 import { RenderedMarkdown } from "./RenderedMarkdown"
 
 describe("Feishu fixture rendering", () => {
+  it("enters and exits Batch Mode with a fresh transient selection", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(screen.queryByRole("checkbox", { name: "Select Active fixture for batch action" })).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    expect(screen.getByRole("button", { name: "Exit Batch Mode" })).toBeVisible()
+    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).not.toBeChecked()
+
+    await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
+    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeChecked()
+    await user.click(screen.getByRole("button", { name: "Exit Batch Mode" }))
+    expect(screen.queryByRole("checkbox", { name: "Select Active fixture for batch action" })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).not.toBeChecked()
+  })
+
+  it("keeps BatchSelector markup, accessibility, and handlers separate from managed completion", async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+
+    const selector = screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })
+    const managedTask = screen.getByRole("checkbox", { name: "Complete managed entry" })
+    expect(selector).toHaveClass("batch-selector")
+    expect(managedTask).toHaveClass("managed-task")
+    expect(selector.closest(".batch-selector")).not.toContainElement(managedTask)
+    expect(managedTask).not.toBeChecked()
+    await user.click(selector)
+    expect(selector).toBeChecked()
+    expect(managedTask).not.toBeChecked()
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(screen.queryByText("Permanent archive fixture")).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    selector.focus()
+    await user.keyboard(" ")
+    expect(selector).not.toBeChecked()
+    expect(managedTask).not.toBeChecked()
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+    fetchMock.mockRestore()
+  })
+
   it("renders only typed local Active fixtures without a browser request", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
     render(<App />)

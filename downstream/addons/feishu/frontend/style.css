@@ -118,6 +118,38 @@ button {
   font-weight: 700;
 }
 
+.batch-mode-toggle,
+.batch-selector {
+  border: 1px solid var(--default-400);
+  border-radius: 0.5rem;
+  background: var(--default-100);
+  color: var(--foreground);
+  cursor: pointer;
+  padding: 0.4rem 0.65rem;
+}
+
+.batch-mode-toggle {
+  margin-bottom: 1rem;
+}
+
+.active-entry-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.batch-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.batch-selector[aria-checked="true"] {
+  border-color: var(--default-700);
+}
+
 .fixture-entry + .fixture-entry {
   margin-top: 1rem;
   padding-top: 1rem;
@@ -150,7 +182,9 @@ button {
 }
 
 .managed-task:focus-visible,
-.completion-dialog button:focus-visible {
+.completion-dialog button:focus-visible,
+.batch-mode-toggle:focus-visible,
+.batch-selector:focus-visible {
   outline: 2px solid var(--default-700);
   outline-offset: 2px;
 }

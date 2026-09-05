@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { App } from "./App"
+import { RenderedMarkdown } from "./RenderedMarkdown"
 
 describe("Feishu fixture rendering", () => {
   it("renders only typed local Active fixtures without a browser request", () => {
@@ -40,6 +41,11 @@ describe("Feishu fixture rendering", () => {
     expect(document.querySelector("script")).not.toBeInTheDocument()
     expect(document.querySelector("img[onerror]")).not.toBeInTheDocument()
     expect(document.querySelector('a[href^="javascript:"]')).not.toBeInTheDocument()
+  })
+
+  it("removes non-checkbox inputs from untrusted Markdown", () => {
+    render(<RenderedMarkdown content={'<input type="text">'} />)
+    expect(document.querySelector('input[type="text"]')).not.toBeInTheDocument()
   })
 
   it("shows static Archive retention labels from fixture expiresAt only", async () => {

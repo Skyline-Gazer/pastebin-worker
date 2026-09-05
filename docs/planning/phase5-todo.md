@@ -135,6 +135,8 @@ Final scope review found only `downstream/addons/feishu/frontend/` plus this TOD
 
 PR #14 Bugbot Medium finding: frontend Vite and Vitest configuration roots now use `fileURLToPath(new URL(".", import.meta.url))`, so filesystem paths with percent-encoded characters resolve correctly. `emptyOutDir: true` remains safe because `outDir` is still the explicit sibling `../dist/frontend` path. Focused frontend test/typecheck/build and Worker config-suite regression commands were rerun for the amended HEAD.
 
+PR #15 Bugbot Low finding: the Markdown renderer now removes every sanitized `<input>` whose DOM type is not `checkbox`; retained checkbox inputs receive the existing accessible name and disabled state. A focused RED test proved raw `<input type="text">` survived the prior allowlist, then passed after the fix while existing GFM task-checkbox assertions remained green. Frontend Vitest (7 tests), frontend TypeScript, frontend Vite build, and Worker Vitest (27 tests) all passed.
+
 ### Planning validation
 
 - Read and reconciled the approved `docs/planning/phase5-plan.md`, `AGENTS.md`, `DECISIONS.md` (including D-030), `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10, `docs/IMPLEMENTATION_ORDER.md` Phase 5, `docs/FRONTEND.md`, `docs/DESIGN.md`, `docs/API_CONTRACT.md`, `docs/SECURITY.md`, Phase 3/4 SPECs/contracts, and existing Add-on configuration.

@@ -38,7 +38,12 @@ function renderSafeMarkdown(content: string) {
     stripIgnoreTagBody: ["script", "style"],
   })
   const documentFragment = new DOMParser().parseFromString(sanitized, "text/html")
-  documentFragment.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+  documentFragment.querySelectorAll("input").forEach((input) => {
+    if (input.type !== "checkbox") {
+      input.remove()
+      return
+    }
+
     input.setAttribute("aria-label", "Markdown task")
     input.setAttribute("disabled", "")
   })

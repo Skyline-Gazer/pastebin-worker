@@ -10,29 +10,29 @@ Implementation has NOT started. Before coding in a later turn, refresh `downstre
 
 ### 0. Preflight
 
-- [ ] Confirm this TODO, SPEC, and phases remain the current D-030 in-scope contract; STOP on requested behavior/API/security drift.
-- [ ] Refresh `downstream/main` with the approved non-destructive workflow; verify a clean checkout and that Phase 4 remains merged.
-- [ ] Create `feat/feishu-frontend-scaffold` (or equivalent) from refreshed `downstream/main`; do not work from this planning branch.
-- [ ] Inspect existing Add-on Vite/Vitest/TS configuration and locked installed dependencies; STOP if a root manifest/lockfile change or a new dependency is required.
+- [x] Confirm this TODO, SPEC, and phases remain the current D-030 in-scope contract; STOP on requested behavior/API/security drift.
+- [x] Refresh `downstream/main` with the approved non-destructive workflow; verify a clean checkout and that Phase 4 remains merged.
+- [x] Create `feat/feishu-frontend-scaffold` (or equivalent) from refreshed `downstream/main`; do not work from this planning branch.
+- [x] Inspect existing Add-on Vite/Vitest/TS configuration and locked installed dependencies; STOP if a root manifest/lockfile change or a new dependency is required.
 
 ### 1. TDD RED — local frontend shell
 
-- [ ] Add failing frontend tests for a minimal named page/shell, compact content region, accessible light/dark presentation control/state if one is implemented, and no browser transport on initial render.
-- [ ] Record the exact failing command/output and why it proves the expected shell is absent in **Evidence → RED** before implementation.
+- [x] Add failing frontend tests for a minimal named page/shell, compact content region, accessible light/dark presentation control/state if one is implemented, and no browser transport on initial render.
+- [x] Record the exact failing command/output and why it proves the expected shell is absent in **Evidence → RED** before implementation.
 
 ### 2. Smallest GREEN — scaffold and local tokens
 
-- [ ] Add only the Add-on-local React/Vite/TypeScript/Tailwind entry/configuration needed for an isolated browser build/test target.
-- [ ] Add a minimal content-first shell with local upstream-inspired background/foreground/default-control tokens and compact responsive layout; do not import/modify upstream frontend source.
-- [ ] Keep all browser-visible fixtures/props secret-free and do not add an entry route, Worker call, or network client.
-- [ ] Turn the shell tests GREEN without adding tabs, GFM, managed checkbox, Archive behavior, or lifecycle affordances.
+- [x] Add only the Add-on-local React/Vite/TypeScript/Tailwind entry/configuration needed for an isolated browser build/test target.
+- [x] Add a minimal content-first shell with local upstream-inspired background/foreground/default-control tokens and compact responsive layout; do not import/modify upstream frontend source.
+- [x] Keep all browser-visible fixtures/props secret-free and do not add an entry route, Worker call, or network client.
+- [x] Turn the shell tests GREEN without adding tabs, GFM, managed checkbox, Archive behavior, or lifecycle affordances.
 
 ### 3. Refactor and regression
 
-- [ ] Format/refactor only after GREEN while retaining the same observed behavior.
-- [ ] Run focused frontend tests, Add-on TypeScript, applicable lint/format, frontend production build, and existing Add-on Worker regression suite.
-- [ ] Inspect the final diff for upstream-owned paths, root dependency/config changes, migrations, patch-series changes, secrets, and accidental API exposure.
-- [ ] Record exact commands/results in **Evidence → GREEN/REFACTOR/REGRESSION**.
+- [x] Format/refactor only after GREEN while retaining the same observed behavior.
+- [x] Run focused frontend tests, Add-on TypeScript, applicable lint/format, frontend production build, and existing Add-on Worker regression suite.
+- [x] Inspect the final diff for upstream-owned paths, root dependency/config changes, migrations, patch-series changes, secrets, and accidental API exposure.
+- [x] Record exact commands/results in **Evidence → GREEN/REFACTOR/REGRESSION**.
 
 ### 4. 5A review gate
 
@@ -58,19 +58,28 @@ Implementation has NOT started. Before coding in a later turn, refresh `downstre
 
 ### RED
 
-Not yet run — implementation has not started.
+`PATH="/home/box/.local/bin:/home/box/.local/node-v22/bin:$PATH" node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts` exited 1 before shell implementation. Vitest reported `Failed to resolve import "./App" from "downstream/addons/feishu/frontend/App.spec.tsx". Does the file exist?`; `App.spec.tsx` contained the required named-shell, compact-region, no-transport, and theme-control assertions. This proves the required frontend shell was absent. (An initial harness invocation also exposed root-relative Vitest resolution; the local config was corrected before this recorded RED run.)
 
 ### GREEN
 
-Not yet run — implementation has not started.
+`PATH="/home/box/.local/bin:/home/box/.local/node-v22/bin:$PATH" node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts` exited 0: 1 file, 2 tests passed. The tests confirm the named compact shell, no initial `fetch`, and the accessible light/dark control updates only local theme state.
 
 ### REFACTOR
 
-Not yet run — implementation has not started.
+No behavior refactor was needed after GREEN. Test cleanup was added to the frontend-local setup so each shell test has an isolated DOM. `node_modules/.bin/prettier --check downstream/addons/feishu/frontend docs/planning/phase5-todo.md` exited 0.
 
 ### REGRESSION
 
-Not yet run — implementation has not started.
+All commands used `PATH="/home/box/.local/bin:/home/box/.local/node-v22/bin:$PATH"` and exited 0:
+
+- `node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts` — 1 file, 2 tests passed.
+- `node_modules/.bin/tsc --noEmit --project downstream/addons/feishu/frontend/tsconfig.json` — passed.
+- `node_modules/.bin/eslint downstream/addons/feishu/frontend` — passed.
+- `node_modules/.bin/prettier --check downstream/addons/feishu/frontend docs/planning/phase5-todo.md` — passed.
+- `node_modules/.bin/vite build --config downstream/addons/feishu/frontend/vite.config.ts` — passed; emitted the isolated Add-on frontend build.
+- `node_modules/.bin/vitest run --config downstream/addons/feishu/vitest.config.js` — 4 files, 27 Worker tests passed (run with approved loopback access required by the Cloudflare pool).
+
+Final scope review found only `downstream/addons/feishu/frontend/` plus this TODO evidence changed. No upstream-owned source, root manifest/lockfile, migration, patch-series, network client, API route, fixture data, or secret-bearing browser state was added.
 
 ### Planning validation
 

@@ -136,8 +136,56 @@ button {
   margin-bottom: 0.75rem;
   border: 1px solid var(--default-400);
   border-radius: 0.5rem;
+  background: var(--content);
+  color: var(--foreground);
+  cursor: pointer;
   padding: 0.4rem 0.65rem;
   font-weight: 600;
+}
+
+.managed-task:disabled,
+.completion-actions button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.managed-task:focus-visible,
+.completion-dialog button:focus-visible {
+  outline: 2px solid var(--default-700);
+  outline-offset: 2px;
+}
+
+.completion-dialog {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  width: min(calc(100% - 2rem), 24rem);
+  border: 1px solid var(--default-400);
+  border-radius: 0.75rem;
+  background: var(--content);
+  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 20%);
+  padding: 1rem;
+}
+
+.completion-dialog h2,
+.completion-dialog p {
+  margin-top: 0;
+}
+
+.completion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.completion-actions button {
+  border: 1px solid var(--default-400);
+  border-radius: 0.5rem;
+  background: var(--default-100);
+  color: var(--foreground);
+  cursor: pointer;
+  padding: 0.4rem 0.65rem;
 }
 
 .rendered-markdown input[type="checkbox"] {

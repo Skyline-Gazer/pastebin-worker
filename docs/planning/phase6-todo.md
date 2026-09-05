@@ -23,9 +23,9 @@ Implementation has NOT started. Active checklist for [Phase 6](phase6-spec.md).
 
 ## 3. Phase 6.2 — completion UI
 
-- [ ] Branch from merged 6.1; RED chooser/cancel/delete-confirm/pending/result/Archive exact-expiry/session-CSRF/a11y/no-secret tests.
-- [ ] Implement compact chooser/delete confirmation; other Markdown tasks remain content and lifecycle is not optimistic.
-- [ ] Render Archive from returned state only; do not add Phase 7 restore/timer or Phase 8 Batch Mode.
+- [x] Branch from merged 6.1; RED chooser/cancel/delete-confirm/pending/result/Archive exact-expiry/session-CSRF/a11y/no-secret tests.
+- [x] Implement compact chooser/delete confirmation; other Markdown tasks remain content and lifecycle is not optimistic.
+- [x] Render Archive from returned state only; do not add Phase 7 restore/timer or Phase 8 Batch Mode.
 - [ ] Record TDD/regression evidence and current-HEAD gate before merge.
 
 ## Evidence
@@ -57,6 +57,15 @@ downstream/addons/feishu/tsconfig.json --noEmit` passed. The fix replays a succe
 as `204`, preserves `PasteError` codes from the pre-reservation source read, maps D1/upstream
 outages to sanitized 5xx responses, and verifies archived timed metadata against the binding's
 authoritative `expiresAt` rather than requiring permanence.
+
+Phase 6.2: RED: the frontend suite reported four failures because the Phase 5 managed checkbox
+was still inert and had no chooser or completion flow. GREEN:
+`node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts`
+passed 14 tests, and `node_modules/.bin/tsc -p downstream/addons/feishu/frontend/tsconfig.json
+--noEmit` passed. REFACTOR keeps session/CSRF completion handling in `App.tsx`; it submits only
+the entry ID, action, and idempotency key, then applies only the Worker allowlisted result.
+REGRESSION: existing GFM sanitization, inert Markdown task, theme, fixture, and archive-display
+tests remain in that 14-test run. Current-HEAD gate and merge remain required.
 
 ## Internal consistency review
 

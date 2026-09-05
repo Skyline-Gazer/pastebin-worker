@@ -1,13 +1,26 @@
-export function ManagedTaskCheckbox({ checked }: { checked: boolean }) {
+export function ManagedTaskCheckbox({
+  checked,
+  disabled,
+  onComplete,
+}: {
+  checked: boolean
+  disabled?: boolean
+  onComplete: () => void
+}) {
   return (
-    <label className="managed-task">
-      <input
-        aria-label="Managed entry task (Phase 5 no-op)"
-        checked={checked}
-        onChange={() => undefined}
-        type="checkbox"
-      />
-      <span>Managed task — no-op until Phase 6</span>
-    </label>
+    <button
+      className="managed-task"
+      type="button"
+      role="checkbox"
+      aria-label="Complete managed entry"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onComplete}
+    >
+      <span aria-hidden="true" className="managed-task-indicator">
+        {checked ? "☑" : "☐"}
+      </span>
+      <span>Managed task</span>
+    </button>
   )
 }

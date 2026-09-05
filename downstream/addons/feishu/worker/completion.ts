@@ -12,6 +12,12 @@ const actions = new Set(["archive_permanent", "archive_expiring", "delete"])
 const maxBodyBytes = 1024
 const requestId = (value: string | null) => !!value && value.length <= 256 && /^[\x20-\x7e]+$/.test(value)
 const json = (code: string, status: number) => Response.json({ code }, { status })
+const completionStatus = (code: string) => {
+  if (code === "ENTRY_NOT_FOUND") return 404
+  if (code === "STORAGE_OR_CREDENTIAL_UNAVAILABLE" || code === "UPSTREAM_UNCERTAIN") return 503
+  if (code === "UPSTREAM_REJECTED" || code === "UPSTREAM_INVALID") return 502
+  return 409
+}
 
 /** The browser completion adapter deliberately has no scope/body/URL/password inputs. */
 export function createCompletionHandler(
@@ -72,13 +78,10 @@ export function createCompletionHandler(
         )
         if (result.ok && "deleted" in result) return new Response(null, { status: 204 })
         if (result.ok) return Response.json({ entry: result.entry })
-        return json(
-          result.code,
-          result.code === "ENTRY_NOT_FOUND" ? 404 : result.code === "RECONCILIATION_REQUIRED" ? 409 : 409,
-        )
+        return json(result.code, completionStatus(result.code))
       } catch (error) {
         if (error instanceof BrowserAuthError) return json(error.code, error.status)
-        return json("INVALID_INPUT", 400)
+        return json("STORAGE_OR_CREDENTIAL_UNAVAILABLE", 503)
       }
     },
   }

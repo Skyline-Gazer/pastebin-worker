@@ -132,7 +132,9 @@ export class EntryService {
         const raced = await this.store.operation(context.scopeId, input.requestId)
         return raced
           ? raced.fingerprint === fingerprint
-            ? this.duplicate(raced, fingerprint)
+            ? input.action === "delete" && raced.kind === "delete" && raced.status === "succeeded"
+              ? { ok: true, deleted: true }
+              : this.duplicate(raced, fingerprint)
             : this.error("REQUEST_CONFLICT", raced.id)
           : this.error("MUTATION_CONFLICT", op.id)
       }
@@ -182,8 +184,10 @@ export class EntryService {
         }
         return this.error("RECONCILIATION_REQUIRED", op.id)
       }
-    } catch {
-      return this.error("STORAGE_OR_CREDENTIAL_UNAVAILABLE", undefined, true)
+    } catch (error) {
+      return error instanceof PasteError
+        ? this.error(error.code, undefined, error.code === "UPSTREAM_UNCERTAIN")
+        : this.error("STORAGE_OR_CREDENTIAL_UNAVAILABLE", undefined, true)
     }
   }
 
@@ -305,7 +309,7 @@ export class EntryService {
       if (!binding) return this.error("ENTRY_NOT_FOUND")
       if (!binding.paste_name || binding.version === 0 || (await this.store.pending(binding.id)))
         return this.error("RECONCILIATION_REQUIRED")
-      await this.client.permanent(binding.paste_name)
+      await this.client.permanent(binding.paste_name, binding.retention_mode === "timed" ? binding.expires_at : null)
       const content = await this.client.read(binding.paste_name)
       if (await this.store.pending(binding.id)) return this.error("MUTATION_CONFLICT")
       const current = await this.store.get(context.scopeId, input.entryId)
@@ -326,7 +330,7 @@ export class EntryService {
       if (!binding.paste_name) return this.error("OPERATOR_RECONCILIATION_REQUIRED", pending.id)
       // A matching read alone cannot prove a timed-out PUT will not commit later.
       // Observe safely but keep the claim: no automatic unlock or mutation retry.
-      await this.client.permanent(binding.paste_name)
+      await this.client.permanent(binding.paste_name, binding.retention_mode === "timed" ? binding.expires_at : null)
       const content = await this.client.read(binding.paste_name)
       const matches = (await this.credentials.fingerprint(content)) === pending.content_fingerprint
       return this.error(

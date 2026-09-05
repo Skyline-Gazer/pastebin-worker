@@ -47,6 +47,17 @@ passed. REFACTOR extracted completion adapter helpers into `worker/completion.ts
 migration `0003_lifecycle_completion.sql`. Current-HEAD review gate (CI + Bugbot + CODEX_VERIFIED)
 and merge remain required before 6.2.
 
+Phase 6.1 Bugbot cycle 1: regression coverage was added before the fix for a delete reservation
+race replay, a pre-reservation upstream `ENTRY_NOT_FOUND`, adapter D1/upstream unavailability, and
+timed archived read/reconciliation metadata. The focused Worker Vitest command could not execute
+in this sandbox because its pool is denied the required loopback listener (`listen EPERM
+127.0.0.1`), so no local RED/GREEN result is claimed for this cycle; it remains CI-required.
+Prettier, ESLint on the touched TypeScript files, and `tsc -p
+downstream/addons/feishu/tsconfig.json --noEmit` passed. The fix replays a successful delete race
+as `204`, preserves `PasteError` codes from the pre-reservation source read, maps D1/upstream
+outages to sanitized 5xx responses, and verifies archived timed metadata against the binding's
+authoritative `expiresAt` rather than requiring permanence.
+
 ## Internal consistency review
 
 This TODO starts 6.0 after this PR merges, requires security negatives before lifecycle work, and preserves merged-phase dependencies. It matches owner decision, Phase 3/4 contracts, and D-030; no STOP exists.

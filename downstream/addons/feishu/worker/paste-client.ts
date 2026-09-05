@@ -95,12 +95,17 @@ export class PasteClient {
     await this.request(`${this.origin}/${name}:${password}`, { method: "DELETE" })
   }
 
-  async permanent(name: string): Promise<void> {
+  /** Verify metadata against the binding's authoritative retention state. */
+  async permanent(name: string, expectedExpiresAt: string | null = null): Promise<void> {
     this.publicUrl(name)
     const response = await this.request(`${this.origin}/m/${name}`, { method: "GET" })
     try {
       const metadata = await response.json<Record<string, unknown>>()
-      if (metadata.expireAt !== null) throw new Error()
+      if (
+        metadata.expireAt !== expectedExpiresAt ||
+        (expectedExpiresAt !== null && !Number.isFinite(Date.parse(expectedExpiresAt)))
+      )
+        throw new Error()
     } catch {
       throw new PasteError("UPSTREAM_INVALID")
     }

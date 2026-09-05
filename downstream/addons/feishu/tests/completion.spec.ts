@@ -73,4 +73,25 @@ describe("completion browser adapter", () => {
     expect((await handler.fetch(request({ action: "delete" }, { "x-csrf-token": "" })))?.status).toBe(403)
     expect(service.completeEntry).not.toHaveBeenCalled()
   })
+
+  it("returns sanitized unavailable responses for storage and service outages", async () => {
+    const trust = { getSession: vi.fn().mockResolvedValue(session), scopes: vi.fn().mockResolvedValue(["scope-a"]) }
+    const bindings = { getById: vi.fn().mockRejectedValue(new Error("D1 unavailable")) }
+    const service = { completeEntry: vi.fn() }
+    const handler = createCompletionHandler(env, trust as never, bindings as never, service as never)
+    const storageFailure = await handler.fetch(request({ action: "delete" }))
+    expect(storageFailure?.status).toBe(503)
+    expect(await storageFailure?.json()).toEqual({ code: "STORAGE_OR_CREDENTIAL_UNAVAILABLE" })
+
+    bindings.getById.mockResolvedValue({ id: "entry-a", scope_id: "scope-a" })
+    service.completeEntry.mockResolvedValue({
+      ok: false,
+      code: "UPSTREAM_UNCERTAIN",
+      correlationId: "correlation",
+      retryable: true,
+    })
+    const upstreamFailure = await handler.fetch(request({ action: "delete" }))
+    expect(upstreamFailure?.status).toBe(503)
+    expect(await upstreamFailure?.json()).toEqual({ code: "UPSTREAM_UNCERTAIN" })
+  })
 })

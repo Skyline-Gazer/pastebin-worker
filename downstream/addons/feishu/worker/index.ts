@@ -7,7 +7,7 @@ import { createBrowserAuthHandler, type BrowserAuthEnvironment } from "./browser
 import { createCompletionHandler } from "./completion"
 import { createRestoreHandler } from "./restore"
 import { createReconciliationHandler } from "./reconcile"
-import { BatchLifecycleCoordinator, createBatchHandler } from "./batch"
+import { BatchLifecycleCoordinator, createBatchDispatch, createBatchHandler } from "./batch"
 import { derivePrincipalKey } from "./principal"
 import { consumeFeishuMessages, createFeishuWebhookHandler, type FeishuWebhookEnvironment } from "./webhook"
 
@@ -42,12 +42,7 @@ export async function createPhase4Worker(env: Phase4Environment) {
   const restore = createRestoreHandler(env, trustStore, bindings, service)
   const reconciliation = createReconciliationHandler(env, trustStore, bindings, service)
   const batchLifecycle = new BatchLifecycleCoordinator(bindings, bindings, service)
-  const batch = createBatchHandler(env, trustStore, async (request, session, scopes, requestId) => {
-    await batchLifecycle.execute(request, session, scopes, requestId)
-    // Phase 9.3 owns the authoritative public result/replay serializer. Phase
-    // 9.2 deliberately exposes no item evidence or lifecycle internals here.
-    return Response.json({ code: "BATCH_RESULT_PENDING" }, { status: 202 })
-  })
+  const batch = createBatchHandler(env, trustStore, createBatchDispatch(batchLifecycle))
   return {
     fetch: async (request: Request) =>
       (await browser.fetch(request)) ??

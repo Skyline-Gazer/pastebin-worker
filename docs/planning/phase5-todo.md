@@ -2,7 +2,7 @@
 
 ## Authorization and active increment
 
-Owner Delegated Continuous Execution under D-030 authorizes the in-scope Phase 5 progression represented by the approved PLAN, [SPEC](phase5-spec.md), and [PHASE decomposition](phase5-phases.md). This TODO is the durable active implementation checklist for **5B — Fixture tabs, safe GFM, and managed-control baseline**. Phase 5A merged through PR #14; this increment begins from refreshed `downstream/main` at `09d7d4478a3f78e1391429389f99871bc02e5301` on `feat/feishu-frontend-rendering`. It does not authorize a live API, mutation/lifecycle behavior, Phase 6–10 work, deployment, migration, PR #5, or `upstream-sync`/`goshujin` work.
+Owner Delegated Continuous Execution under D-030 authorizes the in-scope Phase 5 progression represented by the approved PLAN, [SPEC](phase5-spec.md), and [PHASE decomposition](phase5-phases.md). This TODO is the durable active implementation checklist for **5C — Baseline hardening and Phase 5 closeout**. Phases 5A and 5B merged through PRs #14 and #15; this increment begins from refreshed `downstream/main` at `2de19278908c0a52a6ff35df4ad0ed2312ed21fc` on `fix/feishu-frontend-baseline`. It does not authorize a live API, mutation/lifecycle behavior, Phase 6–10 work, deployment, migration, PR #5, or `upstream-sync`/`goshujin` work.
 
 ## 5A ordered work
 
@@ -71,11 +71,12 @@ Owner Delegated Continuous Execution under D-030 authorizes the in-scope Phase 5
 - [ ] Obtain current-HEAD CI and completed AI Review Bot review; fix/disposition findings under the gate rules and re-review every changed HEAD.
 - [ ] Do not open or merge a PR in this increment; hand off the committed branch for authorized review.
 
-## 5C closeout preview (not active until 5B merges)
+## 5C closeout
 
-- [ ] Reconfirm merged 5B and refresh `downstream/main`; branch anew for 5C.
-- [ ] Close remaining secret-boundary, a11y, token/layout, full-suite, build, and scope-diff evidence without adding Phase 6 behavior.
-- [ ] Complete Phase 5 documentation/TDD evidence and independent review gate.
+- [x] Reconfirm merged 5B and refresh `downstream/main`; branch anew for 5C.
+- [x] Close remaining secret-boundary, malformed-fixture, no-network, a11y, token/layout, full-suite, build, and scope-diff evidence without adding Phase 6 behavior.
+- [x] Complete Phase 5 documentation/TDD evidence.
+- [ ] Obtain current-HEAD CI and completed AI Review Bot review; fix/disposition findings under the gate rules and re-review every changed HEAD. Do not open or merge a PR in this increment; hand off the committed branch for authorized review.
 
 ### CI workflow note
 
@@ -104,8 +105,8 @@ After GREEN, Prettier formatted the new fixture, rendering, managed-control, and
 All commands used `PATH="/home/box/.local/bin:/home/box/.local/node-v22/bin:$PATH"` and exited 0:
 
 - `node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts` — 1 file, 6 tests passed.
-- `node_modules/.bin/tsc --noEmit --project downstream/addons/feishu/frontend/tsconfig.json` — passed.
-- `node_modules/.bin/eslint downstream/addons/feishu/frontend` — passed.
+- `node_modules/.bin/tsc --noEmit --project downstream/addons/feishu/frontend/tsconfig.json` and `node_modules/.bin/tsc --noEmit --project downstream/addons/feishu/tsconfig.json` — passed.
+- `node_modules/.bin/eslint downstream/addons/feishu/frontend downstream/addons/feishu/worker downstream/addons/feishu/shared downstream/addons/feishu/tests` — passed.
 - `node_modules/.bin/prettier --check downstream/addons/feishu/frontend docs/planning/phase5-todo.md` — passed.
 - `node_modules/.bin/vite build --config downstream/addons/feishu/frontend/vite.config.ts` — passed.
 - `node_modules/.bin/vitest run --config downstream/addons/feishu/vitest.config.js` — 4 files, 27 Worker tests passed (with approved loopback access for the Cloudflare test pool).
@@ -136,6 +137,27 @@ Final scope review found only `downstream/addons/feishu/frontend/` plus this TOD
 PR #14 Bugbot Medium finding: frontend Vite and Vitest configuration roots now use `fileURLToPath(new URL(".", import.meta.url))`, so filesystem paths with percent-encoded characters resolve correctly. `emptyOutDir: true` remains safe because `outDir` is still the explicit sibling `../dist/frontend` path. Focused frontend test/typecheck/build and Worker config-suite regression commands were rerun for the amended HEAD.
 
 PR #15 Bugbot Low finding: the Markdown renderer now removes every sanitized `<input>` whose DOM type is not `checkbox`; retained checkbox inputs receive the existing accessible name and disabled state. A focused RED test proved raw `<input type="text">` survived the prior allowlist, then passed after the fix while existing GFM task-checkbox assertions remained green. Frontend Vitest (7 tests), frontend TypeScript, frontend Vite build, and Worker Vitest (27 tests) all passed.
+
+### 5C RED
+
+`PATH="/home/box/.local/bin:/home/box/.local/node-v22/bin:$PATH" node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts` exited 1 after the closeout tests were added and before fixture validation implementation. The new malformed timed-fixture assertion failed because `validateFixtureEntries` was not exported or implemented: `is not a function`. This proves the baseline did not yet reject an Archived/timed fixture with a missing authoritative `expiresAt`.
+
+### 5C GREEN / REFACTOR
+
+Added a fixture-local invariant validator that rejects invalid Active/permanent, Archived/permanent, and Archived/timed expiry combinations before presentation. The closeout tests also prove tab switching remains request-free; fixtures expose only approved display fields; the shell has named main/tablist controls and local theme state; and the content-first layout has no sidebar/avatar/profile chrome markers. The validator is presentation-only: it adds no API, persistence, lifecycle action, timer, or secret-bearing browser data.
+
+### 5C REGRESSION
+
+All commands used `PATH="/home/box/.local/bin:/home/box/.local/node-v22/bin:$PATH"` and exited 0:
+
+- `node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts` — 1 file, 10 tests passed.
+- `node_modules/.bin/tsc --noEmit --project downstream/addons/feishu/frontend/tsconfig.json` and `node_modules/.bin/tsc --noEmit --project downstream/addons/feishu/tsconfig.json` — passed.
+- `node_modules/.bin/eslint downstream/addons/feishu/frontend downstream/addons/feishu/worker downstream/addons/feishu/shared downstream/addons/feishu/tests` — passed.
+- `node_modules/.bin/prettier --check downstream/addons/feishu/frontend docs/planning/phase5-todo.md` — passed.
+- `node_modules/.bin/vite build --config downstream/addons/feishu/frontend/vite.config.ts` — passed.
+- `node_modules/.bin/vitest run --config downstream/addons/feishu/vitest.config.js` — 4 files, 27 Worker tests passed with the required approved loopback listener.
+
+Final scope review found only `downstream/addons/feishu/frontend/` and this planning TODO changed. No upstream-owned source, root manifest/lockfile, workflow, migration, patch-series, route/API, network client, lifecycle control, or secret-bearing fixture/browser data was added.
 
 ### Planning validation
 

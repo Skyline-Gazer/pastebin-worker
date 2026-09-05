@@ -15,17 +15,17 @@ Goal: Feishu webhook foundation — verified encrypted `im.message.receive_v1` P
 ### 0. Preflight (before implementation branch / first RED)
 
 - [x] Confirm owner approval of this PHASE decomposition and TODO (STOP if not explicit).
-- [ ] Refresh `downstream/main` (`fetch` + `--ff-only`); verify clean tree and tip descends from / equals `09148c96cad01af4a5938e5d74f3b3a33823e348` or a later merge that still contains Phase 3 services.
-- [ ] Confirm Node 22.x and pnpm 10.x available; confirm Add-on Vitest/tsc/eslint/vite tooling paths.
-- [ ] Confirm PR #5 remains OPEN / UNMERGED / REVIEW ONLY.
-- [ ] Create the implementation branch from refreshed `downstream/main` (not from an unmerged planning-only commit unless planning docs are first merged or intentionally carried).
-- [ ] Persist any final approved TODO wording on the durable branch before coding (§10.7).
+- [x] Refresh `downstream/main` (`fetch` + `--ff-only`); verify clean tree and tip descends from / equals `09148c96cad01af4a5938e5d74f3b3a33823e348` or a later merge that still contains Phase 3 services.
+- [x] Confirm Node 22.x and pnpm 10.x available; confirm Add-on Vitest/tsc/eslint/vite tooling paths.
+- [x] Confirm PR #5 remains OPEN / UNMERGED / REVIEW ONLY.
+- [x] Create the implementation branch from refreshed `downstream/main` (not from an unmerged planning-only commit unless planning docs are first merged or intentionally carried).
+- [x] Persist any final approved TODO wording on the durable branch before coding (§10.7).
 
 ### 1. Inspect contracts before tests
 
-- [ ] Re-read Phase 3 `createEntry` result codes used by SPEC §3.6 (`ok`, `STORAGE_OR_CREDENTIAL_UNAVAILABLE`, `RECONCILIATION_REQUIRED`, conflicts, etc.).
-- [ ] Confirm existing Add-on worker entrypoints, wrangler/env binding patterns, and downstream-only CI workflow shape.
-- [ ] Select the concrete operator-visible durable disposition integration within SPEC bounds (mandatory DLQ path if no governance-approved durable sink exists; never treat console logs alone as durable disposition). Document the choice in Add-on docs without changing SPEC behavior.
+- [x] Re-read Phase 3 `createEntry` result codes used by SPEC §3.6 (`ok`, `STORAGE_OR_CREDENTIAL_UNAVAILABLE`, `RECONCILIATION_REQUIRED`, conflicts, etc.).
+- [x] Confirm existing Add-on worker entrypoints, wrangler/env binding patterns, and downstream-only CI workflow shape.
+- [x] Select the concrete operator-visible durable disposition integration within SPEC bounds (mandatory DLQ path if no governance-approved durable sink exists; never treat console logs alone as durable disposition). Document the choice in Add-on docs without changing SPEC behavior.
 
 ### 2. TDD RED — protocol and authorization
 
@@ -74,7 +74,22 @@ Goal: Feishu webhook foundation — verified encrypted `im.message.receive_v1` P
 
 ## Evidence
 
-Planning-only so far. Implementation evidence (RED/GREEN/REFACTOR/REGRESSION command transcripts) MUST be appended here during execution after owner TODO approval. No RED/GREEN claims are made by this planning commit.
+RED (2026-09-05):
+
+- `pnpm exec vitest run --config downstream/addons/feishu/vitest.config.js downstream/addons/feishu/tests/webhook.spec.ts`
+- Observed the intended missing-foundation failure: `Cannot find module '../worker/webhook'` and zero executed tests. The test was added before `worker/webhook.ts` existed.
+
+GREEN (2026-09-05):
+
+- The same targeted command passed `5` webhook protocol/ingress/consumer tests after the smallest adapter implementation.
+
+REFACTOR (2026-09-05):
+
+- `pnpm exec prettier --write downstream/addons/feishu/worker/webhook.ts downstream/addons/feishu/worker/index.ts downstream/addons/feishu/tests/webhook.spec.ts` completed; the focused suite remained green.
+
+REGRESSION (2026-09-05):
+
+- `pnpm exec vitest run --config downstream/addons/feishu/vitest.config.js` passed `21` tests in `4` files; `pnpm exec tsc --noEmit -p downstream/addons/feishu/tsconfig.json` passed; Vite build passed. Final lint/format and complete test-matrix validation remain in the active TODO.
 
 ## Explicit non-authorization
 

@@ -69,8 +69,8 @@ downstream/addons/feishu/frontend/vitest.config.ts` passed (2 files, 28
 ### Phase 8.2 implementation evidence — 2026-09-05
 
 - **RED:** `node_modules/.bin/vitest run --config
-  downstream/addons/feishu/frontend/vitest.config.ts
-  downstream/addons/feishu/frontend/App.spec.tsx` failed 3 new tests before
+downstream/addons/feishu/frontend/vitest.config.ts
+downstream/addons/feishu/frontend/App.spec.tsx` failed 3 new tests before
   implementation: no `全选` control, no visible-set helper, and no Batch Mode
   managed-control lock.
 - **GREEN:** the same focused command passed: 26 tests.
@@ -79,11 +79,11 @@ downstream/addons/feishu/frontend/vitest.config.ts` passed (2 files, 28
   selectors/controls. The native disabled managed control refers to a concise
   Batch Mode explanation.
 - **REGRESSION:** `node_modules/.bin/vitest run --config
-  downstream/addons/feishu/frontend/vitest.config.ts` passed (2 files, 31
+downstream/addons/feishu/frontend/vitest.config.ts` passed (2 files, 31
   tests); `node_modules/.bin/tsc --noEmit -p
-  downstream/addons/feishu/tsconfig.json`, focused Prettier check, and
+downstream/addons/feishu/tsconfig.json`, focused Prettier check, and
   `node_modules/.bin/vite build downstream/addons/feishu/frontend --outDir
-  ../dist/frontend --emptyOutDir` passed. No Worker, shared contract, request,
+../dist/frontend --emptyOutDir` passed. No Worker, shared contract, request,
   Archive/countdown/Restore/reconciliation, browser trust, or expiry-authority
   behavior changed. Current-HEAD CI and the AI Review Bot Phase Review Gate
   remain required before merge.

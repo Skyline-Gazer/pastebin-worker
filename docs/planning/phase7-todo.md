@@ -25,24 +25,24 @@ do not start a dependent phase from an unmerged branch.
 
 ## 2. Phase 7.2 — permanent restore
 
-- [ ] After 7.1 merges, refresh `downstream/main`; verify the actual Phase 6
+- [x] After 7.1 merges, refresh `downstream/main`; verify the actual Phase 6
       `authorizeBrowserMutation`, durable claim, lifecycle, store, and Paste
       client extension points; start RED-first.
-- [ ] Add Worker RED tests that valid session, exact Origin, CSRF, and
+- [x] Add Worker RED tests that valid session, exact Origin, CSRF, and
       principal-to-stored-scope authorization occur before claim/store/Paste work;
       cover no/invalid/revoked session, bad Origin/CSRF, no scope, cross-scope,
       guessed ID, and browser-supplied scope/expiry/credential inputs.
-- [ ] Add RED lifecycle tests for archived-only permanent restore, exact
+- [x] Add RED lifecycle tests for archived-only permanent restore, exact
       checked-to-unchecked managed-task precision, upstream/source/persistence
       ordering, final `active/permanent/null`, idempotent replay/conflict/pending,
       uncertain outcome handling, and secret-free public/log output.
-- [ ] Add RED UI tests for Restore availability, pending duplicate prevention,
+- [x] Add RED UI tests for Restore availability, pending duplicate prevention,
       no optimistic Active move, authoritative success movement, and retained row
       on failure/uncertainty.
-- [ ] Implement the narrow server-only restore flow and allowlisted response;
+- [x] Implement the narrow server-only restore flow and allowlisted response;
       add metadata only when required by tests and preserve Phase 3/6 behavior,
       upstream body authority, and existing bindings.
-- [ ] Record GREEN/REFACTOR/REGRESSION evidence; run focused Worker/frontend
+- [x] Record GREEN/REFACTOR/REGRESSION evidence; run focused Worker/frontend
       checks plus Phase 3–6 regressions and current-HEAD review gate before merge.
 
 ## 3. Phase 7.3 — timed restore and expiry cancellation
@@ -110,6 +110,23 @@ Phase 7.1 implementation evidence (2026-09-05):
 - Limitation: the Phase 3–6 Worker suite command
   `node_modules/.bin/vitest run --config downstream/addons/feishu/vitest.config.js` could not start
   because the sandbox denied its required `127.0.0.1` listener (`EPERM`). It is not recorded as passing.
+
+Phase 7.2 implementation evidence (2026-09-05):
+
+- RED: Worker lifecycle/adapter test cases were added before the restore implementation, but the
+  Worker test command could not execute in this sandbox because its Cloudflare runtime requires a
+  `127.0.0.1` listener and receives `EPERM`. No unobserved failing result is claimed.
+- GREEN: `node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts`
+  passed: 2 files, 24 tests, including permanent-only Restore availability, pending disable, no
+  optimistic Archive move, authoritative success movement, and sanitized retained-row failure.
+- REFACTOR: the same frontend suite stayed green after formatting the restore adapter and UI code.
+- REGRESSION: `node_modules/.bin/tsc --noEmit -p downstream/addons/feishu/tsconfig.json`,
+  `node_modules/.bin/tsc --noEmit -p downstream/addons/feishu/frontend/tsconfig.json`, and
+  `node_modules/.bin/prettier --check` for the changed TypeScript files passed.
+- Limitation: `node_modules/.bin/vitest run --config downstream/addons/feishu/vitest.config.js
+downstream/addons/feishu/tests/service.spec.ts downstream/addons/feishu/tests/restore.spec.ts`
+  could not start because sandbox policy denied the required `127.0.0.1` listener (`EPERM`). The
+  new Worker service/auth tests remain required for CI; this limitation is not approval.
 
 ### Regression and review
 

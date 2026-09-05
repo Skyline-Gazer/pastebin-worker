@@ -89,6 +89,93 @@ export class EntryService {
     return `${source.slice(0, candidate)}[x]${source.slice(candidate + 3)}`
   }
 
+  /** Restore only Phase 5's one checked top-level managed task; do not guess
+   * among nested tasks, prose, or fenced Markdown. */
+  private restoreManagedTask(source: string): string | null {
+    const candidates: number[] = []
+    let offset = 0
+    let fence: "`" | "~" | null = null
+    for (const line of source.split(/(?<=\n)/)) {
+      const fenceMatch = /^ {0,3}([`~])\1\1/.exec(line)
+      if (fenceMatch) {
+        if (!fence) fence = fenceMatch[1] as "`" | "~"
+        else if (fence === fenceMatch[1]) fence = null
+      } else if (!fence) {
+        const task = /^(?:[-+*]|\d+[.)])\s+\[[xX]\]/.exec(line)
+        if (task) candidates.push(offset + task[0].indexOf("["))
+      }
+      offset += line.length
+    }
+    if (candidates.length !== 1) return null
+    const candidate = candidates[0]
+    return `${source.slice(0, candidate)}[ ]${source.slice(candidate + 3)}`
+  }
+
+  async restorePermanentEntry(
+    context: EntryContext,
+    input: { entryId: string; requestId: string },
+  ): Promise<EntryResult> {
+    if (!identifier(context.scopeId) || !identifier(input.entryId) || !identifier(input.requestId))
+      return this.error("INVALID_INPUT")
+    try {
+      const fingerprint = await this.credentials.fingerprint(
+        JSON.stringify(["restore_permanent", context.scopeId, input.entryId]),
+      )
+      const previous = await this.store.operation(context.scopeId, input.requestId)
+      if (previous) return this.duplicate(previous, fingerprint)
+      const binding = await this.store.get(context.scopeId, input.entryId)
+      if (!binding) return this.error("ENTRY_NOT_FOUND")
+      if (binding.visibility !== "archived" || binding.retention_mode !== "permanent" || binding.expires_at !== null)
+        return this.error("INVALID_LIFECYCLE_STATE")
+      const password = await this.credentials.open(binding.id, binding.credential)
+      const source = await this.client.read(binding.paste_name!)
+      const content = this.restoreManagedTask(source)
+      if (content === null) return this.error("MANAGED_TASK_AMBIGUOUS")
+      const op = await this.operation(
+        context.scopeId,
+        input.requestId,
+        input.entryId,
+        "restore_permanent",
+        fingerprint,
+        content,
+        binding.version,
+      )
+      try {
+        if (!(await this.store.reservePermanentRestore(op))) return this.error("VERSION_CONFLICT", op.id)
+      } catch {
+        const raced = await this.store.operation(context.scopeId, input.requestId)
+        return raced ? this.duplicate(raced, fingerprint) : this.error("MUTATION_CONFLICT", op.id)
+      }
+      if (!(await this.store.dispatch(op.id))) return this.error("MUTATION_CONFLICT", op.id)
+      try {
+        await this.client.update(binding.paste_name!, password, content, "never")
+        const active: Binding = { ...binding, visibility: "active", retention_mode: "permanent", expires_at: null }
+        const entry = this.project(active, op.expected_version + 1)
+        await this.store.finishPermanentRestore(op, JSON.stringify(entry))
+        return { ok: true, entry }
+      } catch (error) {
+        if (error instanceof PasteError && (error.code === "UPSTREAM_REJECTED" || error.code === "ENTRY_NOT_FOUND")) {
+          try {
+            await this.store.fail(op.id)
+          } catch {
+            /* retain fail-closed evidence */
+          }
+          return this.error(error.code, op.id)
+        }
+        try {
+          await this.store.uncertain(op.id)
+        } catch {
+          /* retain dispatched claim */
+        }
+        return this.error("RECONCILIATION_REQUIRED", op.id)
+      }
+    } catch (error) {
+      return error instanceof PasteError
+        ? this.error(error.code, undefined, error.code === "UPSTREAM_UNCERTAIN")
+        : this.error("STORAGE_OR_CREDENTIAL_UNAVAILABLE", undefined, true)
+    }
+  }
+
   async completeEntry(
     context: EntryContext,
     input: { entryId: string; requestId: string; action: "archive_permanent" | "archive_expiring" | "delete" },

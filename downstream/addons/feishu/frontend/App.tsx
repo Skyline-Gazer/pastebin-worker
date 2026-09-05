@@ -47,6 +47,24 @@ async function completeEntry(
   return entry as PublicEntry
 }
 
+async function restoreEntry(id: string, idempotencyKey: string): Promise<PublicEntry> {
+  const sessionResponse = await fetch("/api/auth/session", { credentials: "include" })
+  if (!sessionResponse.ok) throw new Error("session unavailable")
+  const session: unknown = await sessionResponse.json()
+  if (!session || typeof session !== "object" || typeof (session as { csrfToken?: unknown }).csrfToken !== "string")
+    throw new Error("session unavailable")
+  const response = await fetch(`/api/entries/${encodeURIComponent(id)}/restore`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Idempotency-Key": idempotencyKey, "X-CSRF-Token": (session as { csrfToken: string }).csrfToken },
+  })
+  if (!response.ok) throw new Error("restore unavailable")
+  const payload: unknown = await response.json()
+  const entry = payload && typeof payload === "object" ? (payload as { entry?: unknown }).entry : undefined
+  if (!entry || typeof entry !== "object") throw new Error("restore unavailable")
+  return entry as PublicEntry
+}
+
 function applyPublicResult(
   entries: readonly FixtureEntry[],
   result: PublicEntry | null,
@@ -62,7 +80,7 @@ function applyPublicResult(
           visibility: result.visibility,
           retentionMode: result.retentionMode,
           expiresAt: result.expiresAt,
-          managedTask: { state: result.visibility === "archived" ? "checked" : entry.managedTask.state },
+          managedTask: { state: result.visibility === "archived" ? "checked" : "unchecked" },
         }
       : entry,
   )
@@ -76,6 +94,7 @@ export function App() {
   const [completionEntryId, setCompletionEntryId] = useState<string | null>(null)
   const [completionRequestId, setCompletionRequestId] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [restorePendingId, setRestorePendingId] = useState<string | null>(null)
   const [error, setError] = useState(false)
   const completionTriggerRef = useRef<HTMLButtonElement | null>(null)
   const completionDialogRef = useRef<HTMLDivElement | null>(null)
@@ -122,6 +141,21 @@ export function App() {
     }
   }
 
+  async function submitRestore(entry: FixtureEntry) {
+    if (restorePendingId || entry.retentionMode !== "permanent") return
+    const requestId = requestIdentity()
+    setRestorePendingId(entry.id)
+    setError(false)
+    try {
+      const result = await restoreEntry(entry.id, requestId)
+      setEntries((current) => applyPublicResult(current, result, entry.id))
+    } catch {
+      setError(true)
+    } finally {
+      setRestorePendingId(null)
+    }
+  }
+
   return (
     <main aria-label="Feishu Pastebin" className="page-shell">
       <section className="content-panel" aria-labelledby="page-title">
@@ -155,7 +189,7 @@ export function App() {
               归档
             </button>
           </div>
-          {error && <p role="alert">Unable to complete entry. Please try again.</p>}
+          {error && <p role="alert">Unable to update entry. Please try again.</p>}
           <section id="fixture-panel" aria-label={tab === "active" ? "进行中" : "归档"} role="tabpanel">
             {visibleEntries.map((entry) => (
               <article className="fixture-entry" key={entry.id}>
@@ -172,7 +206,18 @@ export function App() {
                     }}
                   />
                 ) : (
-                  <ArchiveStatus expiresAt={entry.expiresAt} retentionMode={entry.retentionMode} />
+                  <>
+                    <ArchiveStatus expiresAt={entry.expiresAt} retentionMode={entry.retentionMode} />
+                    {entry.retentionMode === "permanent" && (
+                      <button
+                        type="button"
+                        disabled={restorePendingId !== null}
+                        onClick={() => void submitRestore(entry)}
+                      >
+                        {restorePendingId === entry.id ? "Restoring…" : "Restore"}
+                      </button>
+                    )}
+                  </>
                 )}
                 <RenderedMarkdown content={entry.content} />
               </article>

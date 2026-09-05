@@ -52,13 +52,71 @@ describe("Feishu fixture rendering", () => {
     expect(document.querySelector('input[type="text"]')).not.toBeInTheDocument()
   })
 
-  it("shows Archive retention labels without restore controls", async () => {
+  it("shows Restore only for permanent Archive entries", async () => {
     const user = userEvent.setup()
     render(<App />)
     await user.click(screen.getByRole("tab", { name: "归档" }))
     expect(screen.getByText("永久归档")).toBeVisible()
     expect(screen.getByRole("status", { name: /限期归档，剩余/ })).toBeVisible()
-    expect(screen.queryByRole("button", { name: /restore/i })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Restore" })).toBeVisible()
+    expect(screen.getAllByRole("button", { name: "Restore" })).toHaveLength(1)
+  })
+
+  it("keeps a permanent Archive row in place while restore is pending, then moves it only from the response", async () => {
+    const user = userEvent.setup()
+    let finish: ((response: Response) => void) | undefined
+    const restoreResponse = new Promise<Response>((resolve) => {
+      finish = resolve
+    })
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
+      .mockReturnValueOnce(restoreResponse)
+    render(<App />)
+    await user.click(screen.getByRole("tab", { name: "归档" }))
+    const restore = screen.getByRole("button", { name: "Restore" })
+    await user.click(restore)
+    expect(restore).toBeDisabled()
+    expect(screen.getByText("Permanent archive fixture")).toBeVisible()
+    finish!(
+      new Response(
+        JSON.stringify({
+          entry: {
+            id: "permanent-archive-fixture",
+            pasteName: "Restored fixture",
+            publicUrl: "https://example.invalid/p/restored",
+            visibility: "active",
+            retentionMode: "permanent",
+            expiresAt: null,
+            version: 3,
+          },
+        }),
+      ),
+    )
+    await waitFor(() => expect(screen.queryByText("Permanent archive fixture")).not.toBeInTheDocument())
+    await user.click(screen.getByRole("tab", { name: "进行中" }))
+    expect(screen.getByText("Restored fixture")).toBeVisible()
+    const restoreRequest = fetchMock.mock.calls[1][1]
+    expect(restoreRequest).toMatchObject({ method: "POST" })
+    expect(restoreRequest).not.toHaveProperty("body")
+    fetchMock.mockRestore()
+  })
+
+  it("retains a permanent Archive row and hides server details when restore fails", async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: "RECONCILIATION_REQUIRED", secret: "do-not-display" }), { status: 503 }),
+      )
+    render(<App />)
+    await user.click(screen.getByRole("tab", { name: "归档" }))
+    await user.click(screen.getByRole("button", { name: "Restore" }))
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to update entry. Please try again.")
+    expect(screen.getByText("Permanent archive fixture")).toBeVisible()
+    expect(screen.queryByText("do-not-display")).not.toBeInTheDocument()
+    fetchMock.mockRestore()
   })
 
   it("opens a chooser for the managed task and leaves it unchanged on cancel", async () => {
@@ -164,7 +222,7 @@ describe("Feishu fixture rendering", () => {
     await user.click(screen.getByRole("checkbox", { name: "Complete managed entry" }))
     await user.click(screen.getByRole("button", { name: "永久归档" }))
     await user.click(screen.getByRole("button", { name: "Confirm archive" }))
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to complete entry. Please try again.")
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to update entry. Please try again.")
     expect(screen.getByRole("dialog")).toHaveFocus()
     expect(screen.getByText("Active fixture")).toBeVisible()
     expect(screen.queryByText("do-not-display")).not.toBeInTheDocument()

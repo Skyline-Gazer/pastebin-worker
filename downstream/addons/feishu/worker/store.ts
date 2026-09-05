@@ -15,7 +15,7 @@ export interface Operation {
   scope_id: string
   request_id: string
   entry_id: string
-  kind: "create" | "update" | "complete_permanent" | "complete_expiring" | "delete"
+  kind: "create" | "update" | "complete_permanent" | "complete_expiring" | "restore_permanent" | "delete"
   fingerprint: string
   content_fingerprint: string
   expected_version: number
@@ -144,6 +144,33 @@ export class BindingStore {
     return result.meta.changes === 1
   }
 
+  async reservePermanentRestore(op: Operation): Promise<boolean> {
+    const now = new Date().toISOString()
+    const result = await this.db
+      .prepare(
+        `INSERT INTO feishu_operations
+        (id, scope_id, request_id, entry_id, kind, fingerprint, content_fingerprint, expected_version, status, created_at, updated_at)
+        SELECT ?, ?, ?, id, 'restore_permanent', ?, ?, ?, 'reserved', ?, ? FROM feishu_bindings
+        WHERE id = ? AND scope_id = ? AND version = ? AND paste_name IS NOT NULL
+        AND visibility = 'archived' AND retention_mode = 'permanent' AND expires_at IS NULL`,
+      )
+      .bind(
+        op.id,
+        op.scope_id,
+        op.request_id,
+        op.fingerprint,
+        op.content_fingerprint,
+        op.expected_version,
+        now,
+        now,
+        op.entry_id,
+        op.scope_id,
+        op.expected_version,
+      )
+      .run()
+    return result.meta.changes === 1
+  }
+
   async dispatch(id: string): Promise<boolean> {
     const result = await this.db
       .prepare(
@@ -217,6 +244,27 @@ export class BindingStore {
       this.db
         .prepare(
           `UPDATE feishu_operations SET status = 'succeeded', result = ?, updated_at = ? WHERE id = ? AND status = 'dispatched' AND EXISTS (SELECT 1 FROM feishu_bindings WHERE id = ? AND version = ?)`,
+        )
+        .bind(result, now, op.id, op.entry_id, op.expected_version + 1),
+    ])
+    if (results.some((row) => row.meta.changes !== 1)) throw new Error("STATE_CONFLICT")
+  }
+
+  async finishPermanentRestore(op: Operation, result: string): Promise<void> {
+    const now = new Date().toISOString()
+    const results = await this.db.batch([
+      this.db
+        .prepare(
+          `UPDATE feishu_bindings SET visibility = 'active', retention_mode = 'permanent', expires_at = NULL,
+          version = version + 1, updated_at = ? WHERE id = ? AND version = ?
+          AND EXISTS (SELECT 1 FROM feishu_operations WHERE id = ? AND status = 'dispatched')`,
+        )
+        .bind(now, op.entry_id, op.expected_version, op.id),
+      this.db
+        .prepare(
+          `UPDATE feishu_operations SET status = 'succeeded', result = ?, updated_at = ?
+          WHERE id = ? AND status = 'dispatched'
+          AND EXISTS (SELECT 1 FROM feishu_bindings WHERE id = ? AND version = ?)`,
         )
         .bind(result, now, op.id, op.entry_id, op.expected_version + 1),
     ])

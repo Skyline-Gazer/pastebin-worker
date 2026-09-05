@@ -52,14 +52,38 @@ describe("Feishu fixture rendering", () => {
     expect(document.querySelector('input[type="text"]')).not.toBeInTheDocument()
   })
 
-  it("shows Restore only for permanent Archive entries", async () => {
+  it("shows Restore for both permanent and timed Archive entries", async () => {
     const user = userEvent.setup()
     render(<App />)
     await user.click(screen.getByRole("tab", { name: "归档" }))
     expect(screen.getByText("永久归档")).toBeVisible()
     expect(screen.getByRole("status", { name: /限期归档，剩余/ })).toBeVisible()
-    expect(screen.getByRole("button", { name: "Restore" })).toBeVisible()
-    expect(screen.getAllByRole("button", { name: "Restore" })).toHaveLength(1)
+    expect(screen.getAllByRole("button", { name: "Restore" })[0]).toBeVisible()
+    expect(screen.getAllByRole("button", { name: "Restore" })).toHaveLength(2)
+  })
+
+  it("keeps a timed Archive row and its countdown while restore is pending or fails", async () => {
+    const user = userEvent.setup()
+    let finish: ((response: Response) => void) | undefined
+    const pendingRestore = new Promise<Response>((resolve) => {
+      finish = resolve
+    })
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
+      .mockReturnValueOnce(pendingRestore)
+    render(<App />)
+    await user.click(screen.getByRole("tab", { name: "归档" }))
+    const restore = screen.getAllByRole("button", { name: "Restore" })[1]
+    await user.click(restore)
+    expect(restore).toBeDisabled()
+    expect(screen.getByText("Timed archive fixture")).toBeVisible()
+    expect(screen.getByRole("status", { name: /限期归档，剩余/ })).toBeVisible()
+    finish!(new Response(JSON.stringify({ code: "RECONCILIATION_REQUIRED" }), { status: 503 }))
+    expect(await screen.findByRole("alert")).toBeVisible()
+    expect(screen.getByText("Timed archive fixture")).toBeVisible()
+    expect(screen.getByRole("status", { name: /限期归档，剩余/ })).toBeVisible()
+    fetchMock.mockRestore()
   })
 
   it("keeps a permanent Archive row in place while restore is pending, then moves it only from the response", async () => {
@@ -74,7 +98,7 @@ describe("Feishu fixture rendering", () => {
       .mockReturnValueOnce(restoreResponse)
     render(<App />)
     await user.click(screen.getByRole("tab", { name: "归档" }))
-    const restore = screen.getByRole("button", { name: "Restore" })
+    const restore = screen.getAllByRole("button", { name: "Restore" })[0]
     await user.click(restore)
     expect(restore).toBeDisabled()
     expect(screen.getByText("Permanent archive fixture")).toBeVisible()
@@ -112,7 +136,7 @@ describe("Feishu fixture rendering", () => {
       )
     render(<App />)
     await user.click(screen.getByRole("tab", { name: "归档" }))
-    await user.click(screen.getByRole("button", { name: "Restore" }))
+    await user.click(screen.getAllByRole("button", { name: "Restore" })[0])
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to update entry. Please try again.")
     expect(screen.getByText("Permanent archive fixture")).toBeVisible()
     expect(screen.queryByText("do-not-display")).not.toBeInTheDocument()

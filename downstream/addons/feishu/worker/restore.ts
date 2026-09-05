@@ -51,7 +51,7 @@ export function createRestoreHandler(
         const binding = await bindings.getById(id)
         if (!binding || !(await trust.scopes(session.principalKey)).includes(binding.scope_id))
           return response("FORBIDDEN", 403)
-        const result = await service.restorePermanentEntry(
+        const result = await service.restoreEntry(
           { scopeId: binding.scope_id },
           { entryId: binding.id, requestId: request.headers.get("idempotency-key")! },
         )

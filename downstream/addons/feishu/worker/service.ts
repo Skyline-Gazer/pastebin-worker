@@ -111,22 +111,30 @@ export class EntryService {
     return `${source.slice(0, candidate)}[ ]${source.slice(candidate + 3)}`
   }
 
-  async restorePermanentEntry(
-    context: EntryContext,
-    input: { entryId: string; requestId: string },
-  ): Promise<EntryResult> {
+  async restoreEntry(context: EntryContext, input: { entryId: string; requestId: string }): Promise<EntryResult> {
     if (!identifier(context.scopeId) || !identifier(input.entryId) || !identifier(input.requestId))
       return this.error("INVALID_INPUT")
     try {
-      const fingerprint = await this.credentials.fingerprint(
-        JSON.stringify(["restore_permanent", context.scopeId, input.entryId]),
-      )
       const previous = await this.store.operation(context.scopeId, input.requestId)
-      if (previous) return this.duplicate(previous, fingerprint)
+      if (previous) {
+        const kind = previous.kind === "restore_permanent" ? "restore_permanent" : "restore_timed"
+        return this.duplicate(
+          previous,
+          await this.credentials.fingerprint(JSON.stringify([kind, context.scopeId, input.entryId])),
+        )
+      }
       const binding = await this.store.get(context.scopeId, input.entryId)
       if (!binding) return this.error("ENTRY_NOT_FOUND")
-      if (binding.visibility !== "archived" || binding.retention_mode !== "permanent" || binding.expires_at !== null)
-        return this.error("INVALID_LIFECYCLE_STATE")
+      const permanent =
+        binding.visibility === "archived" && binding.retention_mode === "permanent" && binding.expires_at === null
+      const timed =
+        binding.visibility === "archived" &&
+        binding.retention_mode === "timed" &&
+        typeof binding.expires_at === "string" &&
+        Number.isFinite(Date.parse(binding.expires_at))
+      if (!permanent && !timed) return this.error("INVALID_LIFECYCLE_STATE")
+      const kind = timed ? "restore_timed" : "restore_permanent"
+      const fingerprint = await this.credentials.fingerprint(JSON.stringify([kind, context.scopeId, input.entryId]))
       const password = await this.credentials.open(binding.id, binding.credential)
       const source = await this.client.read(binding.paste_name!)
       const content = this.restoreManagedTask(source)
@@ -135,18 +143,41 @@ export class EntryService {
         context.scopeId,
         input.requestId,
         input.entryId,
-        "restore_permanent",
+        kind,
         fingerprint,
         content,
         binding.version,
       )
       try {
-        if (!(await this.store.reservePermanentRestore(op))) return this.error("VERSION_CONFLICT", op.id)
+        if (!(timed ? await this.store.reserveTimedRestore(op) : await this.store.reservePermanentRestore(op)))
+          return this.error("VERSION_CONFLICT", op.id)
       } catch {
         const raced = await this.store.operation(context.scopeId, input.requestId)
         return raced ? this.duplicate(raced, fingerprint) : this.error("MUTATION_CONFLICT", op.id)
       }
       if (!(await this.store.dispatch(op.id))) return this.error("MUTATION_CONFLICT", op.id)
+      if (timed) {
+        // This confirmed response is the expiry-cancellation boundary. The
+        // checked source and archived deadline remain durable until it succeeds.
+        try {
+          await this.client.update(binding.paste_name!, password, source, "never")
+        } catch (error) {
+          if (error instanceof PasteError && (error.code === "UPSTREAM_REJECTED" || error.code === "ENTRY_NOT_FOUND")) {
+            try {
+              await this.store.fail(op.id)
+            } catch {
+              /* retain fail-closed evidence */
+            }
+            return this.error(error.code, op.id)
+          }
+          try {
+            await this.store.uncertain(op.id)
+          } catch {
+            /* retain dispatched claim */
+          }
+          return this.error("RECONCILIATION_REQUIRED", op.id)
+        }
+      }
       try {
         await this.client.update(binding.paste_name!, password, content, "never")
         const active: Binding = { ...binding, visibility: "active", retention_mode: "permanent", expires_at: null }
@@ -169,6 +200,34 @@ export class EntryService {
         }
         return this.error("RECONCILIATION_REQUIRED", op.id)
       }
+    } catch (error) {
+      return error instanceof PasteError
+        ? this.error(error.code, undefined, error.code === "UPSTREAM_UNCERTAIN")
+        : this.error("STORAGE_OR_CREDENTIAL_UNAVAILABLE", undefined, true)
+    }
+  }
+
+  /**
+   * Phase 7.2 compatibility entrypoint. This intentionally remains
+   * permanent-only; the HTTP adapter uses restoreEntry for timed restores.
+   */
+  async restorePermanentEntry(
+    context: EntryContext,
+    input: { entryId: string; requestId: string },
+  ): Promise<EntryResult> {
+    if (!identifier(context.scopeId) || !identifier(input.entryId) || !identifier(input.requestId))
+      return this.error("INVALID_INPUT")
+    try {
+      const fingerprint = await this.credentials.fingerprint(
+        JSON.stringify(["restore_permanent", context.scopeId, input.entryId]),
+      )
+      const previous = await this.store.operation(context.scopeId, input.requestId)
+      if (previous) return this.duplicate(previous, fingerprint)
+      const binding = await this.store.get(context.scopeId, input.entryId)
+      if (!binding) return this.error("ENTRY_NOT_FOUND")
+      if (binding.visibility !== "archived" || binding.retention_mode !== "permanent" || binding.expires_at !== null)
+        return this.error("INVALID_LIFECYCLE_STATE")
+      return this.restoreEntry(context, input)
     } catch (error) {
       return error instanceof PasteError
         ? this.error(error.code, undefined, error.code === "UPSTREAM_UNCERTAIN")

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import migration from "../migrations/0001_bindings.sql?raw"
 import migration3 from "../migrations/0003_lifecycle_completion.sql?raw"
 import migration4 from "../migrations/0004_permanent_restore.sql?raw"
+import migration5 from "../migrations/0005_timed_restore.sql?raw"
 import { Credentials } from "../worker/credentials"
 import { PasteClient } from "../worker/paste-client"
 import { BindingStore, type Operation } from "../worker/store"
@@ -39,7 +40,9 @@ async function setup() {
 
 beforeEach(async () => {
   await db.exec("DROP TABLE IF EXISTS feishu_operations; DROP TABLE IF EXISTS feishu_bindings;")
-  for (const statement of `${migration}\n${migration3}\n${migration4}`.split(";").filter((part) => part.trim()))
+  for (const statement of `${migration}\n${migration3}\n${migration4}\n${migration5}`
+    .split(";")
+    .filter((part) => part.trim()))
     await db.prepare(statement).run()
 })
 
@@ -305,6 +308,98 @@ describe("persistent internal entry services", () => {
       code: "MUTATION_CONFLICT",
     })
     expect(JSON.stringify(await store.pending(permanent.entry.id))).not.toContain("never-visible")
+  })
+
+  it("cancels a timed expiry before restoring its managed source or final lifecycle state", async () => {
+    const { service, transport, store } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] timed" })
+    if (!created.ok) throw new Error("create failed")
+    const archived = await service.completeEntry(context, {
+      entryId: created.entry.id,
+      requestId: "archive-timed-for-restore",
+      action: "archive_expiring",
+    })
+    if (!archived.ok || !("entry" in archived)) throw new Error("archive failed")
+    transport.mockClear()
+
+    const restored = await service.restoreEntry(context, { entryId: created.entry.id, requestId: "restore-timed" })
+
+    expect(restored).toMatchObject({
+      ok: true,
+      entry: { visibility: "active", retentionMode: "permanent", expiresAt: null },
+    })
+    const writes = transport.mock.calls.filter(([, init]) => init?.method === "PUT")
+    expect(writes).toHaveLength(2)
+    expect((writes[0][1]!.body as FormData).get("c")).toBe("- [x] timed")
+    expect((writes[0][1]!.body as FormData).get("e")).toBe("never")
+    expect((writes[1][1]!.body as FormData).get("c")).toBe("- [ ] timed")
+    expect((await store.get(context.scopeId, created.entry.id))?.expires_at).toBeNull()
+  })
+
+  it("keeps a timed archive and its deadline when expiry cancellation is rejected or becomes uncertain", async () => {
+    const { service, transport, store } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] timed" })
+    if (!created.ok) throw new Error("create failed")
+    const archived = await service.completeEntry(context, {
+      entryId: created.entry.id,
+      requestId: "archive-timed-failure",
+      action: "archive_expiring",
+    })
+    if (!archived.ok || !("entry" in archived)) throw new Error("archive failed")
+    transport.mockImplementation((_, init) =>
+      init?.method === "PUT"
+        ? Promise.resolve(new Response(null, { status: 403 }))
+        : Promise.resolve(new Response("- [x] timed")),
+    )
+    expect(
+      await service.restoreEntry(context, { entryId: created.entry.id, requestId: "timed-rejected" }),
+    ).toMatchObject({
+      ok: false,
+      code: "UPSTREAM_REJECTED",
+    })
+    expect(await store.get(context.scopeId, created.entry.id)).toMatchObject({
+      visibility: "archived",
+      retention_mode: "timed",
+      expires_at: archived.entry.expiresAt,
+    })
+    transport.mockImplementation((_, init) =>
+      init?.method === "PUT"
+        ? Promise.reject(new Error("credential=never-visible"))
+        : Promise.resolve(new Response("- [x] timed")),
+    )
+    expect(
+      await service.restoreEntry(context, { entryId: created.entry.id, requestId: "timed-uncertain" }),
+    ).toMatchObject({
+      ok: false,
+      code: "RECONCILIATION_REQUIRED",
+    })
+    expect(await store.pending(created.entry.id)).toMatchObject({ status: "reconciliation_required" })
+  })
+
+  it("records reconciliation evidence when timed restore persistence fails after confirmed cancellation", async () => {
+    const { service, store } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] timed" })
+    if (!created.ok) throw new Error("create failed")
+    const archived = await service.completeEntry(context, {
+      entryId: created.entry.id,
+      requestId: "archive-timed-persistence",
+      action: "archive_expiring",
+    })
+    if (!archived.ok || !("entry" in archived)) throw new Error("archive failed")
+    vi.spyOn(store, "finishPermanentRestore").mockRejectedValueOnce(new Error("storage unavailable"))
+
+    expect(
+      await service.restoreEntry(context, { entryId: created.entry.id, requestId: "timed-persistence" }),
+    ).toMatchObject({
+      ok: false,
+      code: "RECONCILIATION_REQUIRED",
+    })
+    expect(await store.get(context.scopeId, created.entry.id)).toMatchObject({
+      visibility: "archived",
+      retention_mode: "timed",
+      expires_at: archived.entry.expiresAt,
+    })
+    expect(await store.pending(created.entry.id)).toMatchObject({ status: "reconciliation_required" })
   })
 
   it("reads timed archived bindings when upstream metadata matches their authoritative expiry", async () => {

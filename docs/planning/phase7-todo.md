@@ -47,22 +47,22 @@ do not start a dependent phase from an unmerged branch.
 
 ## 3. Phase 7.3 — timed restore and expiry cancellation
 
-- [ ] After 7.2 merges, refresh `downstream/main`; extend the approved restore
+- [x] After 7.2 merges, refresh `downstream/main`; extend the approved restore
       path rather than create a second trust boundary; start RED-first.
-- [ ] Add RED tests proving the server-held credential confirms `e=never` (or
+- [x] Add RED tests proving the server-held credential confirms `e=never` (or
       generic equivalent) before managed-source restore, final persistence, public
       `expiresAt: null`, or UI Active transition.
-- [ ] Add RED tests that cancellation failure preserves the checked source and
+- [x] Add RED tests that cancellation failure preserves the checked source and
       exact authoritative timed deadline; ambiguous dispatch and persistence
       failure retain durable reconciliation evidence and return sanitized
       `RECONCILIATION_REQUIRED` without blind retry.
-- [ ] Add RED UI tests that timed Restore remains archived/timed with its
+- [x] Add RED UI tests that timed Restore remains archived/timed with its
       countdown while pending/failing and clears/moves only from final returned
       success.
-- [ ] Implement ordered timed restoration, public result/error mapping, and
+- [x] Implement ordered timed restoration, public result/error mapping, and
       durable reconciliation behavior without changing generic upstream code or
       exposing credentials, raw upstream errors, Paste body, or deadline input.
-- [ ] Record GREEN/REFACTOR/REGRESSION evidence; run Worker/frontend and
+- [x] Record GREEN/REFACTOR/REGRESSION evidence; run Worker/frontend and
       Phase 3–6 regression checks and current-HEAD review gate before merge.
 
 ## 4. Phase 7.4 — confirmed-absence reconciliation
@@ -127,6 +127,35 @@ Phase 7.2 implementation evidence (2026-09-05):
 downstream/addons/feishu/tests/service.spec.ts downstream/addons/feishu/tests/restore.spec.ts`
   could not start because sandbox policy denied the required `127.0.0.1` listener (`EPERM`). The
   new Worker service/auth tests remain required for CI; this limitation is not approval.
+
+Phase 7.3 implementation evidence (2026-09-05):
+
+- RED: frontend Phase 7.3 assertions initially failed because timed archived rows
+  had no Restore control. Worker test cases and the additive migration import
+  were written before timed lifecycle implementation; the Worker runtime cannot
+  execute in this sandbox (see limitation below), so no unobserved failing result
+  is claimed.
+- GREEN: `node_modules/.bin/vitest run --config
+downstream/addons/feishu/frontend/vitest.config.ts` passed: 2 files, 25 tests,
+  including timed Restore pending/failure retention and countdown visibility.
+  Worker service tests cover ordered cancellation (`e=never`) before source
+  update/final state and rejected/ambiguous cancellation handling, and remain
+  required for CI execution.
+- REFACTOR: the focused frontend suite remained green after consolidating the
+  existing restore adapter on the generic server-side restore service and adding
+  the `restore_timed` durable operation kind. The Phase 7.2 compatibility method
+  `restorePermanentEntry` retains its permanent-only lifecycle gate; timed
+  restores use `restoreEntry`.
+- REGRESSION: `node_modules/.bin/tsc --noEmit -p
+downstream/addons/feishu/tsconfig.json`, `node_modules/.bin/tsc --noEmit -p
+downstream/addons/feishu/frontend/tsconfig.json`, and `node_modules/.bin/prettier
+--check` for changed TypeScript files passed. `git diff --check` passed.
+- Limitation: `node_modules/.bin/vitest run --config
+downstream/addons/feishu/vitest.config.js downstream/addons/feishu/tests/service.spec.ts
+downstream/addons/feishu/tests/restore.spec.ts` could not start because sandbox
+  policy denied the Cloudflare runtime's required `127.0.0.1` listener (`EPERM`).
+  It is not recorded as passing. Current-HEAD CI and the required AI Review Bot
+  Phase Review Gate remain required before merge.
 
 ### Regression and review
 

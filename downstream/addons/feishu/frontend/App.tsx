@@ -142,7 +142,7 @@ export function App() {
   }
 
   async function submitRestore(entry: FixtureEntry) {
-    if (restorePendingId || entry.retentionMode !== "permanent") return
+    if (restorePendingId) return
     const requestId = requestIdentity()
     setRestorePendingId(entry.id)
     setError(false)
@@ -208,7 +208,7 @@ export function App() {
                 ) : (
                   <>
                     <ArchiveStatus expiresAt={entry.expiresAt} retentionMode={entry.retentionMode} />
-                    {entry.retentionMode === "permanent" && (
+                    {(entry.retentionMode === "permanent" || entry.retentionMode === "timed") && (
                       <button
                         type="button"
                         disabled={restorePendingId !== null}

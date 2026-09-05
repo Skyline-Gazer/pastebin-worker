@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { PublicEntry } from "../shared/entries"
 import { fixtureEntries, type FixtureEntry } from "./fixtures"
 import { ArchiveStatus } from "./ArchiveStatus"
@@ -10,6 +10,31 @@ import { RenderedMarkdown } from "./RenderedMarkdown"
 type Theme = "light" | "dark"
 type Tab = "active" | "archived"
 type CompletionAction = "archive_permanent" | "archive_expiring" | "delete"
+
+export function deriveVisibleEligibleActiveIds(entries: readonly FixtureEntry[], tab: Tab): ReadonlySet<string> | null {
+  if (tab !== "active") return new Set()
+
+  const ids = new Set<string>()
+  for (const entry of entries) {
+    if (entry.visibility !== "active") continue
+    if (
+      typeof entry.id !== "string" ||
+      entry.id.length === 0 ||
+      ids.has(entry.id) ||
+      entry.retentionMode !== "permanent" ||
+      entry.expiresAt !== null
+    ) {
+      return null
+    }
+    ids.add(entry.id)
+  }
+  return ids
+}
+
+export function pruneSelectedIds(selectedIds: ReadonlySet<string>, eligibleIds: ReadonlySet<string> | null) {
+  if (!eligibleIds) return new Set<string>()
+  return new Set([...selectedIds].filter((id) => eligibleIds.has(id)))
+}
 
 const actionLabels: Record<CompletionAction, string> = {
   archive_permanent: "永久归档",
@@ -114,12 +139,12 @@ function applyPublicResult(
   )
 }
 
-export function App() {
+export function App({ initialEntries = fixtureEntries }: { initialEntries?: readonly FixtureEntry[] }) {
   const [theme, setTheme] = useState<Theme>("light")
   const [tab, setTab] = useState<Tab>("active")
   const [batchMode, setBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set())
-  const [entries, setEntries] = useState<FixtureEntry[]>(() => [...fixtureEntries])
+  const [entries, setEntries] = useState<FixtureEntry[]>(() => [...initialEntries])
   const [action, setAction] = useState<CompletionAction | null>(null)
   const [completionEntryId, setCompletionEntryId] = useState<string | null>(null)
   const [completionRequestId, setCompletionRequestId] = useState<string | null>(null)
@@ -131,6 +156,8 @@ export function App() {
   const completionDialogRef = useRef<HTMLDivElement | null>(null)
   const nextTheme = theme === "light" ? "dark" : "light"
   const visibleEntries = entries.filter((entry) => entry.visibility === tab)
+  const visibleEligibleIds = useMemo(() => deriveVisibleEligibleActiveIds(entries, tab), [entries, tab])
+  const prunedSelectedIds = pruneSelectedIds(selectedIds, visibleEligibleIds)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -139,6 +166,14 @@ export function App() {
   useEffect(() => {
     if (action && !pending) completionDialogRef.current?.focus()
   }, [action, pending])
+
+  useEffect(() => {
+    setSelectedIds((current) => {
+      const next = pruneSelectedIds(current, visibleEligibleIds)
+      if (next.size === current.size && [...next].every((id) => current.has(id))) return current
+      return next
+    })
+  }, [visibleEligibleIds])
 
   function closeCompletion() {
     setAction(null)
@@ -159,12 +194,17 @@ export function App() {
   }
 
   function toggleBatchSelection(id: string) {
+    if (!visibleEligibleIds?.has(id)) return
     setSelectedIds((current) => {
-      const next = new Set(current)
+      const next = pruneSelectedIds(current, visibleEligibleIds)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
+  }
+
+  function selectAllVisibleEligible() {
+    setSelectedIds(visibleEligibleIds ? new Set(visibleEligibleIds) : new Set())
   }
 
   function selectCompletionAction(nextAction: CompletionAction) {
@@ -254,6 +294,21 @@ export function App() {
             </button>
           </div>
           {tab === "active" && <BatchModeToggle batchMode={batchMode} onToggle={toggleBatchMode} />}
+          {batchMode && (
+            <p className="visually-hidden" id="batch-mode-lock-explanation">
+              Batch Mode is active. Use Batch Selectors or exit Batch Mode to complete an entry.
+            </p>
+          )}
+          {batchMode && tab === "active" && visibleEligibleIds && (
+            <div aria-label="Batch selection controls" className="batch-selection-controls">
+              <button type="button" onClick={selectAllVisibleEligible}>
+                全选
+              </button>
+              <button type="button" onClick={() => setSelectedIds(new Set())}>
+                清空
+              </button>
+            </div>
+          )}
           {error && <p role="alert">Unable to update entry. Please try again.</p>}
           <section id="fixture-panel" aria-label={tab === "active" ? "进行中" : "归档"} role="tabpanel">
             {visibleEntries.map((entry) => (
@@ -261,16 +316,17 @@ export function App() {
                 <h2>{entry.pasteName}</h2>
                 {tab === "active" ? (
                   <div className="active-entry-controls">
-                    {batchMode && (
+                    {batchMode && visibleEligibleIds?.has(entry.id) && (
                       <BatchSelector
-                        checked={selectedIds.has(entry.id)}
+                        checked={prunedSelectedIds.has(entry.id)}
                         entryName={entry.pasteName}
                         onToggle={() => toggleBatchSelection(entry.id)}
                       />
                     )}
                     <ManagedTaskCheckbox
                       checked={entry.managedTask.state === "checked"}
-                      disabled={pending}
+                      disabled={pending || batchMode}
+                      disabledDescriptionId={batchMode ? "batch-mode-lock-explanation" : undefined}
                       onComplete={(control) => {
                         completionTriggerRef.current = control
                         setCompletionEntryId(entry.id)

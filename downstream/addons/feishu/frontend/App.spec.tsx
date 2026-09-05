@@ -1,11 +1,74 @@
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
-import { App } from "./App"
+import { App, deriveVisibleEligibleActiveIds, pruneSelectedIds } from "./App"
 import { fixtureEntries, validateFixtureEntries } from "./fixtures"
 import { RenderedMarkdown } from "./RenderedMarkdown"
 
 describe("Feishu fixture rendering", () => {
+  it("selects, clears, and exits only the current visible eligible Active set", async () => {
+    const user = userEvent.setup()
+    const visibleActive = {
+      ...fixtureEntries[0],
+      id: "second-active-fixture",
+      pasteName: "Second active fixture",
+    }
+    render(<App initialEntries={[fixtureEntries[0], visibleActive, fixtureEntries[1]]} />)
+
+    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    await user.click(screen.getByRole("button", { name: "全选" }))
+    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "Select Second active fixture for batch action" })).toBeChecked()
+    expect(
+      screen.queryByRole("checkbox", { name: "Select Permanent archive fixture for batch action" }),
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "清空" }))
+    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).not.toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "Select Second active fixture for batch action" })).not.toBeChecked()
+
+    await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
+    await user.click(screen.getByRole("button", { name: "Exit Batch Mode" }))
+    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).not.toBeChecked()
+  })
+
+  it("prunes filtered, stale, unloaded, and archived IDs before future batch use", () => {
+    const eligible = deriveVisibleEligibleActiveIds([fixtureEntries[0], fixtureEntries[1]], "active")
+    expect(eligible).toEqual(new Set(["active-fixture"]))
+    expect(pruneSelectedIds(new Set(["active-fixture", "permanent-archive-fixture", "stale-id"]), eligible)).toEqual(
+      new Set(["active-fixture"]),
+    )
+    expect(
+      pruneSelectedIds(new Set(["active-fixture"]), deriveVisibleEligibleActiveIds(fixtureEntries, "archived")),
+    ).toEqual(new Set())
+    expect(pruneSelectedIds(new Set(["active-fixture"]), null)).toEqual(new Set())
+  })
+
+  it("locks managed completion accessibly during Batch Mode and restores the Phase 6 chooser after exit", async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+    render(<App />)
+    const managedTask = screen.getByRole("checkbox", { name: "Complete managed entry" })
+
+    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    expect(managedTask).toBeDisabled()
+    expect(managedTask).toHaveAccessibleDescription(
+      "Batch Mode is active. Use Batch Selectors or exit Batch Mode to complete an entry.",
+    )
+    await user.click(managedTask)
+    managedTask.focus()
+    await user.keyboard(" ")
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole("button", { name: "Exit Batch Mode" }))
+    expect(managedTask).not.toBeDisabled()
+    await user.click(managedTask)
+    expect(screen.getByRole("dialog", { name: "Choose completion action" })).toBeVisible()
+    fetchMock.mockRestore()
+  })
+
   it("enters and exits Batch Mode with a fresh transient selection", async () => {
     const user = userEvent.setup()
     render(<App />)

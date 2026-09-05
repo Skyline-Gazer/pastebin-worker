@@ -1,10 +1,12 @@
 export function ManagedTaskCheckbox({
   checked,
   disabled,
+  disabledDescriptionId,
   onComplete,
 }: {
   checked: boolean
   disabled?: boolean
+  disabledDescriptionId?: string
   onComplete: (control: HTMLButtonElement) => void
 }) {
   return (
@@ -14,6 +16,7 @@ export function ManagedTaskCheckbox({
       role="checkbox"
       aria-label="Complete managed entry"
       aria-checked={checked}
+      aria-describedby={disabledDescriptionId}
       disabled={disabled}
       onClick={(event) => onComplete(event.currentTarget)}
     >

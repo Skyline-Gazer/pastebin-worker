@@ -253,6 +253,21 @@ describe("Feishu webhook ingress", () => {
     expect((await handler.fetch(await signedRequest(envelope, env))).status).toBe(200)
     expect(send).toHaveBeenCalledTimes(1)
     expect(send.mock.calls[0][0]).toMatchObject({ schema: "feishu.message-create.v1", content: " hello\nworld " })
+    const queued: unknown = send.mock.calls[0][0]
+    if (!queued || typeof queued !== "object") throw new Error("expected Queue payload")
+    expect(Object.keys(queued).sort()).toEqual([
+      "content",
+      "correlationId",
+      "recordKey",
+      "requestId",
+      "schema",
+      "scopeId",
+      "sourceMessageId",
+    ])
+    expect(JSON.stringify(queued)).not.toContain(secrets.FEISHU_ENCRYPT_KEY)
+    expect(JSON.stringify(queued)).not.toContain(secrets.FEISHU_VERIFICATION_TOKEN)
+    expect(JSON.stringify(queued)).not.toContain("tenant-a")
+    expect(JSON.stringify(queued)).not.toContain("oc_1")
     const signed = await signedRequest(envelope, env)
     const tampered = new Request(signed.url, {
       method: "POST",
@@ -262,7 +277,13 @@ describe("Feishu webhook ingress", () => {
     expect((await handler.fetch(tampered)).status).toBe(401)
     expect(send).toHaveBeenCalledTimes(1)
     send.mockRejectedValueOnce(new Error("queue down"))
-    expect((await handler.fetch(await signedRequest(envelope, env))).status).toBe(503)
+    const unavailable = await handler.fetch(await signedRequest(envelope, env))
+    expect(unavailable.status).toBe(503)
+    const unavailableBody = await unavailable.text()
+    const unavailablePayload: unknown = JSON.parse(unavailableBody)
+    expect(unavailablePayload).toMatchObject({ code: "UNAVAILABLE" })
+    expect(unavailableBody).not.toContain(secrets.FEISHU_ENCRYPT_KEY)
+    expect(unavailableBody).not.toContain(secrets.FEISHU_VERIFICATION_TOKEN)
     expect((await handler.fetch(new Request("https://worker/api/feishu/events", { method: "GET" }))).status).toBe(405)
     expect(
       (

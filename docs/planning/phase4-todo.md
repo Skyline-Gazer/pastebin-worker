@@ -59,15 +59,15 @@ Goal: Feishu webhook foundation — verified encrypted `im.message.receive_v1` P
 
 ### 7. Hardening, docs, CI, regression
 
-- [ ] Enforce log/response/Queue/D1 redaction rules (SPEC §3.8 / criterion 8).
-- [ ] Update Add-on configuration, recovery, and DLQ operator-runbook docs; state that Phase 4 does not auto-consume DLQ.
-- [ ] Extend downstream-only CI for new tests/typecheck/build without changing upstream-owned workflows or package manifests on `downstream/main` outside Add-on paths.
-- [ ] Run formatting, lint, TypeScript, Vitest, and build checks; keep existing Phase 3 suites green.
-- [ ] Inspect final tracked diff: no Patch 010 / series / upstream-owned source changes; no new D1 migration; no Phase 3 public/internal contract change.
+- [x] Enforce log/response/Queue/D1 redaction rules (SPEC §3.8 / criterion 8).
+- [x] Update Add-on configuration, recovery, and DLQ operator-runbook docs; state that Phase 4 does not auto-consume DLQ.
+- [x] Extend downstream-only CI for new tests/typecheck/build without changing upstream-owned workflows or package manifests on `downstream/main` outside Add-on paths.
+- [x] Run formatting, lint, TypeScript, Vitest, and build checks; keep existing Phase 3 suites green.
+- [x] Inspect final tracked diff: no Patch 010 / series / upstream-owned source changes; no new D1 migration; no Phase 3 public/internal contract change.
 
 ### 8. Review gate (after TODO approval and implementation)
 
-- [ ] Commit with full review context; push; open implementation PR to `downstream/main` with planning refs.
+- [x] Commit with full review context; push; open implementation PR to `downstream/main` with planning refs.
 - [ ] Obtain authoritative GitHub CI on the current HEAD.
 - [ ] Obtain independent current-HEAD AI Review Bot review; fix or owner-disposition findings; re-review after every HEAD change.
 - [ ] Merge only after the Phase Review Gate passes; refresh `downstream/main`; do not start Phase 5 from an unmerged branch.
@@ -107,16 +107,12 @@ REGRESSION (2026-09-05, adversarial matrix):
 
 - `node_modules/.bin/eslint downstream/addons/feishu/worker/webhook.ts downstream/addons/feishu/tests/webhook.spec.ts`, `node_modules/.bin/tsc --noEmit -p downstream/addons/feishu/tsconfig.json`, and `node_modules/.bin/vitest run --config downstream/addons/feishu/vitest.config.js` passed (`26` tests in `4` files).
 
-## Explicit non-authorization
+## Authorization note
 
-Until the owner explicitly approves this TODO (and the companion PHASE decomposition):
+Owner approved this PHASE/TODO pair on 2026-09-05. Implementation on `codex/phase4-webhook-foundation` (PR #12) is authorized within approved SPEC/PHASE/TODO bounds. Merge remains gated on current-HEAD CI + Bugbot + `CODEX_VERIFIED`. Do not start Phase 5 from an unmerged branch. No production deploy/migration.
 
-- do not create the implementation branch for coding;
-- do not modify Add-on runtime source;
-- do not open an implementation PR;
-- do not deploy, migrate, or merge product changes;
-- do not treat Issue #10 handoff text or archived freeze docs as execution authority.
+Evidence (2026-09-05, merge-gate polish):
 
-Status: TODO READY FOR OWNER REVIEW — NOT EXECUTION AUTHORIZED.
-
-Implementation has NOT started.
+- Strengthened Queue/response redaction assertions in `downstream/addons/feishu/tests/webhook.spec.ts` (payload key allowlist; secrets/tenant/chat ids absent from Queue JSON and 503 bodies).
+- Local Node 22: prettier/eslint/tsc/vitest (`27` tests) + Add-on/frontend builds green for touched paths.
+- Diff vs `downstream/main` remains planning docs + Feishu Add-on only.

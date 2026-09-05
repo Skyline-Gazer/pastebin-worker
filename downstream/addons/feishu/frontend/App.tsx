@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import type { PublicEntry } from "../shared/entries"
 import { fixtureEntries, type FixtureEntry } from "./fixtures"
 import { ArchiveStatus } from "./ArchiveStatus"
+import { BatchActionBar, type BatchAction } from "./BatchActionBar"
+import { BatchActionDialog } from "./BatchActionDialog"
 import { BatchModeToggle } from "./BatchModeToggle"
 import { BatchSelector } from "./BatchSelector"
 import { ManagedTaskCheckbox } from "./ManagedTaskCheckbox"
@@ -10,6 +12,7 @@ import { RenderedMarkdown } from "./RenderedMarkdown"
 type Theme = "light" | "dark"
 type Tab = "active" | "archived"
 type CompletionAction = "archive_permanent" | "archive_expiring" | "delete"
+export type BatchActionIntent = { action: BatchAction; entryIds: readonly string[] }
 
 export function deriveVisibleEligibleActiveIds(entries: readonly FixtureEntry[], tab: Tab): ReadonlySet<string> | null {
   if (tab !== "active") return new Set()
@@ -139,11 +142,19 @@ function applyPublicResult(
   )
 }
 
-export function App({ initialEntries = fixtureEntries }: { initialEntries?: readonly FixtureEntry[] }) {
+export function App({
+  initialEntries = fixtureEntries,
+  onDeferredBatchActionIntent,
+}: {
+  initialEntries?: readonly FixtureEntry[]
+  onDeferredBatchActionIntent?: (intent: BatchActionIntent) => void
+}) {
   const [theme, setTheme] = useState<Theme>("light")
   const [tab, setTab] = useState<Tab>("active")
   const [batchMode, setBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [batchAction, setBatchAction] = useState<BatchAction | null>(null)
+  const [deferredBatchIntent, setDeferredBatchIntent] = useState<BatchActionIntent | null>(null)
   const [entries, setEntries] = useState<FixtureEntry[]>(() => [...initialEntries])
   const [action, setAction] = useState<CompletionAction | null>(null)
   const [completionEntryId, setCompletionEntryId] = useState<string | null>(null)
@@ -153,6 +164,7 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
   const [reconciliationPendingId, setReconciliationPendingId] = useState<string | null>(null)
   const [error, setError] = useState(false)
   const completionTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const batchActionTriggerRef = useRef<HTMLButtonElement | null>(null)
   const completionDialogRef = useRef<HTMLDivElement | null>(null)
   const nextTheme = theme === "light" ? "dark" : "light"
   const visibleEntries = entries.filter((entry) => entry.visibility === tab)
@@ -175,6 +187,10 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
     })
   }, [visibleEligibleIds])
 
+  useEffect(() => {
+    if (batchAction && prunedSelectedIds.size === 0) setBatchAction(null)
+  }, [batchAction, prunedSelectedIds.size])
+
   function closeCompletion() {
     setAction(null)
     setCompletionEntryId(null)
@@ -187,6 +203,7 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
     if (batchMode) {
       setBatchMode(false)
       setSelectedIds(new Set())
+      setBatchAction(null)
       return
     }
     setSelectedIds(new Set())
@@ -205,6 +222,30 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
 
   function selectAllVisibleEligible() {
     setSelectedIds(visibleEligibleIds ? new Set(visibleEligibleIds) : new Set())
+  }
+
+  function handoffDeferredBatchIntent(nextAction: BatchAction) {
+    const intent: BatchActionIntent = { action: nextAction, entryIds: [...prunedSelectedIds] }
+    if (intent.entryIds.length === 0) return
+    setDeferredBatchIntent(intent)
+    onDeferredBatchActionIntent?.(intent)
+    setBatchAction(null)
+    batchActionTriggerRef.current?.focus()
+  }
+
+  function beginBatchAction(nextAction: BatchAction, trigger: HTMLButtonElement) {
+    if (prunedSelectedIds.size === 0) return
+    batchActionTriggerRef.current = trigger
+    if (nextAction === "archive_permanent") {
+      handoffDeferredBatchIntent(nextAction)
+      return
+    }
+    setBatchAction(nextAction)
+  }
+
+  function closeBatchAction() {
+    setBatchAction(null)
+    batchActionTriggerRef.current?.focus()
   }
 
   function selectCompletionAction(nextAction: CompletionAction) {
@@ -309,6 +350,13 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
               </button>
             </div>
           )}
+          {batchMode && tab === "active" && (
+            <BatchActionBar
+              count={prunedSelectedIds.size}
+              onAction={(nextAction) => beginBatchAction(nextAction, document.activeElement as HTMLButtonElement)}
+            />
+          )}
+          {deferredBatchIntent && <p role="status">Batch action deferred to Phase 9. No changes were made.</p>}
           {error && <p role="alert">Unable to update entry. Please try again.</p>}
           <section id="fixture-panel" aria-label={tab === "active" ? "进行中" : "归档"} role="tabpanel">
             {visibleEntries.map((entry) => (
@@ -409,6 +457,14 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
             </button>
           </div>
         </div>
+      )}
+      {batchAction && (
+        <BatchActionDialog
+          action={batchAction}
+          count={prunedSelectedIds.size}
+          onCancel={closeBatchAction}
+          onConfirm={() => handoffDeferredBatchIntent(batchAction)}
+        />
       )}
     </main>
   )

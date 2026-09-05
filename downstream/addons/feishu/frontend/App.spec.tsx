@@ -6,6 +6,82 @@ import { fixtureEntries, validateFixtureEntries } from "./fixtures"
 import { RenderedMarkdown } from "./RenderedMarkdown"
 
 describe("Feishu fixture rendering", () => {
+  it("shows a compact three-action bar with the exact selected count only for a nonempty Batch selection", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    expect(screen.queryByRole("toolbar", { name: "Batch actions" })).not.toBeInTheDocument()
+    await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
+
+    const actionBar = screen.getByRole("toolbar", { name: "Batch actions" })
+    expect(actionBar).toHaveTextContent("已选择 1 项")
+    expect(within(actionBar).getAllByRole("button")).toHaveLength(3)
+    expect(within(actionBar).getByRole("button", { name: "永久归档" })).toBeEnabled()
+    expect(within(actionBar).getByRole("button", { name: "限期归档" })).toBeEnabled()
+    expect(within(actionBar).getByRole("button", { name: "删除" })).toBeEnabled()
+
+    await user.click(screen.getByRole("button", { name: "清空" }))
+    expect(screen.queryByRole("toolbar", { name: "Batch actions" })).not.toBeInTheDocument()
+  })
+
+  it("confirms a batch action once, traps and restores focus, and hands off only a safe deferred intent", async () => {
+    const user = userEvent.setup()
+    const handoff = vi.fn()
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+    render(<App onDeferredBatchActionIntent={handoff} />)
+
+    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
+    const expiring = screen.getByRole("button", { name: "限期归档" })
+    expiring.focus()
+    await user.click(expiring)
+
+    const dialog = screen.getByRole("dialog", { name: "Confirm expiring archive" })
+    expect(dialog).toHaveTextContent("1 项")
+    expect(dialog).toContainElement(document.activeElement as HTMLElement | null)
+    await user.keyboard("{Tab}")
+    expect(dialog).toContainElement(document.activeElement as HTMLElement | null)
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+    expect(expiring).toHaveFocus()
+    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeChecked()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    await user.click(expiring)
+    await user.click(screen.getByRole("button", { name: "Confirm deferred action" }))
+    expect(handoff).toHaveBeenCalledWith({ action: "archive_expiring", entryIds: ["active-fixture"] })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(screen.getByText("Active fixture")).toBeVisible()
+    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeChecked()
+    expect(screen.getByText("Batch action deferred to Phase 9. No changes were made.")).toBeVisible()
+    fetchMock.mockRestore()
+  })
+
+  it("uses one destructive count-bearing confirmation without per-item mutation or unsafe intent data", async () => {
+    const user = userEvent.setup()
+    const handoff = vi.fn()
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+    const entry = { ...fixtureEntries[0], id: "safe-entry-id", pasteName: "Safe fixture" }
+    render(<App initialEntries={[fixtureEntries[0], entry]} onDeferredBatchActionIntent={handoff} />)
+
+    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    await user.click(screen.getByRole("button", { name: "全选" }))
+    await user.click(screen.getByRole("button", { name: "删除" }))
+    const dialog = screen.getByRole("dialog", { name: "Confirm batch delete" })
+    expect(dialog).toHaveTextContent("2 项")
+    expect(dialog).toHaveTextContent("permanently")
+    expect(screen.getAllByRole("dialog")).toHaveLength(1)
+    await user.click(within(dialog).getByRole("button", { name: "Confirm deferred action" }))
+
+    expect(handoff).toHaveBeenCalledWith({ action: "delete", entryIds: ["active-fixture", "safe-entry-id"] })
+    expect(JSON.stringify(handoff.mock.calls)).not.toMatch(/password|token|scope|content|expiresAt|https?:/i)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(screen.getByText("Active fixture")).toBeVisible()
+    expect(screen.getByText("Safe fixture")).toBeVisible()
+    expect(screen.getByRole("toolbar", { name: "Batch actions" })).toHaveTextContent("已选择 2 项")
+    fetchMock.mockRestore()
+  })
+
   it("selects, clears, and exits only the current visible eligible Active set", async () => {
     const user = userEvent.setup()
     const visibleActive = {

@@ -68,9 +68,9 @@ Goal: Feishu webhook foundation — verified encrypted `im.message.receive_v1` P
 ### 8. Review gate (after TODO approval and implementation)
 
 - [x] Commit with full review context; push; open implementation PR to `downstream/main` with planning refs.
-- [ ] Obtain authoritative GitHub CI on the current HEAD.
-- [ ] Obtain independent current-HEAD AI Review Bot review; fix or owner-disposition findings; re-review after every HEAD change.
-- [ ] Merge only after the Phase Review Gate passes; refresh `downstream/main`; do not start Phase 5 from an unmerged branch.
+- [x] Obtain authoritative GitHub CI on the current HEAD.
+- [x] Obtain independent current-HEAD AI Review Bot review; fix or owner-disposition findings; re-review after every HEAD change.
+- [x] Merge only after the Phase Review Gate passes; refresh `downstream/main`; do not start Phase 5 from an unmerged branch.
 
 ## Evidence
 
@@ -109,7 +109,7 @@ REGRESSION (2026-09-05, adversarial matrix):
 
 ## Authorization note
 
-Owner approved this PHASE/TODO pair on 2026-09-05. Implementation on `codex/phase4-webhook-foundation` (PR #12) is authorized within approved SPEC/PHASE/TODO bounds. Merge remains gated on current-HEAD CI + Bugbot + `CODEX_VERIFIED`. Do not start Phase 5 from an unmerged branch. No production deploy/migration.
+Owner approved this PHASE/TODO pair on 2026-09-05. Implementation on `codex/phase4-webhook-foundation` (PR #12) is authorized within approved SPEC/PHASE/TODO bounds. PR #12 merged into `downstream/main` at `a9121788e0c653ef592331ba823afa63915553a6` after `CODEX_VERIFIED: 13f6ea3ae44612ce5dc556ca81fb759933ea34c0`. Do not start Phase 5 until separately authorized. No production deploy/migration.
 
 Evidence (2026-09-05, merge-gate polish):
 

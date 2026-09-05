@@ -47,24 +47,46 @@ downstream/addons/feishu/frontend/vitest.config.ts` passed (2 files, 28
 
 ## 2. Phase 8.2 — visible-set selection and interaction lock
 
-- [ ] Only after 8.1 merges, refresh/verify clean `downstream/main`; create
+- [x] Only after 8.1 merges, refresh/verify clean `downstream/main`; create
       the dedicated 8.2 feature branch and begin RED-first.
-- [ ] Add RED tests for `全选` exact visible eligible IDs, `清空`, exit clearing,
+- [x] Add RED tests for `全选` exact visible eligible IDs, `清空`, exit clearing,
       and filtering/refresh pruning stale, unloaded, and archived IDs before
       count or future action use.
-- [ ] Add RED accessibility/interaction tests proving the managed completion
+- [x] Add RED accessibility/interaction tests proving the managed completion
       control cannot open through pointer or keyboard in Batch Mode, explains
       the lock accessibly, remains distinct from BatchSelector, and resumes the
       unchanged Phase 6 chooser after exit.
-- [ ] Add RED regressions for no fetch, no Markdown/lifecycle mutation, no
+- [x] Add RED regressions for no fetch, no Markdown/lifecycle mutation, no
       Archive/countdown/Restore/reconciliation change, and no new browser
       identity, scope, credential, secret, or expiry authority.
-- [ ] Implement only bounded visible-set selection, clear/prune behavior, and
+- [x] Implement only bounded visible-set selection, clear/prune behavior, and
       the normal-control lock. Fail closed if visible eligibility is unknown;
       do not add pagination, Archive selectors, lifecycle execution, or an API.
 - [ ] Record GREEN/REFACTOR/REGRESSION evidence; run focused/frontend and
       Phase 5–7 regression checks plus type/format/build; complete current-HEAD
       CI and AI Review Bot Phase Review Gate before merge.
+
+### Phase 8.2 implementation evidence — 2026-09-05
+
+- **RED:** `node_modules/.bin/vitest run --config
+  downstream/addons/feishu/frontend/vitest.config.ts
+  downstream/addons/feishu/frontend/App.spec.tsx` failed 3 new tests before
+  implementation: no `全选` control, no visible-set helper, and no Batch Mode
+  managed-control lock.
+- **GREEN:** the same focused command passed: 26 tests.
+- **REFACTOR:** derived and pruned the eligible Active ID set in small pure
+  helpers; a `null` eligibility result empties selection and withholds Batch
+  selectors/controls. The native disabled managed control refers to a concise
+  Batch Mode explanation.
+- **REGRESSION:** `node_modules/.bin/vitest run --config
+  downstream/addons/feishu/frontend/vitest.config.ts` passed (2 files, 31
+  tests); `node_modules/.bin/tsc --noEmit -p
+  downstream/addons/feishu/tsconfig.json`, focused Prettier check, and
+  `node_modules/.bin/vite build downstream/addons/feishu/frontend --outDir
+  ../dist/frontend --emptyOutDir` passed. No Worker, shared contract, request,
+  Archive/countdown/Restore/reconciliation, browser trust, or expiry-authority
+  behavior changed. Current-HEAD CI and the AI Review Bot Phase Review Gate
+  remain required before merge.
 
 ## 3. Phase 8.3 — action bar, confirmation, and deferred Phase 9 seam
 

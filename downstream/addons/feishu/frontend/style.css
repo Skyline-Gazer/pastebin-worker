@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #11181c;
+  --content: #ffffff;
+  --default-100: #f4f4f5;
+  --default-200: #e4e4e7;
+  --default-400: #a1a1aa;
+  --default-500: #71717a;
+  --default-700: #3f3f46;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #000000;
+  --foreground: #ecedee;
+  --content: #18181b;
+  --default-100: #27272a;
+  --default-200: #3f3f46;
+  --default-400: #71717a;
+  --default-500: #a1a1aa;
+  --default-700: #d4d4d8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 20rem;
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+button {
+  font: inherit;
+}
+
+.page-shell {
+  display: flex;
+  min-height: 100vh;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.content-panel {
+  width: min(100%, 64rem);
+  align-self: flex-start;
+  border: 1px solid var(--default-200);
+  border-radius: 0.75rem;
+  background: var(--content);
+}
+
+.shell-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--default-200);
+}
+
+.shell-header h1 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.25rem;
+  color: var(--default-500);
+  font-size: 0.875rem;
+}
+
+.theme-control {
+  border: 1px solid var(--default-200);
+  border-radius: 0.5rem;
+  background: var(--default-100);
+  color: var(--foreground);
+  cursor: pointer;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.875rem;
+}
+
+.theme-control:hover {
+  border-color: var(--default-400);
+}
+
+.theme-control:focus-visible {
+  outline: 2px solid var(--default-700);
+  outline-offset: 2px;
+}
+
+.shell-body {
+  padding: 1rem;
+}
+
+.shell-body p:last-child {
+  margin: 0;
+  color: var(--default-700);
+}
+
+@media (max-width: 30rem) {
+  .shell-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

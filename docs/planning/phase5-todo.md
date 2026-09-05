@@ -2,9 +2,7 @@
 
 ## Authorization and active increment
 
-Owner Delegated Continuous Execution under D-030 authorizes the in-scope Phase 5 progression represented by the approved PLAN, [SPEC](phase5-spec.md), and [PHASE decomposition](phase5-phases.md). This TODO is the durable active implementation checklist for **5A — Local scaffold and visual shell**. It does not authorize a live API, mutation/lifecycle behavior, Phase 6–10 work, deployment, migration, PR #5, or `upstream-sync`/`goshujin` work.
-
-Implementation has NOT started. Before coding in a later turn, refresh `downstream/main`, verify a clean current base, create the 5A branch, and preserve this TODO as the applicable execution record.
+Owner Delegated Continuous Execution under D-030 authorizes the in-scope Phase 5 progression represented by the approved PLAN, [SPEC](phase5-spec.md), and [PHASE decomposition](phase5-phases.md). This TODO is the durable active implementation checklist for **5B — Fixture tabs, safe GFM, and managed-control baseline**. Phase 5A merged through PR #14; this increment begins from refreshed `downstream/main` at `09d7d4478a3f78e1391429389f99871bc02e5301` on `feat/feishu-frontend-rendering`. It does not authorize a live API, mutation/lifecycle behavior, Phase 6–10 work, deployment, migration, PR #5, or `upstream-sync`/`goshujin` work.
 
 ## 5A ordered work
 
@@ -38,15 +36,40 @@ Implementation has NOT started. Before coding in a later turn, refresh `downstre
 
 - [x] Update Add-on-local documentation with the frontend-local test/typecheck/build commands.
 - [x] Commit with the required structured Conventional Commit body and planning references.
+- [x] Obtain current-HEAD CI and completed AI Review Bot review; fix/disposition findings under the gate rules and re-review every changed HEAD.
+- [x] Merge only with authorized human process; then refresh `downstream/main` before beginning 5B (PR #14, baseline `09d7d4478a3f78e1391429389f99871bc02e5301`).
+
+## 5B ordered work
+
+### 0. Preflight
+
+- [x] Reconfirm merged 5A and refreshed `downstream/main` baseline; create this 5B feature branch.
+- [x] Confirm locked `marked` and `xss` packages are available without a root manifest/lockfile change; STOP if they cannot provide parser-aware GFM plus sanitization.
+
+### 1. TDD RED — fixture rendering contract
+
+- [x] Add failing tests for typed fixture-only rendering/no network, semantic Chinese Active/Archive tabs and filtering, GFM tasks (including nesting and `[X]`), literal fenced-code task text, malicious markup/URLs inertness, Archive labels from fixture `expiresAt`, and managed-control no-op.
+- [x] Record the exact failing command/output and why it demonstrates each missing behavior in **Evidence → 5B RED** before GREEN implementation.
+
+### 2. Smallest GREEN — safe presentation only
+
+- [x] Add public-safe typed local fixtures and no transport client.
+- [x] Add parser-aware GFM rendering through `marked` followed by `xss` sanitization; preserve parser-recognized semantic checkboxes without regex task replacement.
+- [x] Add semantic tabs and static Archive labels; a timed label must format the fixture's exact `expiresAt` only and must not use a timer or manufacture a deadline.
+- [x] Add a programmatically distinct `ManagedTaskCheckbox`; clicking it is intentionally a documented no-op and must not open Phase 6 UI or mutate anything.
+
+### 3. Refactor and regression
+
+- [x] Format/refactor only after GREEN while retaining fixture-only, inert behavior.
+- [x] Run frontend Vitest/TypeScript/Vite, Worker Vitest, and ESLint/Prettier for touched paths.
+- [x] Inspect final diff for only `downstream/addons/feishu` and `docs/planning`, with no root dependency/lockfile, workflow, API, mutation, secret, or upstream-source change.
+- [x] Record exact commands/results in **Evidence → 5B GREEN/REFACTOR/REGRESSION**.
+
+### 4. 5B review gate
+
+- [ ] Commit with required structured Conventional Commit body and Phase 5B/D-030/planning references.
 - [ ] Obtain current-HEAD CI and completed AI Review Bot review; fix/disposition findings under the gate rules and re-review every changed HEAD.
-- [ ] Merge only with authorized human process; then refresh `downstream/main` before beginning 5B.
-
-## Next increment preview — 5B (not active until 5A merges)
-
-- [ ] Reconfirm merged 5A and refresh `downstream/main`; branch anew for 5B.
-- [ ] TDD RED for typed fixture-only data/no network, semantic Active/Archive tabs, sanitized GFM task forms/nesting, literal fenced-code task text, malicious-markup sanitization, Archive display-only labels, and managed-control no-op.
-- [ ] Implement the smallest parser-aware/sanitized rendering and explicit managed-control distinction; do not use regex task replacement or add lifecycle/API behavior.
-- [ ] Record RED/GREEN/REFACTOR/REGRESSION evidence and complete the independent review gate.
+- [ ] Do not open or merge a PR in this increment; hand off the committed branch for authorized review.
 
 ## 5C closeout preview (not active until 5B merges)
 
@@ -63,6 +86,29 @@ Extending `.github/workflows/feishu-phase3.yml` with frontend vitest/tsc/vite st
 ### RED
 
 `PATH="/home/box/.local/bin:/home/box/.local/node-v22/bin:$PATH" node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts` exited 1 before shell implementation. Vitest reported `Failed to resolve import "./App" from "downstream/addons/feishu/frontend/App.spec.tsx". Does the file exist?`; `App.spec.tsx` contained the required named-shell, compact-region, no-transport, and theme-control assertions. This proves the required frontend shell was absent. (An initial harness invocation also exposed root-relative Vitest resolution; the local config was corrected before this recorded RED run.)
+
+### 5B RED
+
+`PATH="/home/box/.local/bin:/home/box/.local/node-v22/bin:$PATH" node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts` exited 1 before 5B implementation: 1 file, 6 tests failed. The existing shell had no `进行中`/`归档` tab roles, no fixture content, no Markdown checkbox controls, no fenced-code rendering, no Archive labels, and no managed task control. The first failures reported missing `进行中`/`归档` tabs and missing `Markdown task` / `Managed entry task (Phase 5 no-op)` checkboxes. These failures prove the fixture-only tabs, parser-aware rendering/sanitization, Archive presentation, and inert managed-control behavior were absent.
+
+### 5B GREEN
+
+`PATH="/home/box/.local/bin:/home/box/.local/node-v22/bin:$PATH" node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts` exited 0: 1 file, 6 tests passed. The tests prove local fixture filtering without `fetch`, semantic tabs, GFM unchecked/checked/uppercase/nested task output, literal fenced task source, stripped unsafe markup/URLs, fixture-`expiresAt` Archive labels, and a distinct managed checkbox whose click is an intentional no-op (no request, dialog, tab, or checked-state change).
+
+### 5B REFACTOR
+
+After GREEN, Prettier formatted the new fixture, rendering, managed-control, and page modules. The renderer remains a single parser-aware pipeline: `marked` parses GFM, `xss` allowlists safe output, then a parsed DOM adds accessible names only to parser-produced checkbox elements. No regex task replacement or lifecycle behavior was introduced.
+
+### 5B REGRESSION
+
+All commands used `PATH="/home/box/.local/bin:/home/box/.local/node-v22/bin:$PATH"` and exited 0:
+
+- `node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts` — 1 file, 6 tests passed.
+- `node_modules/.bin/tsc --noEmit --project downstream/addons/feishu/frontend/tsconfig.json` — passed.
+- `node_modules/.bin/eslint downstream/addons/feishu/frontend` — passed.
+- `node_modules/.bin/prettier --check downstream/addons/feishu/frontend docs/planning/phase5-todo.md` — passed.
+- `node_modules/.bin/vite build --config downstream/addons/feishu/frontend/vite.config.ts` — passed.
+- `node_modules/.bin/vitest run --config downstream/addons/feishu/vitest.config.js` — 4 files, 27 Worker tests passed (with approved loopback access for the Cloudflare test pool).
 
 ### GREEN
 

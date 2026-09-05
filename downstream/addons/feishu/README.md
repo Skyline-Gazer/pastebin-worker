@@ -53,6 +53,13 @@ The frontend build is a typecheck prerequisite: the reused root Cloudflare decla
 upstream Worker page modules that depend on the generated SSR manifest. A pre-existing local
 `dist/` must not be mistaken for a clean-checkout prerequisite being satisfied in CI.
 
+## Phase 5 fixture baseline
+
+The browser baseline uses typed, public-safe local fixtures only; it makes no browser request or
+live-state claim. Its Active/Archive tabs and sanitized GFM rendering are presentation-only. The
+visibly distinct managed task checkbox is deliberately inert in Phase 5: a click does not change
+Markdown or fixture state, open the Phase 6 chooser, select a retention action, or contact a Worker.
+
 ## Phase 4 webhook foundation
 
 The Worker now exposes only `POST /api/feishu/events` through the explicit Phase 4 adapter.

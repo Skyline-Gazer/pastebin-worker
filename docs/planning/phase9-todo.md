@@ -27,16 +27,16 @@ from an unmerged predecessor.
 
 ## 2. Phase 9.2 — Server-side lifecycle delegation and durable batch operation
 
-- [ ] Only after 9.1 merges, refresh `downstream/main`; inspect existing
+- [x] Only after 9.1 merges, refresh `downstream/main`; inspect existing
       binding, credential, lifecycle, durable-operation, and reconciliation
       interfaces; begin RED-first on `feat/feishu-batch-lifecycle`.
-- [ ] Add RED tests for per-ID server-only scope/binding/password resolution,
+- [x] Add RED tests for per-ID server-only scope/binding/password resolution,
       the three existing action delegations, archive ordering, timed
       authoritative `expiresAt`, delete binding removal, and no tombstone.
-- [ ] Add RED partial-execution tests proving inaccessible/missing IDs yield
+- [x] Add RED partial-execution tests proving inaccessible/missing IDs yield
       sanitized `ENTRY_UNAVAILABLE`, later failure does not undo prior success,
       and ambiguity/persistence failure retains durable reconciliation evidence.
-- [ ] Implement the smallest additive batch record/item evidence and deterministic
+- [x] Implement the smallest additive batch record/item evidence and deterministic
       server-only per-item identities; delegate instead of duplicating lifecycle
       or Paste-client logic. Do not add batch Restore, fourth lifecycle, second
       Paste-body storage, or client expiry authority.
@@ -99,6 +99,20 @@ lifecycle, or Paste services. REGRESSION/CI/review gate remain for the
 orchestrator. Phase 9.2 must add per-ID binding/scope resolution; Phase 9.1
 only proves an authenticated principal has at least one server-derived scope
 and never treats an ID as scope authority.
+
+Phase 9.2 evidence (local branch `feat/feishu-batch-lifecycle`): RED was
+observed as a TypeScript failure because `BatchLifecycleCoordinator` did not
+exist; the new tests name the missing server-only delegation/evidence boundary.
+GREEN: `node_modules/.bin/tsc --noEmit -p downstream/addons/feishu/tsconfig.json`
+and targeted Prettier checks passed after implementation. Focused Worker tests
+remain blocked in this Codex sandbox because the Cloudflare Worker pool cannot
+bind `127.0.0.1` (`listen EPERM`); they require orchestrator execution outside
+the sandbox. REFACTOR keeps password opening, Paste calls, lifecycle ordering,
+and entry operation claims in `EntryService.completeEntry`; the coordinator
+only resolves server-side binding/scope facts and records batch evidence.
+REGRESSION/CI/review gate remain for the orchestrator. Migration 0006 is
+additive and does not add a Paste-body store, batch Restore, or client expiry
+authority.
 
 ### Regression and review
 

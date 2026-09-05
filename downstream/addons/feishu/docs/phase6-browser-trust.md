@@ -39,8 +39,9 @@ Provision these secrets/configuration outside source control: `FEISHU_APP_SECRET
 `FEISHU_PRINCIPAL_KEY`. `FEISHU_SESSION_COOKIE_NAME` is optional; the default is
 `feishu_addon_session` because deployment topology cannot safely require `__Host-` yet.
 
-Apply migrations `0002_browser_trust.sql`, `0003_lifecycle_completion.sql`, and
-`0004_permanent_restore.sql` after `0001_bindings.sql` when deploying. The latter migrations
+Apply migrations `0002_browser_trust.sql`, `0003_lifecycle_completion.sql`,
+`0004_permanent_restore.sql`, `0005_timed_restore.sql`, and
+`0006_batch_operations.sql` after `0001_bindings.sql` when deploying. The latter migrations
 preserve existing binding rows while widening lifecycle and operation-kind checks.
 Migration 0002 only adds
 opaque session/OAuth-state and keyed-principal-to-scope authorization metadata. Feishu OAuth tokens,
@@ -48,3 +49,7 @@ raw identity, management credentials, and Paste bodies are never persisted by th
 returned by these routes. Future browser mutations must call `authorizeBrowserMutation` before any
 Phase 3 or Paste operation; it requires the session, exact Origin, CSRF header, and a server-side
 principal-to-binding-scope join.
+
+Migration 0006 adds batch-operation and per-item evidence only. It stores no
+Paste body, plaintext management password, or browser-supplied scope; the
+existing per-entry operation remains the lifecycle/reconciliation authority.

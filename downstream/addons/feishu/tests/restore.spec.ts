@@ -29,12 +29,12 @@ function request(headers: HeadersInit = {}, body?: BodyInit | null) {
   })
 }
 
-describe("permanent restore browser adapter", () => {
+describe("restore browser adapter", () => {
   it("uses only stored scope and forwards no browser authority to the lifecycle service", async () => {
     const trust = { getSession: vi.fn().mockResolvedValue(session), scopes: vi.fn().mockResolvedValue(["scope-a"]) }
     const bindings = { getById: vi.fn().mockResolvedValue({ id: "entry-a", scope_id: "scope-a" }) }
     const service = {
-      restorePermanentEntry: vi.fn().mockResolvedValue({
+      restoreEntry: vi.fn().mockResolvedValue({
         ok: true,
         entry: {
           id: "entry-a",
@@ -52,7 +52,7 @@ describe("permanent restore browser adapter", () => {
       request({ "x-browser-scope": "scope-b", "x-browser-expiry": "tomorrow", "x-browser-password": "secret" }),
     )
     expect(result?.status).toBe(200)
-    expect(service.restorePermanentEntry).toHaveBeenCalledWith(
+    expect(service.restoreEntry).toHaveBeenCalledWith(
       { scopeId: "scope-a" },
       { entryId: "entry-a", requestId: "restore-a" },
     )
@@ -62,7 +62,7 @@ describe("permanent restore browser adapter", () => {
   it("rejects absent session, invalid origin/CSRF, guessed IDs, and cross-scope entries before service", async () => {
     const trust = { getSession: vi.fn().mockResolvedValue(session), scopes: vi.fn().mockResolvedValue(["scope-b"]) }
     const bindings = { getById: vi.fn().mockResolvedValue({ id: "entry-a", scope_id: "scope-a" }) }
-    const service = { restorePermanentEntry: vi.fn() }
+    const service = { restoreEntry: vi.fn() }
     const handler = createRestoreHandler(env, trust as never, bindings as never, service as never)
     expect((await handler.fetch(request()))?.status).toBe(403)
     expect((await handler.fetch(request({}, JSON.stringify({ scopeId: "scope-b", password: "secret" }))))?.status).toBe(
@@ -74,6 +74,6 @@ describe("permanent restore browser adapter", () => {
     expect((await handler.fetch(request({ "x-csrf-token": "wrong" })))?.status).toBe(403)
     bindings.getById.mockResolvedValueOnce(null)
     expect((await handler.fetch(request()))?.status).toBe(403)
-    expect(service.restorePermanentEntry).not.toHaveBeenCalled()
+    expect(service.restoreEntry).not.toHaveBeenCalled()
   })
 })

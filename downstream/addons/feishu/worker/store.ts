@@ -15,7 +15,8 @@ export interface Operation {
   scope_id: string
   request_id: string
   entry_id: string
-  kind: "create" | "update" | "complete_permanent" | "complete_expiring" | "restore_permanent" | "delete"
+  kind:
+    "create" | "update" | "complete_permanent" | "complete_expiring" | "restore_permanent" | "restore_timed" | "delete"
   fingerprint: string
   content_fingerprint: string
   expected_version: number
@@ -153,6 +154,33 @@ export class BindingStore {
         SELECT ?, ?, ?, id, 'restore_permanent', ?, ?, ?, 'reserved', ?, ? FROM feishu_bindings
         WHERE id = ? AND scope_id = ? AND version = ? AND paste_name IS NOT NULL
         AND visibility = 'archived' AND retention_mode = 'permanent' AND expires_at IS NULL`,
+      )
+      .bind(
+        op.id,
+        op.scope_id,
+        op.request_id,
+        op.fingerprint,
+        op.content_fingerprint,
+        op.expected_version,
+        now,
+        now,
+        op.entry_id,
+        op.scope_id,
+        op.expected_version,
+      )
+      .run()
+    return result.meta.changes === 1
+  }
+
+  async reserveTimedRestore(op: Operation): Promise<boolean> {
+    const now = new Date().toISOString()
+    const result = await this.db
+      .prepare(
+        `INSERT INTO feishu_operations
+        (id, scope_id, request_id, entry_id, kind, fingerprint, content_fingerprint, expected_version, status, created_at, updated_at)
+        SELECT ?, ?, ?, id, 'restore_timed', ?, ?, ?, 'reserved', ?, ? FROM feishu_bindings
+        WHERE id = ? AND scope_id = ? AND version = ? AND paste_name IS NOT NULL
+        AND visibility = 'archived' AND retention_mode = 'timed' AND expires_at IS NOT NULL`,
       )
       .bind(
         op.id,

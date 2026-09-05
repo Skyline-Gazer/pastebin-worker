@@ -5,7 +5,7 @@ export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
   test: {
     environment: "jsdom",
-    include: ["App.spec.tsx"],
+    include: ["*.spec.tsx"],
     setupFiles: ["./test/setup.ts"],
   },
 })

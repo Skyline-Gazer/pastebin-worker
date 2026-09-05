@@ -2,6 +2,7 @@ import { env } from "cloudflare:test"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import migration from "../migrations/0001_bindings.sql?raw"
 import migration3 from "../migrations/0003_lifecycle_completion.sql?raw"
+import migration4 from "../migrations/0004_permanent_restore.sql?raw"
 import { Credentials } from "../worker/credentials"
 import { PasteClient } from "../worker/paste-client"
 import { BindingStore, type Operation } from "../worker/store"
@@ -38,7 +39,7 @@ async function setup() {
 
 beforeEach(async () => {
   await db.exec("DROP TABLE IF EXISTS feishu_operations; DROP TABLE IF EXISTS feishu_bindings;")
-  for (const statement of `${migration}\n${migration3}`.split(";").filter((part) => part.trim()))
+  for (const statement of `${migration}\n${migration3}\n${migration4}`.split(";").filter((part) => part.trim()))
     await db.prepare(statement).run()
 })
 
@@ -231,6 +232,79 @@ describe("persistent internal entry services", () => {
       .filter(([, init]) => init?.method === "PUT")
       .map(([, init]) => init!.body as FormData)
     expect(writes.map((body) => body.get("e"))).toEqual(["never", "max"])
+  })
+
+  it("restores only a permanent archive's managed checked task after upstream confirmation", async () => {
+    const { service, transport } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] managed\n  - [x] nested" })
+    if (!created.ok) throw new Error("create failed")
+    const archived = await service.completeEntry(context, {
+      entryId: created.entry.id,
+      requestId: "archive-for-restore",
+      action: "archive_permanent",
+    })
+    if (!archived.ok || !("entry" in archived)) throw new Error("archive failed")
+    transport.mockClear()
+    const restored = await service.restorePermanentEntry(context, { entryId: created.entry.id, requestId: "restore-1" })
+    expect(restored).toMatchObject({
+      ok: true,
+      entry: { visibility: "active", retentionMode: "permanent", expiresAt: null, version: 3 },
+    })
+    expect(await service.restorePermanentEntry(context, { entryId: created.entry.id, requestId: "restore-1" })).toEqual(
+      restored,
+    )
+    const writes = transport.mock.calls.filter(([, init]) => init?.method === "PUT")
+    expect(writes).toHaveLength(1)
+    expect((writes[0][1]!.body as FormData).get("c")).toBe("- [ ] managed\n  - [x] nested")
+    expect((writes[0][1]!.body as FormData).get("e")).toBe("never")
+  })
+
+  it("fails closed for timed, active, ambiguous, and uncertain permanent restore", async () => {
+    const { service, transport, store } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] managed" })
+    if (!created.ok) throw new Error("create failed")
+    expect(
+      await service.restorePermanentEntry(context, { entryId: created.entry.id, requestId: "active" }),
+    ).toMatchObject({
+      ok: false,
+      code: "INVALID_LIFECYCLE_STATE",
+    })
+    await service.completeEntry(context, { entryId: created.entry.id, requestId: "timed", action: "archive_expiring" })
+    expect(
+      await service.restorePermanentEntry(context, { entryId: created.entry.id, requestId: "timed-restore" }),
+    ).toMatchObject({
+      ok: false,
+      code: "INVALID_LIFECYCLE_STATE",
+    })
+    const permanent = await service.createEntry(context, {
+      recordKey: "restore-permanent",
+      requestId: "create-permanent",
+      content: "- [ ] one",
+    })
+    if (!permanent.ok) throw new Error("create failed")
+    await service.completeEntry(context, {
+      entryId: permanent.entry.id,
+      requestId: "archive-permanent",
+      action: "archive_permanent",
+    })
+    transport.mockImplementation((_, init) =>
+      init?.method === "PUT"
+        ? Promise.reject(new Error("secret=never-visible"))
+        : Promise.resolve(new Response("- [x] one")),
+    )
+    expect(
+      await service.restorePermanentEntry(context, { entryId: permanent.entry.id, requestId: "uncertain-restore" }),
+    ).toMatchObject({
+      ok: false,
+      code: "RECONCILIATION_REQUIRED",
+    })
+    expect(
+      await service.restorePermanentEntry(context, { entryId: permanent.entry.id, requestId: "new-restore" }),
+    ).toMatchObject({
+      ok: false,
+      code: "MUTATION_CONFLICT",
+    })
+    expect(JSON.stringify(await store.pending(permanent.entry.id))).not.toContain("never-visible")
   })
 
   it("reads timed archived bindings when upstream metadata matches their authoritative expiry", async () => {

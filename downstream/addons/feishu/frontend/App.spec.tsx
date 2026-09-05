@@ -168,6 +168,60 @@ describe("Feishu fixture rendering", () => {
     fetchMock.mockRestore()
   })
 
+  it("reuses the completion identity when retrying a failed completion attempt", async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            entry: {
+              id: "active-fixture",
+              pasteName: "Authoritative archive",
+              publicUrl: "https://example.invalid/p/authoritative",
+              visibility: "archived",
+              retentionMode: "permanent",
+              expiresAt: null,
+              version: 4,
+            },
+          }),
+        ),
+      )
+    render(<App />)
+
+    await user.click(screen.getByRole("checkbox", { name: "Complete managed entry" }))
+    await user.click(screen.getByRole("button", { name: "Confirm archive" }))
+    expect(await screen.findByRole("alert")).toBeVisible()
+    await user.click(screen.getByRole("button", { name: "Confirm archive" }))
+    await waitFor(() => expect(screen.queryByText("Active fixture")).not.toBeInTheDocument())
+
+    const firstRequest = fetchMock.mock.calls[1][1]
+    const retryRequest = fetchMock.mock.calls[3][1]
+    if (!firstRequest || !retryRequest) throw new Error("expected completion requests")
+    const firstHeaders = firstRequest.headers as Record<string, string>
+    const retryHeaders = retryRequest.headers as Record<string, string>
+    expect(retryHeaders["Idempotency-Key"]).toBe(firstHeaders["Idempotency-Key"])
+    fetchMock.mockRestore()
+  })
+
+  it("moves focus into the completion dialog and restores it when cancelled with Escape", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const managedTask = screen.getByRole("checkbox", { name: "Complete managed entry" })
+    managedTask.focus()
+
+    await user.click(managedTask)
+    const dialog = screen.getByRole("dialog", { name: "Choose completion action" })
+    expect(dialog).toContainElement(document.activeElement as HTMLElement | null)
+    await user.keyboard("{Escape}")
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(managedTask).toHaveFocus()
+  })
+
   it("keeps rendered Markdown tasks inert while the managed control is actionable", async () => {
     const user = userEvent.setup()
     render(<App />)

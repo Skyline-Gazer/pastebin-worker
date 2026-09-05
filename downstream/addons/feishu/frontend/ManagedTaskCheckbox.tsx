@@ -5,7 +5,7 @@ export function ManagedTaskCheckbox({
 }: {
   checked: boolean
   disabled?: boolean
-  onComplete: () => void
+  onComplete: (control: HTMLButtonElement) => void
 }) {
   return (
     <button
@@ -15,7 +15,7 @@ export function ManagedTaskCheckbox({
       aria-label="Complete managed entry"
       aria-checked={checked}
       disabled={disabled}
-      onClick={onComplete}
+      onClick={(event) => onComplete(event.currentTarget)}
     >
       <span aria-hidden="true" className="managed-task-indicator">
         {checked ? "☑" : "☐"}

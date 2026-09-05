@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { PublicEntry } from "../shared/entries"
 import { fixtureEntries, type FixtureEntry } from "./fixtures"
 import { ManagedTaskCheckbox } from "./ManagedTaskCheckbox"
@@ -22,7 +22,11 @@ function requestIdentity() {
   return globalThis.crypto?.randomUUID?.() || `completion-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-async function completeEntry(id: string, action: CompletionAction): Promise<PublicEntry | null> {
+async function completeEntry(
+  id: string,
+  action: CompletionAction,
+  idempotencyKey: string,
+): Promise<PublicEntry | null> {
   const sessionResponse = await fetch("/api/auth/session", { credentials: "include" })
   if (!sessionResponse.ok) throw new Error("session unavailable")
   const session: unknown = await sessionResponse.json()
@@ -33,7 +37,7 @@ async function completeEntry(id: string, action: CompletionAction): Promise<Publ
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      "Idempotency-Key": requestIdentity(),
+      "Idempotency-Key": idempotencyKey,
       "X-CSRF-Token": (session as { csrfToken: string }).csrfToken,
     },
     body: JSON.stringify({ action }),
@@ -73,8 +77,11 @@ export function App() {
   const [entries, setEntries] = useState<FixtureEntry[]>(() => [...fixtureEntries])
   const [action, setAction] = useState<CompletionAction | null>(null)
   const [completionEntryId, setCompletionEntryId] = useState<string | null>(null)
+  const [completionRequestId, setCompletionRequestId] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState(false)
+  const completionTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const completionDialogRef = useRef<HTMLDivElement | null>(null)
   const nextTheme = theme === "light" ? "dark" : "light"
   const visibleEntries = entries.filter((entry) => entry.visibility === tab)
 
@@ -82,17 +89,35 @@ export function App() {
     document.documentElement.dataset.theme = theme
   }, [theme])
 
+  useEffect(() => {
+    if (action) completionDialogRef.current?.focus()
+  }, [action])
+
+  function closeCompletion() {
+    setAction(null)
+    setCompletionEntryId(null)
+    setCompletionRequestId(null)
+    setError(false)
+    completionTriggerRef.current?.focus()
+  }
+
+  function selectCompletionAction(nextAction: CompletionAction) {
+    setAction(nextAction)
+    setCompletionRequestId(requestIdentity())
+  }
+
   async function submitCompletion() {
-    if (!action || pending) return
+    if (!action || !completionRequestId || pending) return
     const active = entries.find((entry) => entry.id === completionEntryId && entry.visibility === "active")
     if (!active) return
     setPending(true)
     setError(false)
     try {
-      const result = await completeEntry(active.id, action)
+      const result = await completeEntry(active.id, action, completionRequestId)
       setEntries((current) => applyPublicResult(current, result, active.id))
       setAction(null)
       setCompletionEntryId(null)
+      setCompletionRequestId(null)
     } catch {
       setError(true)
     } finally {
@@ -142,8 +167,9 @@ export function App() {
                   <ManagedTaskCheckbox
                     checked={entry.managedTask.state === "checked"}
                     disabled={pending}
-                    onComplete={() => {
-                      setAction("archive_permanent")
+                    onComplete={(control) => {
+                      completionTriggerRef.current = control
+                      selectCompletionAction("archive_permanent")
                       setCompletionEntryId(entry.id)
                       setError(false)
                     }}
@@ -158,7 +184,17 @@ export function App() {
         </div>
       </section>
       {action && (
-        <div aria-labelledby="completion-title" aria-modal="true" className="completion-dialog" role="dialog">
+        <div
+          aria-labelledby="completion-title"
+          aria-modal="true"
+          className="completion-dialog"
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && !pending) closeCompletion()
+          }}
+          ref={completionDialogRef}
+          role="dialog"
+          tabIndex={-1}
+        >
           {action === "delete" ? (
             <>
               <h2 id="completion-title">Confirm delete</h2>
@@ -172,27 +208,19 @@ export function App() {
           )}
           {action !== "delete" && (
             <div className="completion-actions">
-              <button type="button" disabled={pending} onClick={() => setAction("archive_permanent")}>
+              <button type="button" disabled={pending} onClick={() => selectCompletionAction("archive_permanent")}>
                 永久归档
               </button>
-              <button type="button" disabled={pending} onClick={() => setAction("archive_expiring")}>
+              <button type="button" disabled={pending} onClick={() => selectCompletionAction("archive_expiring")}>
                 限期归档
               </button>
-              <button type="button" disabled={pending} onClick={() => setAction("delete")}>
+              <button type="button" disabled={pending} onClick={() => selectCompletionAction("delete")}>
                 删除
               </button>
             </div>
           )}
           <div className="completion-actions">
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => {
-                setAction(null)
-                setCompletionEntryId(null)
-                setError(false)
-              }}
-            >
+            <button type="button" disabled={pending} onClick={closeCompletion}>
               Cancel
             </button>
             <button type="button" disabled={pending} onClick={() => void submitCompletion()}>

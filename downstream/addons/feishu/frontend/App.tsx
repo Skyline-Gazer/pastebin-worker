@@ -90,8 +90,8 @@ export function App() {
   }, [theme])
 
   useEffect(() => {
-    if (action) completionDialogRef.current?.focus()
-  }, [action])
+    if (action && !pending) completionDialogRef.current?.focus()
+  }, [action, pending])
 
   function closeCompletion() {
     setAction(null)
@@ -102,8 +102,8 @@ export function App() {
   }
 
   function selectCompletionAction(nextAction: CompletionAction) {
+    if (action !== nextAction || !completionRequestId) setCompletionRequestId(requestIdentity())
     setAction(nextAction)
-    setCompletionRequestId(requestIdentity())
   }
 
   async function submitCompletion() {
@@ -169,9 +169,9 @@ export function App() {
                     disabled={pending}
                     onComplete={(control) => {
                       completionTriggerRef.current = control
-                      selectCompletionAction("archive_permanent")
                       setCompletionEntryId(entry.id)
                       setError(false)
+                      selectCompletionAction("archive_permanent")
                     }}
                   />
                 ) : (

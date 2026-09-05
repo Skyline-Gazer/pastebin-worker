@@ -67,6 +67,14 @@ the entry ID, action, and idempotency key, then applies only the Worker allowlis
 REGRESSION: existing GFM sanitization, inert Markdown task, theme, fixture, and archive-display
 tests remain in that 14-test run. Current-HEAD gate and merge remain required.
 
+Phase 6.2 Bugbot cycle 2: RED coverage for failed-submit focus and reselecting an unchanged
+action produced two frontend test failures: the dialog retained focus on its submit button after
+failure, and reselecting the same action minted a second idempotency key. GREEN: the frontend
+Vitest command above passed 17 tests after the dialog now refocuses when a pending request settles
+and preserves the open-dialog identity for the same action. Changing action intentionally creates
+a new identity because it changes the completion request fingerprint. REFACTOR keeps that identity
+rule local to the action-selection helper. Prettier and the frontend TypeScript check passed.
+
 ## Internal consistency review
 
 This TODO starts 6.0 after this PR merges, requires security negatives before lifecycle work, and preserves merged-phase dependencies. It matches owner decision, Phase 3/4 contracts, and D-030; no STOP exists.

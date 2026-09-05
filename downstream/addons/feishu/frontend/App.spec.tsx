@@ -163,6 +163,7 @@ describe("Feishu fixture rendering", () => {
     await user.click(screen.getByRole("button", { name: "永久归档" }))
     await user.click(screen.getByRole("button", { name: "Confirm archive" }))
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to complete entry. Please try again.")
+    expect(screen.getByRole("dialog")).toHaveFocus()
     expect(screen.getByText("Active fixture")).toBeVisible()
     expect(screen.queryByText("do-not-display")).not.toBeInTheDocument()
     fetchMock.mockRestore()
@@ -195,6 +196,7 @@ describe("Feishu fixture rendering", () => {
     await user.click(screen.getByRole("checkbox", { name: "Complete managed entry" }))
     await user.click(screen.getByRole("button", { name: "Confirm archive" }))
     expect(await screen.findByRole("alert")).toBeVisible()
+    await user.click(screen.getByRole("button", { name: "永久归档" }))
     await user.click(screen.getByRole("button", { name: "Confirm archive" }))
     await waitFor(() => expect(screen.queryByText("Active fixture")).not.toBeInTheDocument())
 
@@ -204,6 +206,47 @@ describe("Feishu fixture rendering", () => {
     const firstHeaders = firstRequest.headers as Record<string, string>
     const retryHeaders = retryRequest.headers as Record<string, string>
     expect(retryHeaders["Idempotency-Key"]).toBe(firstHeaders["Idempotency-Key"])
+    fetchMock.mockRestore()
+  })
+
+  it("uses a new completion identity when the selected action changes", async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            entry: {
+              id: "active-fixture",
+              pasteName: "Authoritative timed archive",
+              publicUrl: "https://example.invalid/p/authoritative",
+              visibility: "archived",
+              retentionMode: "timed",
+              expiresAt: "2031-02-03T04:05:06.000Z",
+              version: 4,
+            },
+          }),
+        ),
+      )
+    render(<App />)
+
+    await user.click(screen.getByRole("checkbox", { name: "Complete managed entry" }))
+    await user.click(screen.getByRole("button", { name: "Confirm archive" }))
+    expect(await screen.findByRole("alert")).toBeVisible()
+    await user.click(screen.getByRole("button", { name: "限期归档" }))
+    await user.click(screen.getByRole("button", { name: "Confirm archive" }))
+    await waitFor(() => expect(screen.queryByText("Active fixture")).not.toBeInTheDocument())
+
+    const firstRequest = fetchMock.mock.calls[1][1]
+    const changedActionRequest = fetchMock.mock.calls[3][1]
+    if (!firstRequest || !changedActionRequest) throw new Error("expected completion requests")
+    const firstHeaders = firstRequest.headers as Record<string, string>
+    const changedActionHeaders = changedActionRequest.headers as Record<string, string>
+    expect(changedActionHeaders["Idempotency-Key"]).not.toBe(firstHeaders["Idempotency-Key"])
+    expect(JSON.parse(changedActionRequest.body as string)).toEqual({ action: "archive_expiring" })
     fetchMock.mockRestore()
   })
 

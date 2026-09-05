@@ -31,6 +31,28 @@ function request(body: unknown, headers: HeadersInit = {}) {
 }
 
 describe("completion browser adapter", () => {
+  it("returns invalid input for malformed JSON instead of a retryable storage outage", async () => {
+    const trust = { getSession: vi.fn(), scopes: vi.fn() }
+    const bindings = { getById: vi.fn() }
+    const service = { completeEntry: vi.fn() }
+    const handler = createCompletionHandler(env, trust as never, bindings as never, service as never)
+    const malformed = new Request("https://addon.example/api/entries/entry-a/complete", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "request-a",
+      },
+      body: "{",
+    })
+
+    const result = await handler.fetch(malformed)
+
+    expect(result?.status).toBe(400)
+    expect(await result?.json()).toEqual({ code: "INVALID_INPUT" })
+    expect(bindings.getById).not.toHaveBeenCalled()
+    expect(service.completeEntry).not.toHaveBeenCalled()
+  })
+
   it("authorizes only the binding's server-side scope and emits no secrets", async () => {
     const trust = { getSession: vi.fn().mockResolvedValue(session), scopes: vi.fn().mockResolvedValue(["scope-a"]) }
     const bindings = { getById: vi.fn().mockResolvedValue({ id: "entry-a", scope_id: "scope-a" }) }

@@ -12,6 +12,36 @@ const actions = new Set(["archive_permanent", "archive_expiring", "delete"])
 const maxBodyBytes = 1024
 const requestId = (value: string | null) => !!value && value.length <= 256 && /^[\x20-\x7e]+$/.test(value)
 const json = (code: string, status: number) => Response.json({ code }, { status })
+const entryId = (value: string): string | null => {
+  try {
+    const decoded = decodeURIComponent(value)
+    if (decoded.length === 0 || decoded.length > 256 || Array.from(decoded).some((char) => char.charCodeAt(0) < 32))
+      return null
+    return decoded
+  } catch {
+    return null
+  }
+}
+const completionBody = async (
+  request: Request,
+): Promise<{ action: "archive_permanent" | "archive_expiring" | "delete" } | null> => {
+  try {
+    const raw = await request.text()
+    if (new TextEncoder().encode(raw).length > maxBodyBytes) return null
+    const body: unknown = JSON.parse(raw)
+    if (
+      !body ||
+      typeof body !== "object" ||
+      Array.isArray(body) ||
+      Object.keys(body).length !== 1 ||
+      !actions.has((body as { action?: string }).action || "")
+    )
+      return null
+    return body as { action: "archive_permanent" | "archive_expiring" | "delete" }
+  } catch {
+    return null
+  }
+}
 const completionStatus = (code: string) => {
   if (code === "ENTRY_NOT_FOUND") return 404
   if (code === "STORAGE_OR_CREDENTIAL_UNAVAILABLE" || code === "UPSTREAM_UNCERTAIN") return 503
@@ -34,34 +64,23 @@ export function createCompletionHandler(
       if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json"))
         return json("INVALID_INPUT", 415)
       if (!requestId(request.headers.get("idempotency-key"))) return json("INVALID_INPUT", 400)
+      const id = entryId(match[1])
+      if (!id) return json("INVALID_INPUT", 400)
+      const length = Number(request.headers.get("content-length") || "0")
+      if (!Number.isSafeInteger(length) || length > maxBodyBytes) return json("INVALID_INPUT", 413)
+      const body = await completionBody(request)
+      if (!body) return json("INVALID_INPUT", 400)
       try {
-        const length = Number(request.headers.get("content-length") || "0")
-        if (!Number.isSafeInteger(length) || length > maxBodyBytes) return json("INVALID_INPUT", 413)
-        const raw = await request.text()
-        if (new TextEncoder().encode(raw).length > maxBodyBytes) return json("INVALID_INPUT", 413)
-        const body: unknown = JSON.parse(raw)
-        if (
-          !body ||
-          typeof body !== "object" ||
-          Array.isArray(body) ||
-          Object.keys(body).length !== 1 ||
-          !actions.has((body as { action?: string }).action || "")
-        )
-          return json("INVALID_INPUT", 400)
         const session = await requireBrowserSession(request, env, trust)
         requireBrowserRequestProtection(request, env, session)
-        const binding = await bindings.getById(decodeURIComponent(match[1]))
+        const binding = await bindings.getById(id)
         const scopes = await trust.scopes(session.principalKey)
         if (!binding) {
           // Delete removes the binding, but an authorized same-key replay remains safe.
           for (const scopeId of scopes) {
             const prior = await bindings.operation(scopeId, request.headers.get("idempotency-key")!)
-            if (prior?.entry_id !== decodeURIComponent(match[1])) continue
-            if (
-              prior.kind === "delete" &&
-              (body as { action: string }).action === "delete" &&
-              prior.status === "succeeded"
-            )
+            if (prior?.entry_id !== id) continue
+            if (prior.kind === "delete" && body.action === "delete" && prior.status === "succeeded")
               return new Response(null, { status: 204 })
             return json("REQUEST_CONFLICT", 409)
           }
@@ -73,7 +92,7 @@ export function createCompletionHandler(
           {
             entryId: binding.id,
             requestId: request.headers.get("idempotency-key")!,
-            action: (body as { action: "archive_permanent" | "archive_expiring" | "delete" }).action,
+            action: body.action,
           },
         )
         if (result.ok && "deleted" in result) return new Response(null, { status: 204 })

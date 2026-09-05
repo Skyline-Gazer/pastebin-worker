@@ -8,23 +8,42 @@ Do not begin a dependent item from an unmerged prior Phase branch.
 
 ## 1. Phase 8.1 — Batch Mode shell and separate selection controls
 
-- [ ] After this artifact-update PR and Phase 7 are merged, refresh and verify
+- [x] After this artifact-update PR and Phase 7 are merged, refresh and verify
       clean `downstream/main`; create the dedicated 8.1 feature branch.
-- [ ] Inspect the Active-list owner and Phase 6 managed completion control;
+- [x] Inspect the Active-list owner and Phase 6 managed completion control;
       record the exact current visible eligible Active set before implementation.
-- [ ] Write RED-first frontend tests for Batch Mode entry/exit, fresh empty
+- [x] Write RED-first frontend tests for Batch Mode entry/exit, fresh empty
       transient selection, BatchSelector visibility only in mode, separate
       accessible labels/markup/handlers, and pointer/keyboard selection.
-- [ ] Add RED negative tests that selecting never checks Markdown, opens the
+- [x] Add RED negative tests that selecting never checks Markdown, opens the
       single-entry chooser, changes lifecycle/Archive/Paste data, or makes a
       request; retain nested-task and fenced-code literal regressions.
-- [ ] Implement only frontend-local Batch Mode state, compact toggle/exit, and
+- [x] Implement only frontend-local Batch Mode state, compact toggle/exit, and
       structurally separate BatchSelector; do not persist selection, add a
       Worker/shared API contract, or add a fixture result.
-- [ ] Record GREEN/REFACTOR/REGRESSION evidence; run focused frontend,
+- [x] Record GREEN/REFACTOR/REGRESSION evidence; run focused frontend,
       type/format/build, and relevant Phase 5–7 regression checks; document
       limitations without claiming unrun checks pass; obtain current-HEAD CI
       and AI Review Bot Phase Review Gate before merge.
+
+### Phase 8.1 implementation evidence — 2026-09-05
+
+- **Visible eligible set:** the approved fixture Active view currently contains
+  only `active-fixture`; the shell renders its BatchSelector only while local
+  Batch Mode is on. Phase 8.2 owns broader visible-set derivation/pruning.
+- **RED:** `node_modules/.bin/vitest run --config
+downstream/addons/feishu/frontend/vitest.config.ts
+downstream/addons/feishu/frontend/App.spec.tsx` failed 2 new tests before
+  implementation because `Enter Batch Mode` did not exist.
+- **GREEN:** the same focused command passed: 23 tests.
+- **REFACTOR:** extracted `BatchModeToggle` and `BatchSelector` components so
+  selection has distinct markup, label, and handler from managed completion.
+- **REGRESSION:** `node_modules/.bin/vitest run --config
+downstream/addons/feishu/frontend/vitest.config.ts` passed (2 files, 28
+  tests); frontend and Add-on type checks, focused formatting, and the frontend
+  production build passed. No Worker, shared contract, fixture result, or
+  network behavior was changed. Current-HEAD CI and the AI Review Bot review
+  remain required before merge.
 
 ## 2. Phase 8.2 — visible-set selection and interaction lock
 

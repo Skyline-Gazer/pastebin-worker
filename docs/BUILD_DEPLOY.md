@@ -178,7 +178,33 @@ modified by this downstream phase.
 
 ## 9. Rollback
 
-Rollback should select a previous downstream release tag/commit and rebuild/redeploy from its pinned manifest.
+Use the non-production reconstruction/revalidation rehearsal before an
+owner-controlled production handoff:
+
+```bash
+downstream/scripts/release-rollback-rehearsal.sh \
+  --tag fixture-nonprod-rollback-prior --provenance <retained-provenance.json>
+```
+
+The command accepts only an existing tag, resolves it to a commit, checks out
+that revision in a disposable worktree, and runs that revision's candidate gate.
+It therefore reads the tagged manifest, patch series, Add-on, and scripts—not
+the caller's dirty checkout—and reports the clean ordered replay, both target
+results, provenance comparison, selected SHA, and `DEPLOY_CLAIM=no`. It never
+deploys, provisions credentials, or mutates a tag.
+
+For this first downstream release cycle, owner decision 2026-09-06 option 2
+authorizes the local-only tag prefix `fixture-nonprod-rollback-prior` (more
+generally `fixture-nonprod-*`). That prefix cannot match the protected
+production discovery pattern `downstream-vYYYY.MM.DD.N`; this is a
+**FIRST-RELEASE EXCEPTION**, not evidence that a production rollback was
+performed. There is no genuine prior production release tag in this cycle.
+
+The next real release cycle MUST rerun the rehearsal with an actual immutable
+prior `downstream-v*` tag. Production rollback/deploy remains a separate,
+owner-authorized handoff using separately provisioned Pastebin and Add-on
+credentials. A failed rehearsal or deployment receives no automatic repair,
+rollback, generated-tree edit, or success claim.
 
 Do not roll back by manually editing the generated integration tree or trying to reverse individual patch commits in production.
 

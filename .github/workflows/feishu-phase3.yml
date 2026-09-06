@@ -12,6 +12,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
@@ -27,3 +28,12 @@ jobs:
       - run: pnpm exec tsc --noEmit -p downstream/addons/feishu/tsconfig.json
       - run: pnpm exec vitest run --config downstream/addons/feishu/vitest.config.js
       - run: pnpm exec vite build --config downstream/addons/feishu/vite.config.js
+      - run: downstream/tests/release-candidate.test.sh
+      # git am during assembly needs a local committer identity on Actions runners.
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      # Assembly smoke on the exact pinned inputs; independent target failure/block
+      # coverage lives in the fixture above. Default target commands remain for
+      # local/full gates and need a dependency-populated patched worktree.
+      - run: PASTEBIN_CHECK_COMMAND=true ADDON_CHECK_COMMAND=true downstream/scripts/release-candidate.sh

@@ -43,6 +43,12 @@ Configuration changes that affect behavior SHOULD still get executable validatio
 
 This is the canonical TDD-evidence specification. `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.9 references it rather than duplicating it.
 
+Release rollback rehearsal coverage is local-only: it must select an existing
+tag, use its committed inputs, replay cleanly, check both targets, compare safe
+provenance, and report `DEPLOY_CLAIM=no`. The first-release fixture exception
+and mandatory next-cycle real-tag rehearsal are documented in
+[`BUILD_DEPLOY.md`](BUILD_DEPLOY.md#9-rollback).
+
 ## 2. Markdown tests
 
 Required:

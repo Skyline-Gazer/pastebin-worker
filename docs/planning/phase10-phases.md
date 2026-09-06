@@ -137,17 +137,21 @@ changing their product, API, lifecycle, browser-trust, or webhook contracts.
   operational, and Phase 10 docs; wire residual risks/runbook boundaries.
   Do not redeploy production, push/create tags, provision credentials, reset
   data, operate queue/DLQ, or automatically repair/roll back anything.
-- **Dependencies:** Phase 10.3 is merged and `downstream/main` is refreshed;
-  a pre-existing immutable prior downstream tag is available in the controlled
-  fixture/rehearsal environment. If none is available, STOP for owner direction
-  rather than inventing one.
+- **Dependencies:** Phase 10.3 is merged and `downstream/main` is refreshed.
+  Owner decision 2026-09-06 option 2 authorizes this first-cycle-only isolated
+  `fixture-nonprod-*` rehearsal in place of the prior STOP for a missing
+  production tag. It is a **FIRST-RELEASE EXCEPTION**, not production rollback
+  evidence. The next real release cycle MUST rehearse against an actual,
+  immutable `downstream-v*` tag; never fabricate one from the current tip.
 - **Inputs:** Phase 10 SPEC §§3.5–3.6 and 3.10–3.12; `docs/BUILD_DEPLOY.md`
   §§8–10; `docs/PATCH_AND_UPSTREAM.md` §§7–13; `docs/SECURITY.md`; `docs/TESTING.md`
   §§11–14; Phase 10.1–10.3 merged artifacts.
 - **Deliverables:** non-production rollback-rehearsal command/harness and
   fixtures, selected-input/per-target safe report, updated operator/release
   documentation, and Phase 10 residual-risk register/review record.
-- **Acceptance criteria:** rehearsal starts only from an existing immutable tag,
+- **Acceptance criteria:** rehearsal starts only from an existing immutable tag
+  (a `fixture-nonprod-*` tag only under the documented first-release exception,
+  otherwise a protected `downstream-v…` tag),
   loads that tag's committed manifest/series/Add-on, replays cleanly, rebuilds/
   rechecks both targets, and records selected tag/SHA/provenance; a failed stage
   cannot claim success; production rollback/deploy remains an owner-authorized,
@@ -160,7 +164,8 @@ changing their product, API, lifecycle, browser-trust, or webhook contracts.
 - **Expected branch type:** `build/phase10-rollback-docs` from refreshed
   `downstream/main` after 10.3.
 - **Expected PR target:** `downstream/main`.
-- **Risks:** accidentally treating a branch as rollback authority, asserting a
+- **Risks:** accidentally treating a branch as rollback authority, treating a
+  fixture as production evidence, asserting a
   deployment occurred when it did not, availability of no prior tag, or letting
   docs normalize a production operation that needs owner approval.
 - **Exit criteria:** rehearsal evidence shows pass or safely reported failure;

@@ -8,16 +8,16 @@ from an unmerged predecessor.
 
 ## NEXT — Phase 10.1: Pinned release assembly and independent target gate
 
-- [ ] After this artifact-update PR merges, refresh and verify clean/current
+- [x] After this artifact-update PR merges, refresh and verify clean/current
       `downstream/main`; inspect actual release manifest, series, scripts,
       workflows, and target commands before creating `build/phase10-release-gate`.
-- [ ] Write RED fixture tests for dirty checkout, malformed/noncommit manifest
+- [x] Write RED fixture tests for dirty checkout, malformed/noncommit manifest
       pin, comments/blanks, unsafe/duplicate/missing entries, unlisted patch
       ignored, exact sequential replay, first-failure cleanup, and absence of
       any `--3way` release path.
-- [ ] Write RED candidate tests proving a failed or blocked patched-Pastebin or
+- [x] Write RED candidate tests proving a failed or blocked patched-Pastebin or
       Add-on check prevents candidate success, tag eligibility, and deploy claim.
-- [ ] Implement the smallest downstream-only exact-pin, clean-worktree,
+- [x] Implement the smallest downstream-only exact-pin, clean-worktree,
       fail-closed series/replay and independent-target gate; do not edit a
       generated tree, enable deploy/tag mutation, or modify upstream-owned code
       or existing upstream workflows.
@@ -92,6 +92,19 @@ Documentation-only §10.5 artifact update: TDD is N/A for this commit.
 RED/GREEN/REFACTOR/REGRESSION evidence is mandatory and must be recorded with
 each Phase 10 implementation PR; do not claim an unrun or sandbox-blocked check
 passed.
+
+### Phase 10.1 working evidence (local, pre-review)
+
+- Fixture command: `downstream/tests/release-candidate.test.sh` — PASS.
+  Harness `pass()` avoids `pipefail`+`grep -q` SIGPIPE by writing output then grepping.
+  It exercises intentional dirty, malformed/noncommit, duplicate, unsafe,
+  missing, replay-failure cleanup, target-failure, and target-blocked cases,
+  plus ordered comments/blank-aware replay and unlisted-patch exclusion.
+- REFACTOR: `git diff --check` — PASS.
+- REGRESSION and target defaults remain pending for the final current HEAD;
+  no tag/deploy operation was performed.
+- CI workflow wiring for the fixture + assembly smoke is prepared locally but
+  blocked on GitHub `workflow` scope to push `.github/workflows/feishu-phase3.yml`.
 
 ### Regression and review
 

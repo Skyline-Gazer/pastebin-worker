@@ -55,6 +55,34 @@ export type DispositionReporter = (event: {
   operationCorrelationId?: string
 }) => Promise<boolean>
 
+// Queue disposition data can become a DLQ record, alert, or release-visible
+// operational report. Keep that boundary limited to protocol-owned codes and
+// generated correlation IDs; never forward a thrown/upstream detail.
+const dispositionCodes = new Set([
+  "ENTRY_NOT_FOUND",
+  "INVALID_INPUT",
+  "MANAGED_TASK_AMBIGUOUS",
+  "MUTATION_CONFLICT",
+  "OPERATOR_RECONCILIATION_REQUIRED",
+  "OUTCOME_OBSERVED_OPERATOR_CONFIRMATION_REQUIRED",
+  "RECONCILIATION_REQUIRED",
+  "REQUEST_CONFLICT",
+  "STORAGE_OR_CREDENTIAL_UNAVAILABLE",
+  "UPSTREAM_INVALID",
+  "UPSTREAM_REJECTED",
+  "UPSTREAM_UNCERTAIN",
+  "VERSION_CONFLICT",
+])
+function dispositionCode(code: unknown): string {
+  return typeof code === "string" && dispositionCodes.has(code) ? code : "UNAVAILABLE"
+}
+function dispositionCorrelationId(value: unknown): string | undefined {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    ? value
+    : undefined
+}
+
 class WebhookError extends Error {
   constructor(
     readonly code: string,
@@ -392,9 +420,9 @@ export async function consumeFeishuMessages(
     const accepted =
       !!report &&
       (await report({
-        code: result.code,
+        code: dispositionCode(result.code),
         correlationId: item.correlationId,
-        operationCorrelationId: result.correlationId,
+        operationCorrelationId: dispositionCorrelationId(result.correlationId),
       }))
     if (accepted) message.ack()
     else message.retry()

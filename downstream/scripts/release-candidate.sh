@@ -48,9 +48,17 @@ for rel in "${PATCHES[@]}"; do
   git -C "$WORKTREE" am --committer-date-is-author-date "$ROOT/downstream/patches/$rel" || fail "Patch replay failed at: downstream/patches/$rel. Do not repair this generated worktree."
 done
 run_target() {
-  local name="$1" cwd="$2" command="$3"
+  local name="$1" cwd="$2" command="$3" output
   if [[ -z "$command" ]]; then echo "TARGET_${name}=blocked" >&2; fail "$name checks are not configured."; fi
-  if (cd "$cwd" && bash -c "$command"); then echo "TARGET_${name}=passed"; else echo "TARGET_${name}=failed" >&2; fail "$name checks failed."; fi
+  output="$(mktemp "$TMPROOT/${name,,}.XXXXXX")"
+  if (cd "$cwd" && bash -c "$command") >"$output" 2>&1; then
+    rm -f "$output"
+    echo "TARGET_${name}=passed"
+  else
+    rm -f "$output"
+    echo "TARGET_${name}=failed" >&2
+    fail "$name checks failed."
+  fi
 }
 PASTEBIN_CHECK_COMMAND="${PASTEBIN_CHECK_COMMAND-$ROOT/node_modules/.bin/prettier -c . && $ROOT/node_modules/.bin/eslint . && $ROOT/node_modules/.bin/tsc --noEmit && $ROOT/node_modules/.bin/vitest run && $ROOT/node_modules/.bin/wrangler deploy --dry-run --outdir=dist}"
 ADDON_CHECK_COMMAND="${ADDON_CHECK_COMMAND-$ROOT/node_modules/.bin/prettier -c . && $ROOT/node_modules/.bin/eslint . && $ROOT/node_modules/.bin/tsc --noEmit -p tsconfig.json && $ROOT/node_modules/.bin/vitest run --config vitest.config.js && $ROOT/node_modules/.bin/vite build --config vite.config.js}"

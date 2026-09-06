@@ -46,17 +46,17 @@ from an unmerged predecessor.
 
 ## 3. Phase 10.3 — Versioned provenance and protected release-tag eligibility
 
-- [ ] Only after 10.2 merges, refresh `downstream/main`; inspect the merged
+- [x] Only after 10.2 merges, refresh `downstream/main`; inspect the merged
       candidate outcome and sentinel seams before creating
       `build/phase10-provenance-tag`.
-- [ ] Write RED deterministic provenance tests for schema version, exact input
+- [x] Write RED deterministic provenance tests for schema version, exact input
       SHAs, explicit tag state, ordered patch SHA-256s, assembled refs,
       per-target statuses, explicit unavailable IDs, retention failure, and
       sentinel/raw-error absence.
-- [ ] Write RED protected-tag tests for naming, clean validated commit matching,
+- [x] Write RED protected-tag tests for naming, clean validated commit matching,
       collision/mismatch/dirty/unvalidated rejection, and proof that PR CI
       cannot create/push tags or deploy.
-- [ ] Implement the smallest versioned artifact, retention contract, guarded
+- [x] Implement the smallest versioned artifact, retention contract, guarded
       eligibility validation, and least-privilege downstream-only CI wiring;
       do not create/push a tag, deploy, provision credentials, or make
       provenance an authorization source.
@@ -122,6 +122,22 @@ downstream/addons/feishu/tests/webhook.spec.ts` — PASS (39). Plus prettier/esl
 - REFACTOR: `git diff --check` — PASS.
 - REGRESSION: `bash downstream/tests/release-candidate.test.sh` — PASS. Current-HEAD
   CI remains pending; no live Paste, deploy, tag, or queue/DLQ replay was performed.
+
+### Phase 10.3 working evidence (local, pre-review)
+
+- RED: `bash downstream/tests/phase10-provenance-tag.test.sh` — observed failure
+  before implementation because `release-provenance.sh` was absent.
+- GREEN: `bash downstream/tests/phase10-provenance-tag.test.sh` — PASS. It covers
+  deterministic schema/input/hash/order/assembled refs, explicit pre-tag/null
+  IDs, retention failure, sentinel absence, name/collision/mismatch/dirty/
+  unvalidated refusal, and PR-workflow no-tag/no-deploy assertions.
+- REFACTOR: `bash -n` on the two release scripts and fixture plus `git diff
+--check` — PASS.
+- REGRESSION: `bash downstream/tests/release-candidate.test.sh`, `bash
+downstream/tests/phase10-secret-observables.test.sh`, and the new fixture —
+  PASS. Prettier on changed Markdown, source-only Add-on ESLint, Add-on `tsc
+--noEmit`, and Vite build — PASS. No tag was created/pushed and no deployment
+  occurred; current-HEAD CI and AI Review Bot review remain pending.
 
 ### Regression and review
 

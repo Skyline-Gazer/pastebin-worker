@@ -147,6 +147,35 @@ upstream commit
 
 Do not call a release reproducible if these inputs are not recorded.
 
+### Candidate provenance and protected tag eligibility
+
+`downstream/scripts/release-provenance.sh --output <safe-path>` runs the
+non-deploy candidate gate and retains a schema-versioned JSON evidence record
+only after both targets pass. Version 1 records the exact upstream/downstream
+commits, `downstreamTag: null` plus `tagState: "not-created"` for a candidate,
+the ordered patch paths and SHA-256 values, assembled HEAD/tree, per-target
+check statuses, and explicit `null` artifact/deployment identifiers when none
+are available. It does not copy target command output into provenance.
+
+Candidate provenance is evidence, never authorization. CI must retain candidate
+artifacts for at least 30 days. The final provenance for an approved immutable
+release tag must be retained with that tagged release record for the life of
+the release. If publication/retention fails, the candidate fails closed and
+cannot be described as reproducible or eligible.
+
+`downstream/scripts/release-tag-eligibility.sh --tag downstream-vYYYY.MM.DD.N
+--provenance <safe-path>` is validation only. It refuses malformed names, a
+dirty checkout, an existing tag collision, provenance that does not match the
+current commit/assembled result, or a candidate that does not independently
+pass again. It never creates, pushes, retargets, or deletes a tag, and it does
+not deploy. An authorized release actor remains responsible for any later,
+separately approved annotated tag mutation.
+
+Pull-request workflows use read-only validation and must not run tag mutation
+or deployment commands. This repository keeps that assertion executable in
+`downstream/tests/phase10-provenance-tag.test.sh`; no existing workflow is
+modified by this downstream phase.
+
 ## 9. Rollback
 
 Rollback should select a previous downstream release tag/commit and rebuild/redeploy from its pinned manifest.

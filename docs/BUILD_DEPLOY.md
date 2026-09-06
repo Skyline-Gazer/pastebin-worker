@@ -115,6 +115,22 @@ deploy patched Pastebin and Add-on separately
 
 CI may split the two build targets into parallel jobs after common manifest/patch validation.
 
+### Candidate gate
+
+`downstream/scripts/release-candidate.sh` is the downstream-only, non-deploy
+candidate gate. It rejects a dirty checkout; schema-validates the exact
+manifest pin; reads only nonblank, noncomment series entries; rejects unsafe,
+duplicate, or missing paths; and creates a fresh detached worktree for ordered
+`git am` replay. It removes that worktree on every exit, including the first
+replay failure.
+
+The command runs separately named `PASTEBIN` and `ADDON` checks. Its default
+checks use the repository-local tool binaries; CI may provide equivalent
+commands through `PASTEBIN_CHECK_COMMAND` and `ADDON_CHECK_COMMAND`. A failed
+or blocked target prints `CANDIDATE_STATUS=failed`, `TAG_ELIGIBLE=no`, and
+`DEPLOY_CLAIM=no`. Only both passing checks print `CANDIDATE_STATUS=passed`.
+The command has no tag-creation or deploy operation.
+
 ## 8. Release provenance
 
 Generate a machine-readable record containing at least:

@@ -10,6 +10,7 @@ import { Credentials } from "../worker/credentials"
 import { PasteClient } from "../worker/paste-client"
 import { BindingStore, type Operation } from "../worker/store"
 import { EntryService } from "../worker/service"
+import { BatchLifecycleCoordinator } from "../worker/batch"
 
 const db = (env as unknown as { DB: D1Database }).DB
 const context = { scopeId: "scope-a" }
@@ -51,6 +52,75 @@ beforeEach(async () => {
 })
 
 describe("persistent internal entry services", () => {
+  it("keeps one mocked Paste authoritative across update, lifecycle, batch, restore, and absence reconciliation", async () => {
+    const { service, store, transport } = await setup()
+    const first = await service.createEntry(context, { ...input, content: "- [ ] one" })
+    if (!first.ok) throw new Error("create failed")
+    const updated = await service.updateContent(context, {
+      entryId: first.entry.id,
+      requestId: "phase10-update",
+      expectedVersion: first.entry.version,
+      content: "- [ ] updated",
+    })
+    expect(updated).toMatchObject({ ok: true, entry: { pasteName: first.entry.pasteName, expiresAt: null } })
+    expect(transport.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1)
+    expect(transport.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1)
+
+    const timed = await service.completeEntry(context, {
+      entryId: first.entry.id,
+      requestId: "phase10-archive-timed",
+      action: "archive_expiring",
+    })
+    expect(timed).toMatchObject({ ok: true, entry: { retentionMode: "timed", expiresAt: "2030-01-02T03:04:05.000Z" } })
+    const restored = await service.restoreEntry(context, { entryId: first.entry.id, requestId: "phase10-restore" })
+    expect(restored).toMatchObject({
+      ok: true,
+      entry: { visibility: "active", retentionMode: "permanent", expiresAt: null },
+    })
+
+    const archived = await service.createEntry(context, {
+      recordKey: "phase10-absent",
+      requestId: "phase10-absent-create",
+      content: "- [ ] absent",
+    })
+    if (!archived.ok) throw new Error("create failed")
+    await service.completeEntry(context, {
+      entryId: archived.entry.id,
+      requestId: "phase10-archive-permanent",
+      action: "archive_permanent",
+    })
+    transport.mockResolvedValueOnce(new Response(null, { status: 404 }))
+    expect(await service.reconcileArchivedAbsence(context, { entryId: archived.entry.id })).toEqual({
+      ok: true,
+      absent: true,
+    })
+    expect(await store.get(context.scopeId, archived.entry.id)).toBeNull()
+
+    const batchA = await service.createEntry(context, {
+      recordKey: "phase10-batch-a",
+      requestId: "phase10-batch-a-create",
+      content: "- [ ] batch a",
+    })
+    const batchB = await service.createEntry(context, {
+      recordKey: "phase10-batch-b",
+      requestId: "phase10-batch-b-create",
+      content: "- [ ] batch b",
+    })
+    if (!batchA.ok || !batchB.ok) throw new Error("batch setup failed")
+    const batch = await new BatchLifecycleCoordinator(store, store, service).execute(
+      { ids: [batchA.entry.id, "missing-entry", batchB.entry.id], action: "delete" },
+      { principalKey: "phase10-principal" },
+      [context.scopeId],
+      "phase10-batch-delete",
+    )
+    expect(batch.result).toMatchObject({ requested: 3, succeeded: 2, failed: 1 })
+    expect(batch.result.results).toContainEqual(
+      expect.objectContaining({ id: "missing-entry", code: "ENTRY_UNAVAILABLE" }),
+    )
+    expect(await store.get(context.scopeId, batchA.entry.id)).toBeNull()
+    expect(await store.get(context.scopeId, batchB.entry.id)).toBeNull()
+  })
+
   it("persists additive batch evidence without coupling it to a binding lifetime", async () => {
     const { store } = await setup()
     const batch = await store.reserveBatch({

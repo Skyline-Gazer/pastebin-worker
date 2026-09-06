@@ -30,16 +30,16 @@ from an unmerged predecessor.
 - [ ] Only after 10.1 merges, refresh `downstream/main`; inspect its merged
       check interfaces and the actual Phase 5–9 Add-on/Worker test seams before
       creating `test/phase10-integration-security`.
-- [ ] Write RED local/mock integration tests for create/repeated update on one
+- [x] Write RED local/mock integration tests for create/repeated update on one
       Paste, archive/delete, mixed batch, backend `expiresAt`, Restore, and
       missing/expired reconciliation without a live Paste or second body store.
-- [ ] Write RED raw webhook tests for valid delivery, invalid rejection before
+- [x] Write RED raw webhook tests for valid delivery, invalid rejection before
       effects, same-event duplicate/concurrent delivery, and uncertain queue/
       storage/upstream handling that retains the existing retry/DLQ boundary.
-- [ ] Write RED sentinel-absence tests for responses, stable errors, logs/
+- [x] Write RED sentinel-absence tests for responses, stable errors, logs/
       telemetry, webhook/queue records, reports, annotations, artifacts, and
       provenance; use only safe test sentinels.
-- [ ] Add the smallest deterministic harnesses/tests necessary; preserve Phase
+- [x] Add the smallest deterministic harnesses/tests necessary; preserve Phase
       5–9 APIs, lifecycle, browser trust, server-only secrets, and no automatic
       DLQ replay. Record actual TDD evidence and focused/Phase 5–9 regressions,
       then complete current-HEAD CI and AI Review Bot review before merge.
@@ -105,6 +105,23 @@ passed.
   no tag/deploy operation was performed.
 - CI workflow wiring for the fixture + assembly smoke is prepared locally but
   blocked on GitHub `workflow` scope to push `.github/workflows/feishu-phase3.yml`.
+
+### Phase 10.2 working evidence (local, pre-review)
+
+- RED: `downstream/addons/feishu/tests/webhook.spec.ts` adds a disposition-report
+  sentinel case for the prior forwarding of an untrusted failure code and operation
+  correlation ID. Codex sandbox hit `listen EPERM` on `127.0.0.1` before collection;
+  orchestrator re-ran focused Vitest outside that sandbox.
+- GREEN: `bash downstream/tests/phase10-secret-observables.test.sh` — PASS. It
+  proves target-command output containing the safe sentinel is not emitted by the
+  candidate report while stable target/candidate statuses remain visible.
+- GREEN: `node_modules/.bin/vitest run --config downstream/addons/feishu/vitest.config.js
+downstream/addons/feishu/tests/service.spec.ts
+downstream/addons/feishu/tests/webhook.spec.ts` — PASS (39). Plus prettier/eslint/
+  `tsc --noEmit -p downstream/addons/feishu/tsconfig.json`.
+- REFACTOR: `git diff --check` — PASS.
+- REGRESSION: `bash downstream/tests/release-candidate.test.sh` — PASS. Current-HEAD
+  CI remains pending; no live Paste, deploy, tag, or queue/DLQ replay was performed.
 
 ### Regression and review
 

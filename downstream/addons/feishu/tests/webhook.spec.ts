@@ -323,6 +323,29 @@ describe("Feishu webhook ingress", () => {
     ).toBe(415)
   })
 
+  it("gives concurrent raw retries one stable create identity while preserving queue acknowledgement semantics", async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    const handler = createFeishuWebhookHandler(env)
+    const envelope = { encrypt: await encrypted(event()) }
+    const [firstRequest, secondRequest] = await Promise.all([
+      signedRequest(envelope, env),
+      signedRequest(envelope, env),
+    ])
+    const [first, second] = await Promise.all([handler.fetch(firstRequest), handler.fetch(secondRequest)])
+    expect([first.status, second.status]).toEqual([200, 200])
+    expect(send).toHaveBeenCalledTimes(2)
+    const identities = send.mock.calls.map((call) => {
+      const item = call[0] as { requestId: string; recordKey: string }
+      return [item.requestId, item.recordKey]
+    })
+    expect(identities[0]).toEqual(identities[1])
+  })
+
   it("handles encrypted challenges without signature or Queue publication", async () => {
     const send = vi.fn()
     const env: FeishuWebhookEnvironment = {
@@ -367,6 +390,44 @@ describe("Feishu webhook ingress", () => {
 })
 
 describe("Feishu Queue consumer", () => {
+  it("never forwards untrusted failure details or operation identifiers to the disposition reporter", async () => {
+    const sentinel = "PHASE10_SAFE_SENTINEL_NOT_A_SECRET"
+    const reported: unknown[] = []
+    await consumeFeishuMessages(
+      {
+        messages: [
+          {
+            body: {
+              schema: "feishu.message-create.v1" as const,
+              scopeId: "scope",
+              recordKey: "record",
+              requestId: "request",
+              sourceMessageId: "source",
+              content: "body",
+              correlationId: "queue-correlation",
+            },
+            ack: vi.fn(),
+            retry: vi.fn(),
+          },
+        ],
+      },
+      {
+        createEntry: vi.fn().mockResolvedValue({
+          ok: false,
+          code: `upstream error ${sentinel}`,
+          retryable: false,
+          correlationId: sentinel,
+        }),
+      },
+      (event) => {
+        reported.push(event)
+        return Promise.resolve(true)
+      },
+      true,
+    )
+    expect(JSON.stringify(reported)).not.toContain(sentinel)
+  })
+
   it("acks success, retries transient failures, and preserves permanent or ambiguous work for DLQ without a durable sink", async () => {
     const actions: string[] = []
     const item = {

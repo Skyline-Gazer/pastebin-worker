@@ -1,8 +1,8 @@
 # Phase 10 — Release hardening PHASE decomposition
 
-Status: CONTINUOUS-MODE PHASE READY AFTER INTERNAL CONSISTENCY REVIEW / IMPLEMENTATION AUTHORIZED under D-030 after this §10.5 artifact-update PR merges.
+Status: CONTINUOUS-MODE PHASE 10 COMPLETE under D-030 (implementation PRs #46–#49 merged).
 
-Implementation has NOT started. This decomposition implements the approved
+This decomposition implemented the approved
 [Phase 10 PLAN](phase10-plan.md) and [Phase 10 SPEC](phase10-spec.md) after
 Phases 5–9. It hardens downstream release evidence and validation without
 changing their product, API, lifecycle, browser-trust, or webhook contracts.

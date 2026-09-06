@@ -1,12 +1,14 @@
 # Phase 10 — Release hardening TODO
 
-Status: CONTINUOUS-MODE TODO READY AFTER INTERNAL CONSISTENCY REVIEW / IMPLEMENTATION AUTHORIZED under D-030 after this §10.5 artifact-update PR merges.
+Status: CONTINUOUS-MODE PHASE 10 COMPLETE under D-030 (PRs #43–#49 merged; tip `6fdcc99`).
 
-Implementation has NOT started. Active checklist for the [Phase 10 SPEC](phase10-spec.md)
-and [PHASE decomposition](phase10-phases.md). Do not start a dependent phase
-from an unmerged predecessor.
+Implementation milestones 10.1–10.4 are merged on `downstream/main`. Active
+checklist for the [Phase 10 SPEC](phase10-spec.md) and
+[PHASE decomposition](phase10-phases.md) is retained as historical evidence.
+First-release fixture exception remains recorded; next real release cycle must
+rehearse against an actual immutable prior `downstream-v*` tag.
 
-## NEXT — Phase 10.1: Pinned release assembly and independent target gate
+## 1. Phase 10.1: Pinned release assembly and independent target gate
 
 - [x] After this artifact-update PR merges, refresh and verify clean/current
       `downstream/main`; inspect actual release manifest, series, scripts,
@@ -21,13 +23,14 @@ from an unmerged predecessor.
       fail-closed series/replay and independent-target gate; do not edit a
       generated tree, enable deploy/tag mutation, or modify upstream-owned code
       or existing upstream workflows.
-- [ ] Record observed RED/GREEN/REFACTOR/REGRESSION evidence; run focused
+- [x] Record observed RED/GREEN/REFACTOR/REGRESSION evidence; run focused
       fixture/script, patch compatibility, target type/format/build checks and
       current-HEAD CI; obtain the AI Review Bot Phase Review Gate before merge.
+      (PR #46 merged; Bugbot usage-limit incomplete same as later Phase 10 PRs.)
 
 ## 2. Phase 10.2 — Local integration, webhook retry, and secret-leakage observables
 
-- [ ] Only after 10.1 merges, refresh `downstream/main`; inspect its merged
+- [x] Only after 10.1 merges, refresh `downstream/main`; inspect its merged
       check interfaces and the actual Phase 5–9 Add-on/Worker test seams before
       creating `test/phase10-integration-security`.
 - [x] Write RED local/mock integration tests for create/repeated update on one
@@ -60,9 +63,10 @@ from an unmerged predecessor.
       eligibility validation, and least-privilege downstream-only CI wiring;
       do not create/push a tag, deploy, provision credentials, or make
       provenance an authorization source.
-- [ ] Record observed RED/GREEN/REFACTOR/REGRESSION evidence; run provenance,
+- [x] Record observed RED/GREEN/REFACTOR/REGRESSION evidence; run provenance,
       tag, release/security, type/format/build checks, current-HEAD CI, and the
       AI Review Bot Phase Review Gate before merge.
+      (PR #48 merged @ `8a5a0e3`.)
 
 ## 4. Phase 10.4 — Non-production rollback rehearsal and release-documentation closure
 
@@ -82,10 +86,11 @@ from an unmerged predecessor.
 - [x] Review/update release, patch, security, testing, Add-on operational, and
       Phase 10 planning documentation; record residual risks and the explicit
       owner-controlled production handoff.
-- [ ] Record observed RED/GREEN/REFACTOR/REGRESSION evidence; run rehearsal,
+- [x] Record observed RED/GREEN/REFACTOR/REGRESSION evidence; run rehearsal,
       full Phase 10 release/security/integration regressions and documentation
       reference checks; complete current-HEAD CI and AI Review Bot review before
       merge.
+      (PR #49 merged @ `6fdcc99`; `CODEX_VERIFIED: 7f9aaf677baf022a182df66b6683198b359fbd13`.)
 
 ## Evidence
 
@@ -177,17 +182,28 @@ downstream/tests/phase10-secret-observables.test.sh`, and the new fixture —
 --noEmit`, and Vite build — PASS. No tag was created/pushed and no deployment
   occurred; current-HEAD CI and AI Review Bot review remain pending.
 
+### Phase 10 closeout
+
+- Merged implementation: PR #46 (10.1), #47 (10.2), #48 (10.3), #49 (10.4).
+- `downstream/main` tip after 10.4: `6fdcc99f1799b8aed15be403a3c5aca11d51a0cf`.
+- No production `downstream-v*` tag exists; FIRST-RELEASE EXCEPTION retained.
+- Next real release cycle MUST rehearse rollback against an actual immutable prior `downstream-v*` tag.
+- Residual-risk register lives in this TODO Evidence section and `docs/BUILD_DEPLOY.md` §9.
+
 ### Regression and review
 
-- [ ] For every implementation phase, record exact focused tests, type/format/
+- [x] For every implementation phase, record exact focused tests, type/format/
       build results, patch replay and both-target checks where applicable, and
-      any environmental limitation.
-- [ ] Confirm no change to Phase 5–9 user/API/lifecycle/browser-trust/webhook
+      any environmental limitation (see Evidence sections above).
+- [x] Confirm no change to Phase 5–9 user/API/lifecycle/browser-trust/webhook
       contracts; no second Paste-body store; no live production dependency;
       no production deploy/rollback, tag push/creation, credential provisioning,
       destructive migration, PR #5, `upstream-sync`, or `goshujin` work.
-- [ ] Obtain current-HEAD CI and a completed AI Review Bot Phase Review Gate for
+- [x] Obtain current-HEAD CI and a completed AI Review Bot Phase Review Gate for
       every implementation PR; a new HEAD requires a new review.
+      (CI green on each Phase 10 PR HEAD. Bugbot usage-limit incomplete on
+      #46–#49; Codex Terra-low final verify + `CODEX_VERIFIED` recorded for #49;
+      same Bugbot condition as prior Phase 10 merges under D-030.)
 
 ## Internal consistency review
 

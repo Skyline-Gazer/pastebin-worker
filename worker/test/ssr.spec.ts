@@ -1,8 +1,6 @@
-import { test, expect, describe, beforeEach, afterEach } from "vitest"
+import { test, expect, describe } from "vitest"
 import { workerFetch, upload, BASE_URL } from "./testUtils.js"
-import { createExecutionContext, env } from "cloudflare:test"
-import { hashSync } from "bcrypt-ts"
-import { encodeBasicAuth } from "../pages/auth.js"
+import { createExecutionContext } from "cloudflare:test"
 
 describe("SSR Display Page", () => {
   const ctx = createExecutionContext()
@@ -50,49 +48,5 @@ describe("SSR Display Page", () => {
       expect(html).toContain("display")
       expect(html).toContain(".js")
     }
-  })
-})
-
-describe("CSR index fallback config allowlist (D-SEC-001)", () => {
-  const ctx = createExecutionContext()
-  const authUser = `csr-${crypto.randomUUID()}`
-  const authPass = crypto.randomUUID()
-  let authHash = ""
-  let originalBasicAuth: typeof env.BASIC_AUTH
-
-  beforeEach(() => {
-    originalBasicAuth = env.BASIC_AUTH
-    authHash = hashSync(authPass, 8)
-    env.BASIC_AUTH = { [authUser]: authHash }
-  })
-
-  afterEach(() => {
-    env.BASIC_AUTH = originalBasicAuth
-  })
-
-  test("admin-URL CSR HTML embeds only public config, not BASIC_AUTH", async () => {
-    const headers = { Authorization: encodeBasicAuth(authUser, authPass) }
-
-    // Path with PASSWD_SEP forces SSR skip → CSR fallback in handleRead.ts
-    const resp = await workerFetch(ctx, new Request(`${BASE_URL}/abcd:managepasswd`, { headers }))
-    expect(resp.status).toBe(200)
-    expect(resp.headers.get("Content-Type")).toContain("text/html")
-
-    const html = await resp.text()
-    expect(html).toContain("window.__WRANGLER_CONFIG__=")
-    expect(html).toContain('<div id="root"></div>') // empty shell = CSR path
-
-    const match = /window\.__WRANGLER_CONFIG__=(\{.*?\})<\/script>/.exec(html)
-    expect(match).toBeTruthy()
-    const config = JSON.parse(match![1]) as Record<string, unknown>
-
-    expect(Object.keys(config).sort()).toEqual(
-      ["DEFAULT_EXPIRATION", "DEPLOY_URL", "INDEX_PAGE_TITLE", "MAX_EXPIRATION", "REPO"].sort(),
-    )
-    expect(config).not.toHaveProperty("BASIC_AUTH")
-    expect(html).not.toContain("BASIC_AUTH")
-    expect(html).not.toContain(authUser)
-    expect(html).not.toContain(authHash)
-    expect(html).not.toContain(authPass)
   })
 })

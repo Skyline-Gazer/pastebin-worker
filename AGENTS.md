@@ -217,12 +217,14 @@ Dependabot maintenance targeting `downstream/main` may be evaluated and integrat
 
 Every non-trivial change — product development, upstream patch development, patch promotion, build/release, security, and governance — MUST pass the Phase Review Gate described in `docs/CHANGE_CONTEXT_AND_REVIEW.md` §9 before its PR is merged.
 
+Kody Code Review remains a quorum-pool reviewer. Kody Business Logic / Business Rules Validation is permanently retired and MUST NOT be triggered, polled, classified, used as evidence or guidance, or included in settlement/quorum calculations. Automatically produced historical or future Business Logic output has no governance authority.
+
 1. Every non-trivial implementation PR MUST pass the AI Review Bot Phase Review Gate before merge.
 2. Review MUST cover the latest/current PR HEAD; ANY commit that changes the HEAD SHA invalidates the previous gate and requires a new completed review of the new HEAD.
 3. ANY commit that changes the PR HEAD SHA after review invalidates the previous AI-review gate and requires a new completed review of the new HEAD (mechanical rule).
 4. All actionable findings MUST be fixed or explicitly dispositioned; a CRITICAL/BLOCKING finding that will not be fixed MUST NOT be dispositioned by a coding agent alone under any label (`FALSE_POSITIVE`, `NOT_APPLICABLE`, `WRONG_TASK_ASSOCIATION`, `DEFERRED`, or equivalent).
 5. Blocking findings cannot be self-overridden by a coding agent; only the owner may override, explicitly and recorded.
-6. Bot failure/unavailability is NOT a PASS vote; the gate fails closed for votes. Settlement of normally triggered channels MUST complete before 2-of-3 reviewer-pool quorum is calculated (`docs/CHANGE_CONTEXT_AND_REVIEW.md` §9.3.1–§9.3.5, §9.6). `CODEX_VERIFIED` is not merge-ready until CI PASS, settlement, and quorum are satisfied. One `SKIPPED_QUOTA` does not by itself require owner override when remaining quorum is still met.
+6. Bot failure/unavailability is NOT a PASS vote; the gate fails closed for votes. Settlement of normally triggered supported channels MUST complete before 2-of-3 reviewer-pool quorum is calculated (`docs/CHANGE_CONTEXT_AND_REVIEW.md` §9.3.1–§9.3.5, §9.6). `CODEX_VERIFIED` is not merge-ready until CI PASS, settlement, and quorum are satisfied. One `SKIPPED_QUOTA` does not by itself require owner override when remaining quorum is still met.
 7. Dependent next-phase work MUST start only after the required previous phase/PR is merged (with target branch refreshed).
 8. Large phases MAY be split; every constituent PR remains independently review-gated.
 9. Patch source PRs are review-only and MUST NOT merge into `upstream-sync`.

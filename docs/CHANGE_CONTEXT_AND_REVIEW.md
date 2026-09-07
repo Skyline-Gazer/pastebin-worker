@@ -362,7 +362,7 @@ Deterministic required CI is mandatory for the exact current HEAD. CI is not a q
 
 **Quorum pool** (exactly these three members):
 
-- A: Kody
+- A: Kody Code Review
 - B: Cursor Bugbot
 - C: Codex Final Verify
 
@@ -370,7 +370,7 @@ Normal merge requires ALL of:
 
 - required CI = PASS for the exact HEAD;
 - at least 2 of 3 quorum-pool members = PASS;
-- at least one of those PASS votes is from an independent PR reviewer (Kody or Bugbot).
+- at least one of those PASS votes is from an independent PR reviewer (Kody Code Review or Bugbot).
 
 Only one PASS does not satisfy quorum.
 
@@ -391,6 +391,12 @@ Greptile is a `SUPPLEMENTAL_REVIEWER`, not a quorum-pool vote.
 - Actionable Greptile findings MUST be handled under §9.4 / §9.3.5.
 - Greptile PASS does not substitute for a Kody, Bugbot, or Codex Final Verify quorum vote.
 - Greptile quota/unavailability (`SKIPPED_QUOTA` / `SKIPPED_UNAVAILABLE` / `FAILED_INFRA`) does not by itself destroy a valid 2-of-3 quorum, unless the owner separately requires Greptile for that PR.
+
+#### Retired Kody Business Logic channel
+
+Kody Business Logic / Business Rules Validation is not part of this workflow. It MUST NOT be triggered, polled, waited on, classified, included in settlement records, used as implementation guidance, or counted as merge/release evidence. If it runs automatically, ignore its output completely. Historical results remain historical artifacts only.
+
+This retirement does not affect Kody Code Review, which remains quorum-pool member A.
 
 ### 9.3.5 Completed FINDINGS always block
 
@@ -420,27 +426,7 @@ Rules:
 - Non-blocking findings MAY be deferred only with an explicit rationale.
 - A coding agent MUST NOT grant itself an override for a blocking finding.
 - Where practical, reference the bot finding/comment/review URL or identifier in the fix commit's `Refs:` section.
-- A **non-blocking** finding caused solely by validating the PR against an unrelated or stale task MAY be dispositioned `WRONG_TASK_ASSOCIATION` / `NOT_APPLICABLE` under §9.4.1 with evidence; that disposition MUST NOT dismiss a separate genuine code finding. If the same finding is CRITICAL/BLOCKING, owner approval is still required.
-
-### 9.4.1 Business-rule task association
-
-Business-rules validation MUST use the task actually associated with the PR, following this deterministic precedence (highest first):
-
-1. explicit owner-approved decision, SPEC, or requirement referenced by the PR;
-2. explicit PR body scope, acceptance criteria, and Refs;
-3. explicitly linked active implementation Issue;
-4. other active Issues discovered by tooling;
-5. closed, stale, or superseded historical Issues.
-
-A lower source MUST NOT override a higher source. If levels 1–3 materially conflict, STOP for the owner. Stale, closed, or superseded issues MAY be historical context only; they MUST NOT become the controlling task when a higher source exists.
-
-Before treating a scope-mismatch finding as a code defect, apply this precedence and verify whether the discovered task is stale or superseded.
-
-A finding caused solely by validating an unrelated PR against an unrelated or stale task MAY be dispositioned `WRONG_TASK_ASSOCIATION` / `NOT_APPLICABLE` with evidence: the controlling source from the precedence list, why the validator task is stale or unrelated, and confirmation that the finding cites no independent code defect. If that finding is CRITICAL/BLOCKING, owner approval is still required (§9.4).
-
-Wrong task association MUST NOT dismiss a separate genuine code finding on the same review.
-
-Closing stale handoff/issues is preferred over leaving them as active validator context.
+- A **non-blocking** finding from an active reviewer caused solely by unrelated or stale task context MAY be dispositioned `WRONG_TASK_ASSOCIATION` / `NOT_APPLICABLE` with evidence; that disposition MUST NOT dismiss a separate genuine code finding. If the same finding is CRITICAL/BLOCKING, owner approval is still required.
 
 ### 9.5 Fix → push → re-review loop
 
@@ -455,7 +441,7 @@ After actionable findings:
 
 ### 9.6 Bot unavailable / failed / quota exhausted
 
-The review gate fails closed for **PASS votes**. Kody unavailable or quota exhausted ≠ PASS. Cursor Bugbot unavailable or quota exhausted ≠ PASS. No bot comments ≠ PASS. Empty ≠ PASS. "No actionable findings" inferred from tool failure ≠ PASS.
+The review gate fails closed for **PASS votes**. Kody Code Review unavailable or quota exhausted ≠ PASS. Cursor Bugbot unavailable or quota exhausted ≠ PASS. No bot comments ≠ PASS. Empty ≠ PASS. "No actionable findings" inferred from tool failure ≠ PASS.
 
 A finished availability failure MAY be recorded as `SKIPPED_QUOTA`, `SKIPPED_UNAVAILABLE`, or `FAILED_INFRA`. That completes settlement for that channel (§9.3.1) but casts no PASS vote. Do not treat SKIPPED_* as APPROVED.
 

@@ -265,7 +265,13 @@ actionable findings?
         ↓
 required CI/checks green on current HEAD
         ↓
-merge authorization
+review settlement complete for exact HEAD (§9.3.1–§9.3.2)
+        ↓
+reviewer-pool quorum satisfied (§9.3.3)
+        ↓
+CODEX_VERIFIED only if merge-ready
+        ↓
+merge authorization (repeat settlement + quorum immediately before merge)
         ↓
 merge
         ↓
@@ -286,13 +292,109 @@ A PR passes the AI Review Gate only when ALL of the following are true:
 
 1. The configured AI Review Bot actually completed a review.
 2. The completed review corresponds to the current/latest PR HEAD SHA, or there is equivalent reliable evidence that the latest code was reviewed.
-3. Every actionable finding has been either fixed in code/tests/docs and pushed, or explicitly dispositioned as false-positive / not-applicable / intentionally-deferred with evidence and rationale.
+3. Every actionable finding has been either fixed in code/tests/docs and pushed, or explicitly dispositioned under §9.4. CRITICAL/BLOCKING findings that will not be fixed require recorded owner approval regardless of disposition label.
 4. ANY commit that changes the PR HEAD SHA after the last completed bot review invalidates the previous gate and requires a new completed review of the new HEAD (mechanical rule, see §9.2).
 5. Required CI/status checks for the current HEAD are green.
 6. There are no unresolved blocking findings.
 7. The PR acceptance criteria and validation evidence are current.
+8. Every normally triggered review channel for the exact current HEAD has reached a terminal disposition (§9.3.1). Settlement MUST complete before quorum is calculated (§9.3.3). `CODEX_VERIFIED` is not a substitute for this condition.
+9. Reviewer-pool quorum is satisfied for that exact HEAD (§9.3.3).
 
-A stale bot review MUST NOT authorize merge. "The bot posted no comments" is NOT a definition of passed.
+A stale bot review MUST NOT authorize merge. "The bot posted no comments" is NOT a definition of passed. An empty response, inferred "no findings" from tool failure, or a still-running check is not a PASS vote.
+
+### 9.3.1 Review settlement rule
+
+`CODEX_VERIFIED` is a final verification marker, not a substitute for unfinished independent review. `CODEX_VERIFIED` MUST NOT be issued as merge-ready until every normally triggered review channel for the exact current HEAD has reached a terminal state. Quorum MUST NOT be calculated until that settlement is complete. PR #54 is the motivating post-merge race: merge followed `CODEX_VERIFIED` while required review output was still settling.
+
+Do not skip a still-running reviewer because two others have already passed.
+
+**Non-terminal** (settlement INCOMPLETE; wait):
+
+- REQUESTED;
+- QUEUED;
+- RUNNING;
+- PENDING;
+- IN_PROGRESS;
+- no comment yet while a check or bot is still running;
+- validator still running;
+- check still queued or in progress.
+
+**Terminal** (settlement may complete). Terminal is not the same as PASS:
+
+- PASS / APPROVED — a PASS vote;
+- FINDINGS — completed reviewer with unresolved actionable findings; terminal for settlement, **not** a PASS vote (§9.3.5);
+- completed findings fully dispositioned under §9.4 — after fix or allowed disposition, the channel may become a PASS or remain a non-vote according to the disposition;
+- SKIPPED_QUOTA / SKIPPED_UNAVAILABLE / FAILED_INFRA — availability or infrastructure failure; terminal for settlement, **not** a PASS vote;
+- explicit OWNER OVERRIDE recorded according to §9.7.
+
+The following are **NOT** a PASS vote (some are non-terminal; some are terminal non-votes):
+
+- pending / no comment yet / empty in-progress response (non-terminal);
+- SKIPPED_QUOTA, SKIPPED_UNAVAILABLE, FAILED_INFRA, timeout, provider error, empty completed failure (terminal non-vote);
+- skipped while still actually running (treat as non-terminal, not as SKIPPED_*);
+- "no actionable findings" inferred from tool failure (not a PASS).
+
+If one review component completed while another spawned for the same PR is still running, the gate remains INCOMPLETE.
+
+Availability failures MAY terminate as SKIPPED_QUOTA, SKIPPED_UNAVAILABLE, or FAILED_INFRA. Those states complete settlement for that channel but cast no PASS vote. Do NOT require an owner override merely because **one** quorum-pool reviewer is quota-exhausted if the remaining quorum is still satisfied under §9.3.3. Owner override is required when quorum itself cannot be met, or for unresolved CRITICAL/BLOCKING dispositions (§9.4, §9.7).
+
+This subsection does not replace §9.3 conditions 1–7. Settlement is the prerequisite for quorum (§9.3.3) and for a merge-ready `CODEX_VERIFIED`.
+
+### 9.3.2 Exact-head + review-settlement procedure
+
+Immediately before posting `CODEX_VERIFIED`:
+
+1. re-read the actual PR HEAD SHA;
+2. verify all required CI is terminal SUCCESS for that exact HEAD (§9.3 condition 5);
+3. inspect the complete PR review / comment / check timeline;
+4. identify every normally triggered review subsystem, including supplemental reviewers (§9.3.4);
+5. verify each reached a terminal disposition (§9.3.1);
+6. verify no channel is still REQUESTED / QUEUED / RUNNING / PENDING / IN_PROGRESS;
+7. verify no unresolved actionable finding remains (§9.3.5, §9.4);
+8. only then calculate reviewer-pool quorum (§9.3.3);
+9. only then post `CODEX_VERIFIED` if CI PASS, settlement complete, and quorum satisfied.
+
+Immediately before merge: repeat this settlement-then-quorum check. `CODEX_VERIFIED` does not freeze GitHub state. If a new bot review, comment, or check appears after `CODEX_VERIFIED` but before merge, it MUST be evaluated before merge. If merge happens before a required bot output settles, that is a gate process failure and MUST be retrospectively audited before release.
+
+### 9.3.3 Resilient reviewer pool (2 of 3)
+
+Deterministic required CI is mandatory for the exact current HEAD. CI is not a quorum-pool member.
+
+**Quorum pool** (exactly these three members):
+
+- A: Kody
+- B: Cursor Bugbot
+- C: Codex Final Verify
+
+Normal merge requires ALL of:
+
+- required CI = PASS for the exact HEAD;
+- at least 2 of 3 quorum-pool members = PASS;
+- at least one of those PASS votes is from an independent PR reviewer (Kody or Bugbot).
+
+Only one PASS does not satisfy quorum.
+
+Examples:
+
+- A PASS, B PASS, C SKIPPED_QUOTA → satisfied (2 of 3; independent reviewers A and B).
+- A PASS, C PASS, B SKIPPED_UNAVAILABLE → satisfied (2 of 3; independent reviewer A).
+- B PASS, C PASS, A SKIPPED_QUOTA → satisfied (2 of 3; independent reviewer B).
+- C PASS, A SKIPPED_QUOTA, B SKIPPED_QUOTA → **not** satisfied (only one PASS; no independent PR reviewer).
+- A PASS, B still RUNNING, C PASS → settlement INCOMPLETE; do not compute quorum.
+- A PASS, B FINDINGS, C PASS → **not** satisfied until B's findings are fixed or owner-dispositioned. FINDINGS is not a PASS vote; quorum arithmetic MUST NOT bypass a reviewer that found a problem.
+
+### 9.3.4 Greptile = SUPPLEMENTAL_REVIEWER
+
+Greptile is a `SUPPLEMENTAL_REVIEWER`, not a quorum-pool vote.
+
+- If Greptile is triggered or still running, wait until it settles before calculating quorum (§9.3.1).
+- Actionable Greptile findings MUST be handled under §9.4 / §9.3.5.
+- Greptile PASS does not substitute for a Kody, Bugbot, or Codex Final Verify quorum vote.
+- Greptile quota/unavailability (`SKIPPED_QUOTA` / `SKIPPED_UNAVAILABLE` / `FAILED_INFRA`) does not by itself destroy a valid 2-of-3 quorum, unless the owner separately requires Greptile for that PR.
+
+### 9.3.5 Completed FINDINGS always block
+
+A completed reviewer that reported actionable findings is `FINDINGS`, not `PASS`. Settlement may be terminal for that channel, but quorum arithmetic MUST NOT treat FINDINGS as a PASS vote and MUST NOT ignore that reviewer because two other pool members passed. Fix or disposition the findings first (§9.4). CRITICAL/BLOCKING findings that will not be fixed require owner approval (§9.7).
 
 ### 9.4 Finding disposition
 
@@ -302,6 +404,7 @@ Conceptual categories:
 fixed
 false_positive
 not_applicable
+wrong_task_association
 deferred_non_blocking
 blocking_unresolved
 ```
@@ -313,10 +416,31 @@ Rules:
 - If a bot suggestion conflicts with an approved architecture/product requirement, do not silently change the requirement to satisfy the bot; document the conflict and escalate to the owner when necessary.
 - Merely marking a GitHub conversation "resolved" is not sufficient evidence.
 - Blocking findings MUST be fixed or explicitly owner-overridden before merge.
-- A blocking/critical finding MUST NOT be dispositioned as false-positive or not-applicable solely by a coding agent. If it will not be fixed, the owner/human must approve that disposition, and the approval MUST be recorded in the PR.
+- CRITICAL/BLOCKING findings that will **not** be fixed require OWNER approval regardless of disposition label. A coding agent MUST NOT solely disposition a CRITICAL/BLOCKING finding as `FALSE_POSITIVE`, `NOT_APPLICABLE`, `WRONG_TASK_ASSOCIATION`, `DEFERRED`, or any equivalent. `WRONG_TASK_ASSOCIATION` does not bypass owner authority.
 - Non-blocking findings MAY be deferred only with an explicit rationale.
 - A coding agent MUST NOT grant itself an override for a blocking finding.
 - Where practical, reference the bot finding/comment/review URL or identifier in the fix commit's `Refs:` section.
+- A **non-blocking** finding caused solely by validating the PR against an unrelated or stale task MAY be dispositioned `WRONG_TASK_ASSOCIATION` / `NOT_APPLICABLE` under §9.4.1 with evidence; that disposition MUST NOT dismiss a separate genuine code finding. If the same finding is CRITICAL/BLOCKING, owner approval is still required.
+
+### 9.4.1 Business-rule task association
+
+Business-rules validation MUST use the task actually associated with the PR, following this deterministic precedence (highest first):
+
+1. explicit owner-approved decision, SPEC, or requirement referenced by the PR;
+2. explicit PR body scope, acceptance criteria, and Refs;
+3. explicitly linked active implementation Issue;
+4. other active Issues discovered by tooling;
+5. closed, stale, or superseded historical Issues.
+
+A lower source MUST NOT override a higher source. If levels 1–3 materially conflict, STOP for the owner. Stale, closed, or superseded issues MAY be historical context only; they MUST NOT become the controlling task when a higher source exists.
+
+Before treating a scope-mismatch finding as a code defect, apply this precedence and verify whether the discovered task is stale or superseded.
+
+A finding caused solely by validating an unrelated PR against an unrelated or stale task MAY be dispositioned `WRONG_TASK_ASSOCIATION` / `NOT_APPLICABLE` with evidence: the controlling source from the precedence list, why the validator task is stale or unrelated, and confirmation that the finding cites no independent code defect. If that finding is CRITICAL/BLOCKING, owner approval is still required (§9.4).
+
+Wrong task association MUST NOT dismiss a separate genuine code finding on the same review.
+
+Closing stale handoff/issues is preferred over leaving them as active validator context.
 
 ### 9.5 Fix → push → re-review loop
 
@@ -331,7 +455,16 @@ After actionable findings:
 
 ### 9.6 Bot unavailable / failed / quota exhausted
 
-The review gate fails closed. If the AI Review Bot fails to run, times out, has quota/credit exhaustion, loses permissions, returns an infrastructure/workflow error, or does not actually review the latest HEAD, the AI Review Gate is INCOMPLETE. "No bot comments" MUST NOT be interpreted as approval. Do not merge automatically.
+The review gate fails closed for **PASS votes**. Kody unavailable or quota exhausted ≠ PASS. Cursor Bugbot unavailable or quota exhausted ≠ PASS. No bot comments ≠ PASS. Empty ≠ PASS. "No actionable findings" inferred from tool failure ≠ PASS.
+
+A finished availability failure MAY be recorded as `SKIPPED_QUOTA`, `SKIPPED_UNAVAILABLE`, or `FAILED_INFRA`. That completes settlement for that channel (§9.3.1) but casts no PASS vote. Do not treat SKIPPED_* as APPROVED.
+
+Do NOT require an owner override merely because one quorum-pool reviewer is quota-exhausted if remaining quorum is still satisfied under §9.3.3 (CI PASS, at least 2 of 3 PASS, and at least one independent PR-reviewer PASS). Owner override under §9.7 is required when:
+
+- reviewer-pool quorum itself cannot be met; or
+- a CRITICAL/BLOCKING finding will not be fixed and needs disposition.
+
+Do not merge automatically. `CODEX_VERIFIED` is not an owner override. Greptile unavailability is governed by §9.3.4 and does not by itself destroy a valid 2-of-3 quorum.
 
 ### 9.7 Owner override
 
@@ -342,17 +475,19 @@ Review override:
 Reason:
 Approved by:
 Reviewed HEAD SHA:
+Unavailable reviewer:
 Alternative validation performed:
 Known risk:
 ```
 
-Only the owner/human authority may approve such an override. A coding agent MUST NOT self-authorize it.
+Only the owner/human authority may approve such an override. A coding agent MUST NOT self-authorize it. Use override when quorum itself cannot be met, or for unresolved CRITICAL/BLOCKING dispositions. Do not use override merely because one quorum-pool reviewer is `SKIPPED_QUOTA` / `SKIPPED_UNAVAILABLE` / `FAILED_INFRA` if remaining quorum is still satisfied (§9.3.3, §9.6). Posting `CODEX_VERIFIED` without a required recorded override does not complete the gate.
 
 ### 9.8 Base branch movement and stale review
 
 Before merge:
 
 - required CI/checks MUST be valid for the current PR HEAD;
+- repeat the exact-head review-settlement check, then calculate quorum (§9.3.2–§9.3.3); `CODEX_VERIFIED` does not freeze later bot output;
 - if the target branch changed and repository policy requires the PR to be updated, update it safely;
 - conflict resolution or any material diff change requires validation again;
 - if the PR HEAD changes, AI Review Bot re-review is mandatory;

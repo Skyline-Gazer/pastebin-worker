@@ -90,15 +90,17 @@ downstream/scripts/check-patches.sh
 - [ ] All actionable findings are fixed or explicitly dispositioned.
 - [ ] Any HEAD change after the previous bot review was re-reviewed.
 - [ ] Required CI/status checks pass for the current HEAD.
-- [ ] No unresolved blocking findings remain.
+- [ ] Every normally triggered review channel for this exact HEAD has reached a terminal disposition (§9.3.1) before quorum is calculated.
+- [ ] Reviewer-pool quorum is satisfied: 2 of 3 (Kody / Bugbot / Codex Final Verify) PASS, including at least one independent PR reviewer (§9.3.3).
+- [ ] No unresolved FINDINGS remain; CRITICAL/BLOCKING dispositions have owner approval if not fixed (§9.3.5, §9.4).
 - [ ] Acceptance criteria and validation evidence are current.
 
 ### Review finding disposition
 
 <!-- Link/summarize findings that were not fixed and explain false-positive,
-not-applicable, or deferred-non-blocking rationale. Blocking/critical findings
-MUST NOT be dispositioned as false-positive / not-applicable by a coding agent
-alone; owner approval of that disposition must be recorded here. -->
+not-applicable, wrong-task-association, or deferred-non-blocking rationale.
+CRITICAL/BLOCKING findings MUST NOT be dispositioned under any label by a
+coding agent alone; owner approval of that disposition must be recorded here. -->
 
 ### Review override (only if explicitly approved by owner)
 
@@ -107,6 +109,7 @@ Review override:
 Reason:
 Approved by:
 Reviewed HEAD SHA:
+Unavailable reviewer:
 Alternative validation:
 Known risk:
 ```

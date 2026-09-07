@@ -217,7 +217,7 @@ Dependabot maintenance targeting `downstream/main` may be evaluated and integrat
 
 Every non-trivial change — product development, upstream patch development, patch promotion, build/release, security, and governance — MUST pass the Phase Review Gate described in `docs/CHANGE_CONTEXT_AND_REVIEW.md` §9 before its PR is merged.
 
-Kody Code Review remains a quorum-pool reviewer. Kody Business Logic / Business Rules Validation is permanently retired and MUST NOT be triggered, polled, classified, used as evidence or guidance, or included in settlement/quorum calculations. Automatically produced historical or future Business Logic output has no governance authority.
+Kody is permanently retired from downstream review governance. No Kody channel may be triggered, polled, awaited, classified, used as evidence or guidance, or included in settlement/quorum calculations. Automatically produced Kody output has no governance authority; historical output remains history only. The reviewer pool is Cursor Bugbot, Greptile, and Codex Final Verify.
 
 1. Every non-trivial implementation PR MUST pass the AI Review Bot Phase Review Gate before merge.
 2. Review MUST cover the latest/current PR HEAD; ANY commit that changes the HEAD SHA invalidates the previous gate and requires a new completed review of the new HEAD.

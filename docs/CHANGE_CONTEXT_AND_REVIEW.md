@@ -362,15 +362,15 @@ Deterministic required CI is mandatory for the exact current HEAD. CI is not a q
 
 **Quorum pool** (exactly these three members):
 
-- A: Kody Code Review
-- B: Cursor Bugbot
+- A: Cursor Bugbot
+- B: Greptile
 - C: Codex Final Verify
 
 Normal merge requires ALL of:
 
 - required CI = PASS for the exact HEAD;
 - at least 2 of 3 quorum-pool members = PASS;
-- at least one of those PASS votes is from an independent PR reviewer (Kody Code Review or Bugbot).
+- at least one of those PASS votes is from an independent PR reviewer (Cursor Bugbot or Greptile).
 
 Only one PASS does not satisfy quorum.
 
@@ -383,20 +383,18 @@ Examples:
 - A PASS, B still RUNNING, C PASS → settlement INCOMPLETE; do not compute quorum.
 - A PASS, B FINDINGS, C PASS → **not** satisfied until B's findings are fixed or owner-dispositioned. FINDINGS is not a PASS vote; quorum arithmetic MUST NOT bypass a reviewer that found a problem.
 
-### 9.3.4 Greptile = SUPPLEMENTAL_REVIEWER
+### 9.3.4 Greptile = PRIMARY_INDEPENDENT_REVIEWER
 
-Greptile is a `SUPPLEMENTAL_REVIEWER`, not a quorum-pool vote.
+Greptile is a primary independent reviewer and quorum-pool member B.
 
-- If Greptile is triggered or still running, wait until it settles before calculating quorum (§9.3.1).
+- Greptile MUST reach a terminal disposition before calculating quorum (§9.3.1).
 - Actionable Greptile findings MUST be handled under §9.4 / §9.3.5.
-- Greptile PASS does not substitute for a Kody, Bugbot, or Codex Final Verify quorum vote.
-- Greptile quota/unavailability (`SKIPPED_QUOTA` / `SKIPPED_UNAVAILABLE` / `FAILED_INFRA`) does not by itself destroy a valid 2-of-3 quorum, unless the owner separately requires Greptile for that PR.
+- Greptile PASS counts toward the 2-of-3 reviewer-pool quorum and satisfies the independent-reviewer requirement.
+- Greptile quota/unavailability (`SKIPPED_QUOTA` / `SKIPPED_UNAVAILABLE` / `FAILED_INFRA`) is a terminal non-vote. Bugbot plus Codex Final Verify may still satisfy quorum.
 
-#### Retired Kody Business Logic channel
+#### Retired Kody channels
 
-Kody Business Logic / Business Rules Validation is not part of this workflow. It MUST NOT be triggered, polled, waited on, classified, included in settlement records, used as implementation guidance, or counted as merge/release evidence. If it runs automatically, ignore its output completely. Historical results remain historical artifacts only.
-
-This retirement does not affect Kody Code Review, which remains quorum-pool member A.
+Kody is not part of this workflow. No Kody channel—including Code Review or Business Logic / Business Rules Validation—may be triggered, polled, waited on, classified, included in settlement records, used as implementation guidance, or counted as merge/release evidence. If Kody runs automatically, ignore its output completely. Historical results remain historical artifacts only.
 
 ### 9.3.5 Completed FINDINGS always block
 
@@ -441,7 +439,7 @@ After actionable findings:
 
 ### 9.6 Bot unavailable / failed / quota exhausted
 
-The review gate fails closed for **PASS votes**. Kody Code Review unavailable or quota exhausted ≠ PASS. Cursor Bugbot unavailable or quota exhausted ≠ PASS. No bot comments ≠ PASS. Empty ≠ PASS. "No actionable findings" inferred from tool failure ≠ PASS.
+The review gate fails closed for **PASS votes**. Cursor Bugbot unavailable or quota exhausted ≠ PASS. Greptile unavailable or quota exhausted ≠ PASS. No bot comments ≠ PASS. Empty ≠ PASS. "No actionable findings" inferred from tool failure ≠ PASS.
 
 A finished availability failure MAY be recorded as `SKIPPED_QUOTA`, `SKIPPED_UNAVAILABLE`, or `FAILED_INFRA`. That completes settlement for that channel (§9.3.1) but casts no PASS vote. Do not treat SKIPPED_* as APPROVED.
 
@@ -450,7 +448,7 @@ Do NOT require an owner override merely because one quorum-pool reviewer is quot
 - reviewer-pool quorum itself cannot be met; or
 - a CRITICAL/BLOCKING finding will not be fixed and needs disposition.
 
-Do not merge automatically. `CODEX_VERIFIED` is not an owner override. Greptile unavailability is governed by §9.3.4 and does not by itself destroy a valid 2-of-3 quorum.
+Do not merge automatically. `CODEX_VERIFIED` is not an owner override. Reviewer unavailability does not by itself destroy a valid 2-of-3 quorum when the other two members PASS and the independent-reviewer requirement is satisfied.
 
 ### 9.7 Owner override
 

@@ -90,9 +90,12 @@ downstream/scripts/check-patches.sh
 - [ ] All actionable findings are fixed or explicitly dispositioned.
 - [ ] Any HEAD change after the previous bot review was re-reviewed.
 - [ ] Required CI/status checks pass for the current HEAD.
-- [ ] Every normally triggered review channel for this exact HEAD has reached a terminal disposition (§9.3.1) before quorum is calculated.
-- [ ] Reviewer-pool quorum is satisfied: 2 of 3 (Kody Code Review / Bugbot / Codex Final Verify) PASS, including at least one independent PR reviewer (§9.3.3).
-- [ ] Kody Business Logic / Business Rules Validation was not manually triggered, awaited, classified, or used as review evidence; any automatically produced output was ignored (§9.3.4).
+- [ ] Cursor Bugbot reached a terminal disposition for the exact current HEAD.
+- [ ] Greptile reached a terminal disposition for the exact current HEAD.
+- [ ] Codex Final verified the exact current HEAD.
+- [ ] Reviewer-pool quorum is satisfied: 2 of 3 (Bugbot / Greptile / Codex Final Verify) PASS (§9.3.3).
+- [ ] At least one PASS is from an independent reviewer: Bugbot or Greptile.
+- [ ] No Kody output was used as review, implementation, settlement, quorum, or merge evidence (§9.3.4).
 - [ ] No unresolved FINDINGS remain; CRITICAL/BLOCKING dispositions have owner approval if not fixed (§9.3.5, §9.4).
 - [ ] Acceptance criteria and validation evidence are current.
 

@@ -249,22 +249,22 @@ Continuous execution does not authorize silent SPEC drift, new product scope, or
 
 The owner message that authorized this decision also authorizes this governance documentation change as a policy bootstrap. The rule applies prospectively after this policy merges. Details and operational requirements are in `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.1.1 and `AGENTS.md` §18.
 
-## D-031 — Retire Kody Business Logic from review governance
+## D-031 — Retire Kody from review governance
 
 ### Decision
 
-Kody Business Logic / Business Rules Validation is permanently removed from downstream development and review governance because repeated wrong-task associations and stale-code analysis make it unsuitable as a trusted signal.
+Kody is permanently removed from downstream development and review governance. This includes Kody Code Review and Kody Business Logic / Business Rules Validation. Repeated unreliable task/context behavior and the owner's decision to remove Kody entirely make it unsuitable as a trusted signal.
 
-It MUST NOT be triggered, polled, waited on, classified, included in reviewer settlement, used as implementation guidance or evidence, or counted in merge/release decisions. Automatically produced output is ignored. Historical output remains history only.
+No Kody channel may be triggered, polled, waited on, classified, included in reviewer settlement, used as implementation guidance or evidence, or counted in merge/release decisions. Automatically produced output is ignored. Historical output remains history only.
 
 ### Current review architecture
 
 - GitHub Actions is authoritative deterministic validation.
-- The 2-of-3 quorum pool is Kody Code Review, Cursor Bugbot, and Codex Final Verify.
-- At least one PASS must come from the independent reviewers: Kody Code Review or Cursor Bugbot.
-- Greptile remains supplemental; its actionable findings still require normal handling.
-- Kody Code Review remains active and is unaffected by this decision.
+- The 2-of-3 quorum pool is Cursor Bugbot, Greptile, and Codex Final Verify.
+- At least one PASS must come from the independent reviewers: Cursor Bugbot or Greptile.
+- Greptile is a primary independent reviewer and quorum member; its actionable findings require normal handling.
+- Codex Final runs only after CI, Bugbot, and Greptile are terminal and all actionable findings are resolved.
 
 ### Consequences
 
-Review settlement and persistent status records no longer contain a Kody Business Logic field or state. No retry, timeout, non-vote, override, or other merge-gate handling applies because the retired channel is outside the workflow entirely.
+Review settlement and persistent status records contain no Kody field or state. No retry, timeout, non-vote, override, or other merge-gate handling applies because Kody is outside the workflow entirely.

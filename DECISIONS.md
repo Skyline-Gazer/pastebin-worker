@@ -248,3 +248,23 @@ Within that delegation, work proceeds as: explicit owner authorization → PLAN 
 Continuous execution does not authorize silent SPEC drift, new product scope, or changes outside the delegated Phases 5–10. It must stop for a real owner decision on unresolved product ambiguity; work beyond the roadmap; security/API/trust-boundary changes outside the applicable SPEC; destructive migrations; production deployment; anything involving PR #5, `upstream-sync`, or a `goshujin` rewrite; bot-unavailable overrides or blocking-finding dispositions requiring owner authority; and change control that alters observable behavior, API, security, or acceptance criteria beyond the delegated roadmap/SPEC.
 
 The owner message that authorized this decision also authorizes this governance documentation change as a policy bootstrap. The rule applies prospectively after this policy merges. Details and operational requirements are in `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.1.1 and `AGENTS.md` §18.
+
+## D-031 — Retire Kody from review governance
+
+### Decision
+
+Kody is permanently removed from downstream development and review governance. This includes Kody Code Review and Kody Business Logic / Business Rules Validation. Repeated unreliable task/context behavior and the owner's decision to remove Kody entirely make it unsuitable as a trusted signal.
+
+No Kody channel may be triggered, polled, waited on, classified, included in reviewer settlement, used as implementation guidance or evidence, or counted in merge/release decisions. Automatically produced output is ignored. Historical output remains history only.
+
+### Current review architecture
+
+- GitHub Actions is authoritative deterministic validation.
+- The 2-of-3 quorum pool is Cursor Bugbot, Greptile, and Codex Final Verify.
+- At least one PASS must come from the independent reviewers: Cursor Bugbot or Greptile.
+- Greptile is a primary independent reviewer and quorum member; its actionable findings require normal handling.
+- Codex Final runs only after CI, Bugbot, and Greptile are terminal and all actionable findings are resolved.
+
+### Consequences
+
+Review settlement and persistent status records contain no Kody field or state. No retry, timeout, non-vote, override, or other merge-gate handling applies because Kody is outside the workflow entirely.

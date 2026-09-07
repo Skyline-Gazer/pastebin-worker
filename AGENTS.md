@@ -211,6 +211,8 @@ The downstream is actively curated, not a passive mirror. An upstream change is 
 10. Dependencies belonging only to downstream-owned code (`downstream/addons/feishu/` or downstream tooling) are normal downstream changes and MAY merge into `downstream/main`; they do NOT become upstream patches.
 11. Keep the patch stack curated: do not adopt a change downstream does not need, does not unblock, or whose maintenance burden is not justified, and do not keep a duplicate carried patch once official upstream includes an equivalent change.
 
+Dependabot maintenance targeting `downstream/main` may be evaluated and integrated into the maintained downstream distribution after full validation; `upstream-sync` remains official-upstream-only.
+
 ### 4.8 Mandatory AI Review Bot Phase Review Gate
 
 Every non-trivial change — product development, upstream patch development, patch promotion, build/release, security, and governance — MUST pass the Phase Review Gate described in `docs/CHANGE_CONTEXT_AND_REVIEW.md` §9 before its PR is merged.

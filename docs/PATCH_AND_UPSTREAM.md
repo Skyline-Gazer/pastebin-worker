@@ -157,6 +157,8 @@ Do NOT keep a duplicate downstream patch merely because it historically existed.
 
 ### 3.5 Dependabot policy
 
+Dependabot maintenance targeting `downstream/main` may be evaluated and integrated into the maintained downstream distribution after full validation; `upstream-sync` remains official-upstream-only.
+
 #### 3.5.1 Already merged by official upstream
 
 If official upstream merges the dependency update:

@@ -55,17 +55,19 @@ describe("SSR Display Page", () => {
 
 describe("CSR index fallback config allowlist (D-SEC-001)", () => {
   const ctx = createExecutionContext()
-  const authUser = "csr-secret-user"
-  const authPass = "csr-secret-pass-70"
+  const authUser = `csr-${crypto.randomUUID()}`
+  const authPass = crypto.randomUUID()
   let authHash = ""
+  let originalBasicAuth: typeof env.BASIC_AUTH
 
   beforeEach(() => {
+    originalBasicAuth = env.BASIC_AUTH
     authHash = hashSync(authPass, 8)
     env.BASIC_AUTH = { [authUser]: authHash }
   })
 
   afterEach(() => {
-    env.BASIC_AUTH = {}
+    env.BASIC_AUTH = originalBasicAuth
   })
 
   test("admin-URL CSR HTML embeds only public config, not BASIC_AUTH", async () => {

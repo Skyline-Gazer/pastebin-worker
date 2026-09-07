@@ -101,4 +101,26 @@ describe("basic auth", () => {
     expect(deleteResp.status).toStrictEqual(200)
     expect((await workerFetch(ctx, uploadResp1.url)).status).toStrictEqual(404)
   })
+
+  it("should not expose BASIC_AUTH in the admin CSR fallback", async () => {
+    const resp = await workerFetch(ctx, new Request(`${BASE_URL}/abcd:managepasswd`, { headers: authHeader }))
+    expect(resp.status).toBe(200)
+    expect(resp.headers.get("Content-Type")).toContain("text/html")
+
+    const html = await resp.text()
+    expect(html).toContain("window.__WRANGLER_CONFIG__=")
+    expect(html).toContain('<div id="root"></div>')
+
+    const match = /window\.__WRANGLER_CONFIG__=(\{.*?\})<\/script>/.exec(html)
+    expect(match).toBeTruthy()
+    const config = JSON.parse(match![1]) as Record<string, unknown>
+
+    expect(Object.keys(config).sort()).toEqual(
+      ["DEFAULT_EXPIRATION", "DEPLOY_URL", "INDEX_PAGE_TITLE", "MAX_EXPIRATION", "REPO"].sort(),
+    )
+    expect(config).not.toHaveProperty("BASIC_AUTH")
+    expect(html).not.toContain("BASIC_AUTH")
+    expect(html).not.toContain("user1")
+    expect(html).not.toContain(users.user1)
+  })
 })

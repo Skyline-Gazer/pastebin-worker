@@ -106,6 +106,16 @@ async function handleStaticPages(request: Request, env: Env, _: ExecutionContext
     // CSR fallback: dynamically generate empty HTML shell
     const { jsFile, cssPaths } = getAssetPaths(manifest, "index.html")
 
+    // Allowlist only public config fields (mirror SSR in worker/pages/index.ts).
+    // Never JSON.stringify(env) — Worker env may include BASIC_AUTH and other secrets.
+    const publicConfig = {
+      DEPLOY_URL: env.DEPLOY_URL,
+      REPO: env.REPO,
+      MAX_EXPIRATION: env.MAX_EXPIRATION,
+      DEFAULT_EXPIRATION: env.DEFAULT_EXPIRATION,
+      INDEX_PAGE_TITLE: env.INDEX_PAGE_TITLE,
+    }
+
     return new Response(
       `<!doctype html>
 <html lang="en">
@@ -118,7 +128,7 @@ ${renderCssLinks(cssPaths)}
 <script>
 ${DARK_MODE_SCRIPT}
 </script>
-<script>window.__WRANGLER_CONFIG__=${JSON.stringify(env)}</script>
+<script>window.__WRANGLER_CONFIG__=${JSON.stringify(publicConfig)}</script>
 </head>
 <body>
 <div id="root"></div>

@@ -222,7 +222,7 @@ Every non-trivial change — product development, upstream patch development, pa
 3. ANY commit that changes the PR HEAD SHA after review invalidates the previous AI-review gate and requires a new completed review of the new HEAD (mechanical rule).
 4. All actionable findings MUST be fixed or explicitly dispositioned; a blocking/critical finding MUST NOT be dispositioned as false-positive or not-applicable by a coding agent alone.
 5. Blocking findings cannot be self-overridden by a coding agent; only the owner may override, explicitly and recorded.
-6. Bot failure/unavailability is NOT approval; the gate fails closed.
+6. Bot failure/unavailability is NOT approval; the gate fails closed. `CODEX_VERIFIED` is not merge-ready until every required review channel for the exact current HEAD has reached a terminal disposition (`docs/CHANGE_CONTEXT_AND_REVIEW.md` §9.3.1–§9.3.2, §9.6).
 7. Dependent next-phase work MUST start only after the required previous phase/PR is merged (with target branch refreshed).
 8. Large phases MAY be split; every constituent PR remains independently review-gated.
 9. Patch source PRs are review-only and MUST NOT merge into `upstream-sync`.

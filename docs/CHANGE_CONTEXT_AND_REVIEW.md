@@ -265,7 +265,11 @@ actionable findings?
         ↓
 required CI/checks green on current HEAD
         ↓
-merge authorization
+review settlement complete for exact HEAD (§9.3.1–§9.3.2)
+        ↓
+CODEX_VERIFIED only if merge-ready
+        ↓
+merge authorization (repeat settlement immediately before merge)
         ↓
 merge
         ↓
@@ -291,8 +295,51 @@ A PR passes the AI Review Gate only when ALL of the following are true:
 5. Required CI/status checks for the current HEAD are green.
 6. There are no unresolved blocking findings.
 7. The PR acceptance criteria and validation evidence are current.
+8. Every configured/triggered required review channel for the exact current HEAD has reached a terminal disposition (§9.3.1). `CODEX_VERIFIED` is not a substitute for this condition.
 
-A stale bot review MUST NOT authorize merge. "The bot posted no comments" is NOT a definition of passed.
+A stale bot review MUST NOT authorize merge. "The bot posted no comments" is NOT a definition of passed. An empty, timed-out, quota-exhausted, skipped, or failed review is not a completed review (§9.6).
+
+### 9.3.1 Review settlement rule
+
+`CODEX_VERIFIED` is a final verification marker, not a substitute for unfinished independent review. `CODEX_VERIFIED` MUST NOT be issued as merge-ready until every configured/triggered required review channel for the exact current HEAD has reached a terminal state. PR #54 is the motivating post-merge race: merge followed `CODEX_VERIFIED` while required review output was still settling.
+
+**Terminal** means one of:
+
+- PASS / APPROVED;
+- completed findings fully dispositioned under §9.4;
+- explicit OWNER OVERRIDE recorded according to §9.7.
+
+The following are **NOT** a terminal PASS:
+
+- pending;
+- no comment yet;
+- empty response;
+- timeout;
+- quota exhausted;
+- provider error;
+- skipped;
+- validator still running;
+- check still queued or in progress;
+- "no actionable findings" inferred from tool failure.
+
+If one review component completed while another spawned for the same PR is still running, the gate remains INCOMPLETE.
+
+This subsection does not replace §9.3 conditions 1–7. It is the settlement requirement that must also be true before a merge-ready `CODEX_VERIFIED`.
+
+### 9.3.2 Exact-head + review-settlement procedure
+
+Immediately before posting `CODEX_VERIFIED`:
+
+1. re-read the actual PR HEAD SHA;
+2. verify all required CI is terminal SUCCESS for that exact HEAD (§9.3 condition 5);
+3. inspect the complete PR review / comment / check timeline;
+4. identify every configured/triggered review subsystem;
+5. verify each reached a terminal disposition (§9.3.1);
+6. verify no unresolved actionable finding remains (§9.4);
+7. verify no review is still pending or in progress;
+8. only then post `CODEX_VERIFIED`.
+
+Immediately before merge: repeat this settlement check. `CODEX_VERIFIED` does not freeze GitHub state. If a new bot review, comment, or check appears after `CODEX_VERIFIED` but before merge, it MUST be evaluated before merge. If merge happens before a required bot output settles, that is a gate process failure and MUST be retrospectively audited before release.
 
 ### 9.4 Finding disposition
 
@@ -302,6 +349,7 @@ Conceptual categories:
 fixed
 false_positive
 not_applicable
+wrong_task_association
 deferred_non_blocking
 blocking_unresolved
 ```
@@ -317,6 +365,17 @@ Rules:
 - Non-blocking findings MAY be deferred only with an explicit rationale.
 - A coding agent MUST NOT grant itself an override for a blocking finding.
 - Where practical, reference the bot finding/comment/review URL or identifier in the fix commit's `Refs:` section.
+- A finding caused solely by validating the PR against an unrelated or stale task MAY be dispositioned `WRONG_TASK_ASSOCIATION` / `NOT_APPLICABLE` under §9.4.1; that disposition MUST NOT dismiss a separate genuine code finding.
+
+### 9.4.1 Business-rule task association
+
+Business-rules validation MUST use the task actually associated with the PR: explicit PR refs, PR body scope, and active issue association. Before treating a scope-mismatch finding as a code defect, verify whether the discovered task is stale or superseded.
+
+A finding caused solely by validating an unrelated PR against an unrelated or stale task MAY be dispositioned `WRONG_TASK_ASSOCIATION` / `NOT_APPLICABLE` with evidence: the task actually associated with the PR, why the validator task is stale or unrelated, and confirmation that the finding cites no independent code defect.
+
+Wrong task association MUST NOT dismiss a separate genuine code finding on the same review.
+
+Closing stale handoff/issues is preferred over leaving them as active validator context.
 
 ### 9.5 Fix → push → re-review loop
 
@@ -331,7 +390,17 @@ After actionable findings:
 
 ### 9.6 Bot unavailable / failed / quota exhausted
 
-The review gate fails closed. If the AI Review Bot fails to run, times out, has quota/credit exhaustion, loses permissions, returns an infrastructure/workflow error, or does not actually review the latest HEAD, the AI Review Gate is INCOMPLETE. "No bot comments" MUST NOT be interpreted as approval. Do not merge automatically.
+The review gate fails closed. If a required review channel fails to run, times out, has quota/credit exhaustion, loses permissions, returns an infrastructure/workflow error, returns an empty response, is skipped, is still queued or in progress, or does not actually review the latest HEAD, that channel is NOT a PASS and the AI Review Gate is INCOMPLETE.
+
+This includes, without treating absence of output as success:
+
+- Kody unavailable or quota exhausted ≠ PASS;
+- Cursor Bugbot unavailable or quota exhausted ≠ PASS when Bugbot is a required review channel for the PR;
+- no bot comments ≠ PASS;
+- empty response ≠ PASS;
+- "no actionable findings" inferred from tool failure ≠ PASS.
+
+Do not merge automatically. Only an explicit owner override under §9.7 may permit merge when a required reviewer is unavailable. That override MUST record the reason, exact HEAD, unavailable reviewer, alternative validation, and known risk. `CODEX_VERIFIED` is not an owner override.
 
 ### 9.7 Owner override
 
@@ -342,17 +411,19 @@ Review override:
 Reason:
 Approved by:
 Reviewed HEAD SHA:
+Unavailable reviewer:
 Alternative validation performed:
 Known risk:
 ```
 
-Only the owner/human authority may approve such an override. A coding agent MUST NOT self-authorize it.
+Only the owner/human authority may approve such an override. A coding agent MUST NOT self-authorize it. An override is the only path that may permit merge when a required review channel is unavailable, quota-exhausted, empty, or otherwise non-terminal (§9.3.1, §9.6). Posting `CODEX_VERIFIED` without that recorded override does not complete the gate.
 
 ### 9.8 Base branch movement and stale review
 
 Before merge:
 
 - required CI/checks MUST be valid for the current PR HEAD;
+- repeat the exact-head review-settlement check (§9.3.2); `CODEX_VERIFIED` does not freeze later bot output;
 - if the target branch changed and repository policy requires the PR to be updated, update it safely;
 - conflict resolution or any material diff change requires validation again;
 - if the PR HEAD changes, AI Review Bot re-review is mandatory;

@@ -90,6 +90,7 @@ downstream/scripts/check-patches.sh
 - [ ] All actionable findings are fixed or explicitly dispositioned.
 - [ ] Any HEAD change after the previous bot review was re-reviewed.
 - [ ] Required CI/status checks pass for the current HEAD.
+- [ ] Every required review channel for this exact HEAD has reached a terminal disposition (§9.3.1).
 - [ ] No unresolved blocking findings remain.
 - [ ] Acceptance criteria and validation evidence are current.
 
@@ -107,6 +108,7 @@ Review override:
 Reason:
 Approved by:
 Reviewed HEAD SHA:
+Unavailable reviewer:
 Alternative validation:
 Known risk:
 ```

@@ -220,9 +220,9 @@ Every non-trivial change — product development, upstream patch development, pa
 1. Every non-trivial implementation PR MUST pass the AI Review Bot Phase Review Gate before merge.
 2. Review MUST cover the latest/current PR HEAD; ANY commit that changes the HEAD SHA invalidates the previous gate and requires a new completed review of the new HEAD.
 3. ANY commit that changes the PR HEAD SHA after review invalidates the previous AI-review gate and requires a new completed review of the new HEAD (mechanical rule).
-4. All actionable findings MUST be fixed or explicitly dispositioned; a blocking/critical finding MUST NOT be dispositioned as false-positive or not-applicable by a coding agent alone.
+4. All actionable findings MUST be fixed or explicitly dispositioned; a CRITICAL/BLOCKING finding that will not be fixed MUST NOT be dispositioned by a coding agent alone under any label (`FALSE_POSITIVE`, `NOT_APPLICABLE`, `WRONG_TASK_ASSOCIATION`, `DEFERRED`, or equivalent).
 5. Blocking findings cannot be self-overridden by a coding agent; only the owner may override, explicitly and recorded.
-6. Bot failure/unavailability is NOT approval; the gate fails closed. `CODEX_VERIFIED` is not merge-ready until every required review channel for the exact current HEAD has reached a terminal disposition (`docs/CHANGE_CONTEXT_AND_REVIEW.md` §9.3.1–§9.3.2, §9.6).
+6. Bot failure/unavailability is NOT a PASS vote; the gate fails closed for votes. Settlement of normally triggered channels MUST complete before 2-of-3 reviewer-pool quorum is calculated (`docs/CHANGE_CONTEXT_AND_REVIEW.md` §9.3.1–§9.3.5, §9.6). `CODEX_VERIFIED` is not merge-ready until CI PASS, settlement, and quorum are satisfied. One `SKIPPED_QUOTA` does not by itself require owner override when remaining quorum is still met.
 7. Dependent next-phase work MUST start only after the required previous phase/PR is merged (with target branch refreshed).
 8. Large phases MAY be split; every constituent PR remains independently review-gated.
 9. Patch source PRs are review-only and MUST NOT merge into `upstream-sync`.
@@ -728,6 +728,7 @@ Agents MUST NOT:
 - merge a PR that has not passed the latest-HEAD AI Review Gate;
 - treat "no bot comments" as bot approval;
 - self-override a blocking finding, or approve a bot-outage/blocking override without owner authorization;
+- disposition a CRITICAL/BLOCKING finding under `WRONG_TASK_ASSOCIATION` or any other label without recorded owner approval;
 - start dependent-phase work from an unmerged phase branch;
 - merge a patch source review-only PR into `upstream-sync`;
 - dismiss actionable bot findings without fixing or recording an owner-approved disposition.

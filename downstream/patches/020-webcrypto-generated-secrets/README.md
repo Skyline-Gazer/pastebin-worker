@@ -38,4 +38,4 @@ Exported patch:
 
 Provenance: downstream-identified fix; not external fork adoption. The source commit preserves the existing `genRandStr` alphabet and API, uses Web Crypto rejection sampling, and adds focused generator coverage. No unrelated randomness, callers, dependencies, or authentication architecture were changed.
 
-Validation: source PR CI PASS, Greptile PASS, Bugbot SKIPPED_QUOTA, Codex source review PASS; promotion validation requires the complete ordered patch series replay and assembled-source tests.
+Validation: source PR CI PASS, Greptile PASS, Bugbot SKIPPED_QUOTA, Codex source review PASS; promotion validation requires the complete ordered patch series replay and assembled-source tests. Run `git diff --check` on promotion metadata and `downstream/patches/series`; generated patch files retain the leading spaces required by unified-diff context and are validated by `downstream/scripts/check-patches.sh`.

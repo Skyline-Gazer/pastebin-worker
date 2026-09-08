@@ -8,3 +8,4 @@
 020-webcrypto-generated-secrets/0001-fix-security-use-Web-Crypto-for-generated-secrets.patch
 030-harden-u-redirect/0001-fix-redirect-restrict-URL-redirects-to-credential-fr.patch
 030-harden-u-redirect/0002-fix-redirect-reject-empty-URL-userinfo.patch
+040-sanitize-uncaught-500/0001-fix-errors-sanitize-uncaught-500-responses.patch

@@ -9,3 +9,8 @@
 030-harden-u-redirect/0001-fix-redirect-restrict-URL-redirects-to-credential-fr.patch
 030-harden-u-redirect/0002-fix-redirect-reject-empty-URL-userinfo.patch
 040-sanitize-uncaught-500/0001-fix-errors-sanitize-uncaught-500-responses.patch
+050-atomic-named-paste-create/0001-fix-storage-atomically-claim-custom-paste-names.patch
+050-atomic-named-paste-create/0002-fix-storage-make-expired-name-reclaim-generation-saf.patch
+050-atomic-named-paste-create/0003-fix-storage-expire-failed-named-claims-without-delet.patch
+050-atomic-named-paste-create/0004-fix-storage-keep-original-metadata-error-if-claim-cl.patch
+050-atomic-named-paste-create/0005-test-storage-assert-sanitized-500-when-named-claim-c.patch

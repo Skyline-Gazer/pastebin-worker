@@ -1,0 +1,132 @@
+From 15b80c1fbf4e8800e888964055b01565cc56b0f2 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Tue, 8 Sep 2026 15:03:50 +0800
+Subject: [PATCH 4/5] fix(storage): keep original metadata error if claim
+ cleanup fails
+
+Context:
+Greptile P1 on 0673611 noted that a throwing cleanup R2 PUT masked the original KV metadata failure.
+
+Expected behavior:
+Claim cleanup remains best-effort and generation-safe. If that cleanup throws, the original metadata error is still returned.
+
+Acceptance criteria:
+- a throwing cleanup PUT still surfaces the original KV failure to the client
+
+Constraints:
+- generic upstream behavior only
+- do not modify upstream-sync
+- dual R2+KV failure remains fail-closed until expiry/cleanup; no reservation namespace
+
+Validation:
+- RED: worker/test/writeConcurrency.spec.ts expected "kv unavailable", observed "cleanup put failed"
+- GREEN: Node 22 ./node_modules/.bin/vitest run worker/test/writeConcurrency.spec.ts -> 7 passed
+- REGRESSION: Node 22 ./node_modules/.bin/vitest run --project Workers -> 17 files, 121 tests passed
+- tsc --noEmit and eslint on changed files passed
+
+Docs:
+- N/A; public API contract unchanged
+
+Upstream base:
+0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+
+Patch ID:
+050-atomic-named-paste-create (candidate; verify against refreshed series before export)
+
+Dependencies:
+none
+
+Refs:
+- https://github.com/Skyline-Gazer/pastebin-worker/issues/78
+- https://github.com/Skyline-Gazer/pastebin-worker/pull/99
+- Greptile P1 on 0673611: cleanup failure strands claim
+---
+ worker/handlers/handleWrite.ts       | 12 +++++---
+ worker/test/writeConcurrency.spec.ts | 43 ++++++++++++++++++++++++++++
+ 2 files changed, 51 insertions(+), 4 deletions(-)
+
+diff --git a/worker/handlers/handleWrite.ts b/worker/handlers/handleWrite.ts
+index 12280b124780ac55ba962bd992ce6ff66e4e4e6d..2e0fb11244f0e4dcc4a1511a5ac9fb31aab9aa30 100644
+--- a/worker/handlers/handleWrite.ts
++++ b/worker/handlers/handleWrite.ts
+@@ -290,10 +290,14 @@ export async function handlePostOrPut(
+       )
+     } catch (error) {
+       if (namedR2Object !== undefined && pasteName !== undefined) {
+-        await env.R2.put(pasteName, new ArrayBuffer(0), {
+-          onlyIf: { uploadedBefore: new Date(namedR2Object.uploaded.getTime() + 1) },
+-          customMetadata: { willExpireAtUnix: "0" },
+-        })
++        try {
++          await env.R2.put(pasteName, new ArrayBuffer(0), {
++            onlyIf: { uploadedBefore: new Date(namedR2Object.uploaded.getTime() + 1) },
++            customMetadata: { willExpireAtUnix: "0" },
++          })
++        } catch {
++          // Best-effort generation-safe expire. Preserve the original failure.
++        }
+       }
+       throw error
+     }
+diff --git a/worker/test/writeConcurrency.spec.ts b/worker/test/writeConcurrency.spec.ts
+index 81ca76dc5976194207cca5cab89f1f3b4543a11c..8876274998853eb4c99428d17d6493a47c59af61 100644
+--- a/worker/test/writeConcurrency.spec.ts
++++ b/worker/test/writeConcurrency.spec.ts
+@@ -84,6 +84,28 @@ function failKvPuts(namespace: KVNamespace, pasteName: string): KVNamespace {
+   })
+ }
+ 
++function r2PutThrowsOnUploadedBefore(bucket: R2Bucket): R2Bucket {
++  const put = bucket.put.bind(bucket)
++  return new Proxy(bucket, {
++    get(target, property) {
++      if (property === "put") {
++        return async (...args: Parameters<R2Bucket["put"]>) => {
++          const options = args[2]
++          if (
++            options?.onlyIf !== undefined &&
++            typeof options.onlyIf === "object" &&
++            "uploadedBefore" in options.onlyIf
++          ) {
++            throw new Error("cleanup put failed")
++          }
++          return put(...args)
++        }
++      }
++      return boundMember(target, property)
++    },
++  })
++}
++
+ function failKvPutsAfterReplacingR2(
+   namespace: KVNamespace,
+   bucket: R2Bucket,
+@@ -253,4 +275,25 @@ describe("custom-name create concurrency", () => {
+     expect(failed.status).toStrictEqual(500)
+     expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("newer generation")
+   })
++
++  it("preserves the original metadata error if claim cleanup throws", async () => {
++    const requestedName = "kv-fail-cleanup-throw"
++    const pasteName = `~${requestedName}`
++    const failingEnv = {
++      ...env,
++      PB: failKvPuts(env.PB, pasteName),
++      R2: r2PutThrowsOnUploadedBefore(env.R2),
++    }
++
++    const failed = await worker.fetch(
++      new Request(BASE_URL, {
++        method: "POST",
++        body: createFormData({ c: new Blob(["cleanup throw"]), n: requestedName }),
++      }),
++      failingEnv,
++      createExecutionContext(),
++    )
++    expect(failed.status).toStrictEqual(500)
++    expect(await failed.text()).toContain("kv unavailable")
++  })
+ })
+-- 
+2.50.1 (Apple Git-155)
+

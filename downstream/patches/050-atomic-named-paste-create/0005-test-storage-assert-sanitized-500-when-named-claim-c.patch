@@ -1,0 +1,99 @@
+From d12bd3ce296c3dd22fe148a08437b6f320f05fb2 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Tue, 8 Sep 2026 15:50:00 +0800
+Subject: [PATCH 5/5] test(storage): assert sanitized 500 when named-claim
+ cleanup fails
+
+Context:
+Assembled replay includes Patch 040, which returns a stable generic uncaught 500 body. The source-branch test expected the raw KV error in the client response, which is correct on upstream-only HEAD a3482e0 but fails after 040.
+
+Expected behavior:
+When KV metadata persistence fails and generation-safe compensation also throws, the client still receives HTTP 500 with `Error 500: Internal Server Error\n`. The cleanup error is not leaked. Server-side logging still contains the original KV failure and does not treat the cleanup throw as the logged error.
+
+Acceptance criteria:
+- assembled cleanup-throw path returns status 500
+- client body is the Patch 040 generic uncaught contract
+- client body contains neither `kv unavailable` nor `cleanup put failed`
+- console.error receives the original KV error stack
+
+Constraints:
+- generic upstream behavior only
+- do not rewrite source PR #99 HEAD a3482e05a7ddf808a48ffe2f9e0ebafc758f7e26
+- do not expand Issue #78 or add coordination architecture
+- export-only replay adaptation onto assembled 040
+
+Validation:
+- RED: Node 22 pnpm exec vitest run worker/test/writeConcurrency.spec.ts -> expected "kv unavailable", received "Error 500: Internal Server Error"
+- GREEN: same command -> 7 passed
+- REGRESSION: Node 22 pnpm exec vitest run -> 23 files, 185 tests passed
+- prettier --check, eslint, tsc --noEmit, wrangler deploy --dry-run -> PASS
+
+Docs:
+- N/A in this commit; promotion README records the 040-compatible assertion
+
+Upstream base:
+0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+
+Patch ID:
+050-atomic-named-paste-create
+
+Dependencies:
+010-non-expiring-paste (handleWrite overlap); 040-sanitize-uncaught-500 (public uncaught 500 body)
+
+Refs:
+- https://github.com/Skyline-Gazer/pastebin-worker/issues/78
+- https://github.com/Skyline-Gazer/pastebin-worker/pull/99
+- OWNER_FINDING_DISPOSITION accepted residual risk remains unchanged
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ worker/test/writeConcurrency.spec.ts | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/worker/test/writeConcurrency.spec.ts b/worker/test/writeConcurrency.spec.ts
+index 8876274998853eb4c99428d17d6493a47c59af61..1177c12c607ac2e084bcd0c620ed5fc3a8a549a4 100644
+--- a/worker/test/writeConcurrency.spec.ts
++++ b/worker/test/writeConcurrency.spec.ts
+@@ -1,5 +1,5 @@
+ import { createExecutionContext, env } from "cloudflare:test"
+-import { describe, expect, it } from "vitest"
++import { afterEach, describe, expect, it, vi } from "vitest"
+ 
+ import worker from "../index.js"
+ import type { PasteResponse } from "../../shared/interfaces.js"
+@@ -132,6 +132,10 @@ function failKvPutsAfterReplacingR2(
+ }
+ 
+ describe("custom-name create concurrency", () => {
++  afterEach(() => {
++    vi.restoreAllMocks()
++  })
++
+   it("returns one winner and one stable 409 when availability checks race", async () => {
+     const requestedName = "atomic-race"
+     const pasteName = `~${requestedName}`
+@@ -285,6 +289,7 @@ describe("custom-name create concurrency", () => {
+       R2: r2PutThrowsOnUploadedBefore(env.R2),
+     }
+ 
++    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+     const failed = await worker.fetch(
+       new Request(BASE_URL, {
+         method: "POST",
+@@ -293,7 +298,12 @@ describe("custom-name create concurrency", () => {
+       failingEnv,
+       createExecutionContext(),
+     )
++    const body = await failed.text()
+     expect(failed.status).toStrictEqual(500)
+-    expect(await failed.text()).toContain("kv unavailable")
++    expect(body).toStrictEqual("Error 500: Internal Server Error\n")
++    expect(body).not.toContain("cleanup put failed")
++    expect(body).not.toContain("kv unavailable")
++    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("kv unavailable"))
++    expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining("cleanup put failed"))
+   })
+ })
+-- 
+2.50.1 (Apple Git-155)
+

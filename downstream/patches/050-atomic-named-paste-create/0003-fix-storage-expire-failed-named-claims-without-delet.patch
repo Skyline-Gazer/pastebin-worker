@@ -1,0 +1,168 @@
+From 3939fc78bf5fecda485d7894f90cc6db63d3388d Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Tue, 8 Sep 2026 14:58:57 +0800
+Subject: [PATCH 3/5] fix(storage): expire failed named claims without deleting
+ newer objects
+
+Context:
+Greptile P1 on d793036 noted that an unconditional R2.delete after a KV metadata failure can remove a newer generation if another request reclaimed the name first.
+
+Expected behavior:
+If this request still owns the claimed object, mark that generation expired so a retry can reclaim it. If a newer upload already replaced it, leave the newer object untouched.
+
+Acceptance criteria:
+- KV metadata failure still leaves the original name retryable
+- a newer R2 generation written before cleanup survives the failed request
+
+Constraints:
+- generic upstream behavior only; no Feishu concepts
+- do not modify upstream-sync
+
+Validation:
+- RED: worker/test/writeConcurrency.spec.ts newer-generation case failed because R2.get returned null
+- GREEN: Node 22 ./node_modules/.bin/vitest run worker/test/writeConcurrency.spec.ts -> 6 passed
+- REGRESSION: Node 22 ./node_modules/.bin/vitest run --project Workers -> 17 files, 120 tests passed
+- tsc --noEmit and eslint on changed files passed
+
+Docs:
+- N/A; public API contract unchanged
+
+Upstream base:
+0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+
+Patch ID:
+050-atomic-named-paste-create (candidate; verify against refreshed series before export)
+
+Dependencies:
+none
+
+Refs:
+- https://github.com/Skyline-Gazer/pastebin-worker/issues/78
+- https://github.com/Skyline-Gazer/pastebin-worker/pull/99
+- Greptile P1 on d793036: cleanup deletes newer generation
+---
+ worker/handlers/handleWrite.ts       | 17 ++++++-----
+ worker/test/writeConcurrency.spec.ts | 45 ++++++++++++++++++++++++++++
+ 2 files changed, 55 insertions(+), 7 deletions(-)
+
+diff --git a/worker/handlers/handleWrite.ts b/worker/handlers/handleWrite.ts
+index 4714804df15c258e8aa59ef401d72ecadef27ce9..12280b124780ac55ba962bd992ce6ff66e4e4e6d 100644
+--- a/worker/handlers/handleWrite.ts
++++ b/worker/handlers/handleWrite.ts
+@@ -231,7 +231,7 @@ export async function handlePostOrPut(
+     )
+   } else {
+     let pasteName: string | undefined
+-    let namedPasteStoredInR2 = false
++    let namedR2Object: R2Object | undefined
+     if (isMPUComplete) {
+       if (url.searchParams.has("name")) {
+         pasteName = url.searchParams.get("name")!
+@@ -243,17 +243,17 @@ export async function handlePostOrPut(
+       if (!(await pasteNameAvailable(env, pasteName))) {
+         throw new WorkerError(409, `name '${pasteName}' is already used`)
+       }
+-      const namedR2Object = await createNamedPasteObject(
++      const claimedR2Object = await createNamedPasteObject(
+         env,
+         pasteName,
+         content,
+         expirationSeconds === null ? null : dateToUnix(now) + expirationSeconds,
+         dateToUnix(now),
+       )
+-      if (namedR2Object === null) {
++      if (claimedR2Object === null) {
+         throw new WorkerError(409, `name '${pasteName}' is already used`)
+       }
+-      namedPasteStoredInR2 = true
++      namedR2Object = claimedR2Object
+     } else {
+       pasteName = genRandStr(isPrivate ? PRIVATE_PASTE_NAME_LEN : PASTE_NAME_LEN)
+     }
+@@ -276,7 +276,7 @@ export async function handlePostOrPut(
+         highlightLanguage,
+         contentLength: r2Object?.size || contentLength,
+         encryptionScheme,
+-        isMPUComplete: isMPUComplete || namedPasteStoredInR2,
++        isMPUComplete: isMPUComplete || namedR2Object !== undefined,
+       })
+ 
+       return makeResponse(
+@@ -289,8 +289,11 @@ export async function handlePostOrPut(
+         { etag: r2Object?.httpEtag },
+       )
+     } catch (error) {
+-      if (namedPasteStoredInR2 && pasteName !== undefined) {
+-        await env.R2.delete(pasteName)
++      if (namedR2Object !== undefined && pasteName !== undefined) {
++        await env.R2.put(pasteName, new ArrayBuffer(0), {
++          onlyIf: { uploadedBefore: new Date(namedR2Object.uploaded.getTime() + 1) },
++          customMetadata: { willExpireAtUnix: "0" },
++        })
+       }
+       throw error
+     }
+diff --git a/worker/test/writeConcurrency.spec.ts b/worker/test/writeConcurrency.spec.ts
+index 5e6d81d721a0bdc787969f93aea7e1c46f2ca2e8..81ca76dc5976194207cca5cab89f1f3b4543a11c 100644
+--- a/worker/test/writeConcurrency.spec.ts
++++ b/worker/test/writeConcurrency.spec.ts
+@@ -84,6 +84,31 @@ function failKvPuts(namespace: KVNamespace, pasteName: string): KVNamespace {
+   })
+ }
+ 
++function failKvPutsAfterReplacingR2(
++  namespace: KVNamespace,
++  bucket: R2Bucket,
++  pasteName: string,
++  newerBody: string,
++): KVNamespace {
++  const put = namespace.put.bind(namespace) as (key: string, ...args: unknown[]) => Promise<unknown>
++  return new Proxy(namespace, {
++    get(target, property) {
++      if (property === "put") {
++        return async (key: string, ...args: unknown[]) => {
++          if (key === pasteName) {
++            await bucket.put(pasteName, newerBody, {
++              customMetadata: { willExpireAtUnix: String(Math.floor(Date.now() / 1000) + 3600) },
++            })
++            throw new Error("kv unavailable")
++          }
++          return put(key, ...args)
++        }
++      }
++      return boundMember(target, property)
++    },
++  })
++}
++
+ describe("custom-name create concurrency", () => {
+   it("returns one winner and one stable 409 when availability checks race", async () => {
+     const requestedName = "atomic-race"
+@@ -208,4 +233,24 @@ describe("custom-name create concurrency", () => {
+       "retry",
+     )
+   })
++
++  it("does not delete a newer R2 generation if metadata persistence fails late", async () => {
++    const requestedName = "kv-fail-newer-gen"
++    const pasteName = `~${requestedName}`
++    const failingEnv = {
++      ...env,
++      PB: failKvPutsAfterReplacingR2(env.PB, env.R2, pasteName, "newer generation"),
++    }
++
++    const failed = await worker.fetch(
++      new Request(BASE_URL, {
++        method: "POST",
++        body: createFormData({ c: new Blob(["original claim"]), n: requestedName }),
++      }),
++      failingEnv,
++      createExecutionContext(),
++    )
++    expect(failed.status).toStrictEqual(500)
++    expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("newer generation")
++  })
+ })
+-- 
+2.50.1 (Apple Git-155)
+

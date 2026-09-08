@@ -211,7 +211,7 @@ export async function handlePostOrPut(
     )
   } else {
     let pasteName: string | undefined
-    let namedPasteStoredInR2 = false
+    let namedR2Object: R2Object | undefined
     if (isMPUComplete) {
       if (url.searchParams.has("name")) {
         pasteName = url.searchParams.get("name")!
@@ -223,17 +223,17 @@ export async function handlePostOrPut(
       if (!(await pasteNameAvailable(env, pasteName))) {
         throw new WorkerError(409, `name '${pasteName}' is already used`)
       }
-      const namedR2Object = await createNamedPasteObject(
+      const claimedR2Object = await createNamedPasteObject(
         env,
         pasteName,
         content,
         expirationSeconds === null ? null : dateToUnix(now) + expirationSeconds,
         dateToUnix(now),
       )
-      if (namedR2Object === null) {
+      if (claimedR2Object === null) {
         throw new WorkerError(409, `name '${pasteName}' is already used`)
       }
-      namedPasteStoredInR2 = true
+      namedR2Object = claimedR2Object
     } else {
       pasteName = genRandStr(isPrivate ? PRIVATE_PASTE_NAME_LEN : PASTE_NAME_LEN)
     }
@@ -250,7 +250,7 @@ export async function handlePostOrPut(
         highlightLanguage,
         contentLength: r2Object?.size || contentLength,
         encryptionScheme,
-        isMPUComplete: isMPUComplete || namedPasteStoredInR2,
+        isMPUComplete: isMPUComplete || namedR2Object !== undefined,
       })
 
       return makeResponse(
@@ -263,8 +263,11 @@ export async function handlePostOrPut(
         { etag: r2Object?.httpEtag },
       )
     } catch (error) {
-      if (namedPasteStoredInR2 && pasteName !== undefined) {
-        await env.R2.delete(pasteName)
+      if (namedR2Object !== undefined && pasteName !== undefined) {
+        await env.R2.put(pasteName, new ArrayBuffer(0), {
+          onlyIf: { uploadedBefore: new Date(namedR2Object.uploaded.getTime() + 1) },
+          customMetadata: { willExpireAtUnix: "0" },
+        })
       }
       throw error
     }

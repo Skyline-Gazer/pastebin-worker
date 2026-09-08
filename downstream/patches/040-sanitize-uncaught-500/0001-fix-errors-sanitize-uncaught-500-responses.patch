@@ -1,0 +1,100 @@
+From 8aebf56f4a9a41b7ec1d669c1767a13755a011e9 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Tue, 8 Sep 2026 11:06:42 +0800
+Subject: [PATCH] fix(errors): sanitize uncaught 500 responses
+
+Context:
+- The top-level Worker exception boundary returned uncaught Error.message values to clients, exposing internal exception details.
+
+Expected behavior:
+- Uncaught exceptions return HTTP 500 with the stable body `Error 500: Internal Server Error`.
+- Exception stack details remain available in existing server-side console logging.
+- Structured ParseError and WorkerError responses retain their current status and body behavior.
+
+Acceptance criteria:
+- [x] An uncaught storage failure returns 500.
+- [x] The public body is stable and generic.
+- [x] A distinctive internal Error.message is absent from the client response.
+- [x] The internal detail remains present in server-side logging.
+- [x] Existing behavior passes the full regression suite.
+
+Constraints:
+- Generic upstream patch only; no Feishu-specific behavior.
+- No error framework, taxonomy, logging, telemetry, status-code, or response-format redesign.
+
+Validation:
+- RED: focused errors.spec.ts returned `Error 500: THIS_INTERNAL_ERROR_MUST_NOT_REACH_CLIENT`.
+- GREEN: focused errors.spec.ts passed 1/1 after using the stable generic body.
+- REFACTOR: no refactor required; Prettier and TypeScript remained green.
+- REGRESSION: Node 22 complete suite passed 22 files / 157 tests.
+- ESLint, Prettier check, TypeScript, Wrangler dry-run build, and git diff --check passed.
+
+Docs:
+- N/A; the narrow stable response contract is captured by executable regression coverage. Promotion provenance will document the patch.
+
+Refs:
+- Skyline-Gazer/pastebin-worker#80
+- Parent audit Skyline-Gazer/pastebin-worker#61
+
+Upstream base:
+0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+
+Patch ID:
+040-sanitize-uncaught-500
+
+Dependencies:
+none
+---
+ worker/index.ts            |  2 +-
+ worker/test/errors.spec.ts | 24 ++++++++++++++++++++++++
+ 2 files changed, 25 insertions(+), 1 deletion(-)
+ create mode 100644 worker/test/errors.spec.ts
+
+diff --git a/worker/index.ts b/worker/index.ts
+index 295f3e35cf10560d846f31b20b883ee53f252a40..ee3a94dc865ba03f345109b7bc103c5c934da60c 100644
+--- a/worker/index.ts
++++ b/worker/index.ts
+@@ -42,7 +42,7 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
+     } else {
+       const err = e as Error
+       console.error(err.stack)
+-      return corsWrapResponse(new Response(`Error 500: ${err.message}\n`, { status: 500 }))
++      return corsWrapResponse(new Response("Error 500: Internal Server Error\n", { status: 500 }))
+     }
+   }
+ }
+diff --git a/worker/test/errors.spec.ts b/worker/test/errors.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..fbff20d198f785b688416b547d4e3e32c1cd61f3
+--- /dev/null
++++ b/worker/test/errors.spec.ts
+@@ -0,0 +1,24 @@
++import { env, createExecutionContext } from "cloudflare:test"
++import { afterEach, describe, expect, it, vi } from "vitest"
++
++import { BASE_URL, workerFetch } from "./testUtils.js"
++
++describe("uncaught errors", () => {
++  afterEach(() => {
++    vi.restoreAllMocks()
++  })
++
++  it("returns a stable generic 500 response while logging internal details", async () => {
++    const internalMessage = "THIS_INTERNAL_ERROR_MUST_NOT_REACH_CLIENT"
++    vi.spyOn(env.PB, "getWithMetadata").mockRejectedValueOnce(new Error(internalMessage))
++    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
++
++    const response = await workerFetch(createExecutionContext(), `${BASE_URL}/uncaught-error-test`)
++    const body = await response.text()
++
++    expect(response.status).toStrictEqual(500)
++    expect(body).toStrictEqual("Error 500: Internal Server Error\n")
++    expect(body).not.toContain(internalMessage)
++    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining(internalMessage))
++  })
++})
+
+base-commit: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+-- 
+2.50.1 (Apple Git-155)
+

@@ -84,6 +84,50 @@ function failKvPuts(namespace: KVNamespace, pasteName: string): KVNamespace {
   })
 }
 
+function r2BodyPutAfterReservationReturnsNull(bucket: R2Bucket, pasteName: string): R2Bucket {
+  const put = bucket.put.bind(bucket)
+  let etagMatchPuts = 0
+  return new Proxy(bucket, {
+    get(target, property) {
+      if (property === "put") {
+        return async (...args: Parameters<R2Bucket["put"]>) => {
+          const [key, , options] = args
+          if (
+            key === pasteName &&
+            options?.onlyIf !== undefined &&
+            typeof options.onlyIf === "object" &&
+            "etagMatches" in options.onlyIf
+          ) {
+            etagMatchPuts += 1
+            if (etagMatchPuts === 2) {
+              return null
+            }
+          }
+          return put(...args)
+        }
+      }
+      return boundMember(target, property)
+    },
+  })
+}
+
+function kvMisses(namespace: KVNamespace, pasteName: string): KVNamespace {
+  const getWithMetadata = namespace.getWithMetadata.bind(namespace) as (...args: unknown[]) => Promise<unknown>
+  return new Proxy(namespace, {
+    get(target, property) {
+      if (property === "getWithMetadata") {
+        return async (...args: unknown[]) => {
+          if (args[0] === pasteName) {
+            return { value: null, metadata: null }
+          }
+          return getWithMetadata(...args)
+        }
+      }
+      return boundMember(target, property)
+    },
+  })
+}
+
 function r2PutThrowsOnUploadedBefore(bucket: R2Bucket): R2Bucket {
   const put = bucket.put.bind(bucket)
   return new Proxy(bucket, {
@@ -213,6 +257,18 @@ describe("custom-name create concurrency", () => {
   it("reclaims an expired legacy R2 name that has no custom expiration metadata", async () => {
     const pasteName = "~expired-legacy-r2"
     await env.R2.put(pasteName, "legacy expired")
+    await env.PB.put(pasteName, "", {
+      metadata: {
+        schemaVersion: 2,
+        location: "R2",
+        passwd: "legacy",
+        lastModifiedAtUnix: 5,
+        createdAtUnix: 5,
+        willExpireAtUnix: 10,
+        accessCounter: 0,
+        sizeBytes: 14,
+      },
+    })
 
     const created = await createNamedPasteObject(
       env,
@@ -224,6 +280,47 @@ describe("custom-name create concurrency", () => {
 
     expect(created).not.toBeNull()
     expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("legacy replacement")
+  })
+
+  it("does not reclaim a live legacy R2 name when KV metadata is missing", async () => {
+    const pasteName = "~legacy-live-kv-miss"
+    await env.R2.put(pasteName, "live legacy")
+    const missingKvEnv = {
+      ...env,
+      PB: kvMisses(env.PB, pasteName),
+    }
+
+    const created = await createNamedPasteObject(
+      missingKvEnv,
+      pasteName,
+      new TextEncoder().encode("overwrite").buffer,
+      100,
+      20,
+    )
+
+    expect(created).toBeNull()
+    expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("live legacy")
+  })
+
+  it("expires a reservation if the following body PUT does not take the generation", async () => {
+    const pasteName = "~reservation-body-miss"
+    const replacement = new TextEncoder().encode("reserved then retried")
+    await env.R2.put(pasteName, "expired", {
+      customMetadata: { willExpireAtUnix: "10" },
+    })
+
+    const first = await createNamedPasteObject(
+      { ...env, R2: r2BodyPutAfterReservationReturnsNull(env.R2, pasteName) },
+      pasteName,
+      replacement.buffer,
+      100,
+      20,
+    )
+    expect(first).toBeNull()
+
+    const retry = await createNamedPasteObject(env, pasteName, replacement.buffer, 100, 20)
+    expect(retry).not.toBeNull()
+    expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("reserved then retried")
   })
 
   it("releases a new R2 name claim when KV metadata persistence fails", async () => {

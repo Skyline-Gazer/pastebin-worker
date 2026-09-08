@@ -289,8 +289,13 @@ async function namedPasteObjectExpired(
     return metadataExpiration < nowUnix
   }
 
-  const kvMeta = await getPasteMetadata(env, pasteName)
-  return kvMeta === null
+  const kvMeta = await env.PB.getWithMetadata<PasteMetadataInStorage>(pasteName, {
+    type: "stream",
+  })
+  if (kvMeta.value === null || kvMeta.metadata === null) {
+    return false
+  }
+  return isExpired(migratePasteMetadata(kvMeta.metadata), nowUnix)
 }
 
 /**
@@ -328,10 +333,25 @@ export async function createNamedPasteObject(
   })
   if (reserved === null) return null
 
-  return await env.R2.put(pasteName, content, {
-    onlyIf: { etagMatches: reserved.etag },
-    customMetadata,
-  })
+  try {
+    const replaced = await env.R2.put(pasteName, content, {
+      onlyIf: { etagMatches: reserved.etag },
+      customMetadata,
+    })
+    if (replaced !== null) return replaced
+  } catch {
+    // Best-effort generation-safe expire of this reservation below.
+  }
+
+  try {
+    await env.R2.put(pasteName, new ArrayBuffer(0), {
+      onlyIf: { etagMatches: reserved.etag },
+      customMetadata: { willExpireAtUnix: "0" },
+    })
+  } catch {
+    // Fail-closed if compensation also fails; do not clobber a newer generation.
+  }
+  return null
 }
 
 export async function pasteNameAvailable(env: Env, pasteName: string): Promise<boolean> {

@@ -42,7 +42,7 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
     } else {
       const err = e as Error
       console.error(err.stack)
-      return corsWrapResponse(new Response(`Error 500: ${err.message}\n`, { status: 500 }))
+      return corsWrapResponse(new Response("Error 500: Internal Server Error\n", { status: 500 }))
     }
   }
 }

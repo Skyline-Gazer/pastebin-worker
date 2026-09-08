@@ -63,7 +63,7 @@ async function handleNormalRequest(request: Request, env: Env, ctx: ExecutionCon
     return new Response(`method ${request.method} not allowed`, {
       status: 405,
       headers: {
-        Allow: "GET, HEAD, PUT, POST, DELETE, OPTION",
+        Allow: "GET, HEAD, PUT, POST, DELETE, OPTIONS",
       },
     })
   }

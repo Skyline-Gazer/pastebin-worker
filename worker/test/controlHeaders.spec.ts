@@ -125,7 +125,7 @@ test("other HTTP methods", async () => {
     }),
   )
   expect(resp.status).toStrictEqual(405)
-  expect(resp.headers.has("Allow")).toStrictEqual(true)
+  expect(resp.headers.get("Allow")).toStrictEqual("GET, HEAD, PUT, POST, DELETE, OPTIONS")
 })
 
 test("option method", async () => {
@@ -144,6 +144,7 @@ test("option method", async () => {
   expect(resp.status).toStrictEqual(200)
   expect(resp.headers.has("Access-Control-Allow-Origin")).toStrictEqual(true)
   expect(resp.headers.has("Access-Control-Allow-Methods")).toStrictEqual(true)
+  expect(resp.headers.get("Access-Control-Allow-Methods")).toContain("DELETE")
   expect(resp.headers.has("Access-Control-Max-Age")).toStrictEqual(true)
 
   const resp1 = await workerFetch(
@@ -157,4 +158,5 @@ test("option method", async () => {
   )
   expect(resp1.status).toStrictEqual(200)
   expect(resp1.headers.has("Allow")).toStrictEqual(true)
+  expect(resp1.headers.get("Allow")).toContain("OPTIONS")
 })

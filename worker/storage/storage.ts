@@ -76,24 +76,6 @@ export interface PasteWithMetadata {
   httpEtag?: string
 }
 
-async function updateAccessCounter(env: Env, short: string, value: ArrayBuffer, metadata: PasteMetadata) {
-  // update counter with probability 1%
-  if (Math.random() < 0.01) {
-    metadata.accessCounter += 1
-    try {
-      await env.PB.put(short, value, {
-        metadata: metadata,
-        expiration: metadata.willExpireAtUnix,
-      })
-    } catch (e) {
-      // ignore rate limit message
-      if (!(e as Error).message.includes("KV PUT failed: 429 Too Many Requests")) {
-        throw e
-      }
-    }
-  }
-}
-
 export async function getPaste(env: Env, short: string, ctx: ExecutionContext): Promise<PasteWithMetadata | null> {
   const item = await env.PB.getWithMetadata<PasteMetadataInStorage>(short, {
     type: "arrayBuffer",
@@ -106,19 +88,14 @@ export async function getPaste(env: Env, short: string, ctx: ExecutionContext): 
     const metadata = migratePasteMetadata(item.metadata)
     const expired = metadata.willExpireAtUnix < new Date().getTime() / 1000
 
-    ctx.waitUntil(
-      (async () => {
-        if (expired) {
-          await deletePaste(env, short, metadata)
-          return null
-        }
-        await updateAccessCounter(env, short, item.value!, metadata)
-      })(),
-    )
-
     if (expired) {
+      ctx.waitUntil(deletePaste(env, short, metadata))
       return null
     }
+
+    // Cloudflare KV has no metadata-only update. Rewriting this record with
+    // the originally-read body could clobber a concurrent paste update, so
+    // access reads deliberately do not mutate the paste record.
 
     if (metadata.location === "R2") {
       const object = await env.R2.get(short)

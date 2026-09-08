@@ -116,6 +116,62 @@ describe("MPU error paths", () => {
     expect(resp.status).toStrictEqual(204)
   })
 
+  it("handleMPUCreateUpdate accepts password from X-PB-Password without a query secret", async () => {
+    const seeded = await upload(ctx, { c: new Blob(["seed"]), s: "headerpasswd" })
+    const { name, password } = parsePath(new URL(seeded.manageUrl).pathname)
+    expect(password).toStrictEqual("headerpasswd")
+
+    const resp = await workerFetch(
+      ctx,
+      new Request(`${BASE_URL}/mpu/create-update?name=${name}`, {
+        method: "POST",
+        headers: { "X-PB-Password": "headerpasswd" },
+      }),
+    )
+    expect(resp.status).toStrictEqual(200)
+    const body: MPUCreateResponse = await resp.json()
+    expect(body.name).toStrictEqual(name)
+    expect(typeof body.uploadId).toStrictEqual("string")
+  })
+
+  it("handleMPUCreateUpdate prefers X-PB-Password over a conflicting query password", async () => {
+    const seeded = await upload(ctx, { c: new Blob(["seed"]), s: "realpasswd" })
+    const { name } = parsePath(new URL(seeded.manageUrl).pathname)
+
+    const resp = await workerFetch(
+      ctx,
+      new Request(`${BASE_URL}/mpu/create-update?name=${name}&password=wrongpasswd`, {
+        method: "POST",
+        headers: { "X-PB-Password": "realpasswd" },
+      }),
+    )
+    expect(resp.status).toStrictEqual(200)
+  })
+
+  it("handleMPUResume and abort accept key and uploadId from headers", async () => {
+    const createResp = await workerFetch(ctx, new Request(`${BASE_URL}/mpu/create`, { method: "POST" }))
+    const { key, uploadId }: MPUCreateResponse = await createResp.json()
+
+    const resume = await workerFetch(
+      ctx,
+      new Request(`${BASE_URL}/mpu/resume?partNumber=1`, {
+        method: "PUT",
+        headers: { "X-PB-MPU-Key": key, "X-PB-MPU-Upload-Id": uploadId },
+        body: new Uint8Array(8),
+      }),
+    )
+    expect(resume.status).toStrictEqual(200)
+
+    const abort = await workerFetch(
+      ctx,
+      new Request(`${BASE_URL}/mpu/abort`, {
+        method: "POST",
+        headers: { "X-PB-MPU-Key": key, "X-PB-MPU-Upload-Id": uploadId },
+      }),
+    )
+    expect(abort.status).toStrictEqual(204)
+  })
+
   it("handleMPUComplete returns 413 when uploaded object exceeds R2_MAX_ALLOWED", async () => {
     const tightEnv = { ...env, R2_MAX_ALLOWED: "1K" }
 

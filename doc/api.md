@@ -213,6 +213,26 @@ If error occurs, the worker returns status code different from `200`:
 - `413`: the request body exceeds Cloudflare's 100 MB per-request cap (returned by the platform before the worker runs), or the content exceeds the deployment's `R2_MAX_ALLOWED`.
 - `500`: unexpected exception. You may report this to the author to give it a fix.
 
+## Multipart upload `/mpu/*`
+
+Large uploads are split into parts. The official web client and `pb` CLI use these endpoints and **must not** put the paste management password, R2 object `key`, or MPU `uploadId` in the URL query string.
+
+New clients send those values as headers:
+
+| Header               | Value                                                             |
+| -------------------- | ----------------------------------------------------------------- |
+| `X-PB-Password`      | Paste management password, required for `POST /mpu/create-update` |
+| `X-PB-MPU-Key`       | R2 object key from `/mpu/create` or `/mpu/create-update`          |
+| `X-PB-MPU-Upload-Id` | Multipart `uploadId` from create                                  |
+
+`partNumber` and the public paste `name` are not secrets and may remain in the query string. `POST /mpu/create` query parameters `n`, `p`, and `e` are unchanged.
+
+The worker still accepts the older `password`, `key`, and `uploadId` query parameters when the corresponding header is absent, so existing curl scripts keep working. If both a header and a query value are present, the header wins.
+
+### Residual threat model
+
+Moving secrets out of the query string removes the default access-log / Referer / history leak for new clients. It does not introduce a new authorization model: `resume` / `complete` / `abort` remain authorized by knowledge of `(key, uploadId)`. Query fallback still leaks those values for old clients. Headers can still appear in operator-enabled verbose HTTP dumps. Compensating `abort` is fire-and-forget; leftover R2 multipart state is a soft failure.
+
 ## DELETE `/<name>:<passwd>`
 
 Delete the paste of name `<name>` and password `<passwd>`. It may take seconds to synchronize the deletion globally.

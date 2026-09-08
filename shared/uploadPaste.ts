@@ -2,6 +2,7 @@
 
 import type { MPUCreateResponse, PasteResponse } from "./interfaces.js"
 import type { EncryptionScheme } from "../frontend/utils/encryption.js"
+import { MPU_KEY_HEADER, MPU_PASSWORD_HEADER, MPU_UPLOAD_ID_HEADER } from "./constants.js"
 import { parsePath } from "./parsers.js"
 
 export class UploadError extends Error {
@@ -34,6 +35,7 @@ export const DEFAULT_MPU_CONCURRENCY = 8
 interface XhrSendOptions {
   method: "POST" | "PUT"
   body: XMLHttpRequestBodyInit
+  headers?: Record<string, string>
   onUploadProgress?: (loaded: number, total: number) => void
   signal?: AbortSignal
 }
@@ -48,7 +50,12 @@ interface XhrResponse {
 function xhrSend(url: string | URL, opts: XhrSendOptions): Promise<XhrResponse> {
   // Fallback for non-browser environments (Workers/Node tests): use fetch, no upload progress events.
   if (typeof XMLHttpRequest === "undefined") {
-    return fetch(url.toString(), { method: opts.method, body: opts.body, signal: opts.signal }).then((r) => ({
+    return fetch(url.toString(), {
+      method: opts.method,
+      body: opts.body,
+      headers: opts.headers,
+      signal: opts.signal,
+    }).then((r) => ({
       ok: r.ok,
       status: r.status,
       text: () => r.text(),
@@ -62,6 +69,11 @@ function xhrSend(url: string | URL, opts: XhrSendOptions): Promise<XhrResponse> 
     }
     const xhr = new XMLHttpRequest()
     xhr.open(opts.method, url.toString())
+    if (opts.headers) {
+      for (const [name, value] of Object.entries(opts.headers)) {
+        xhr.setRequestHeader(name, value)
+      }
+    }
     if (opts.onUploadProgress) {
       xhr.upload.addEventListener("progress", (e) => {
         if (e.lengthComputable) opts.onUploadProgress!(e.loaded, e.total)
@@ -204,10 +216,14 @@ export async function uploadMPU(
     ctrl.abort()
     if (createResp) {
       const abortUrl = new URL(`${apiUrl}/mpu/abort`)
-      abortUrl.searchParams.set("key", createResp.key)
-      abortUrl.searchParams.set("uploadId", createResp.uploadId)
       // Fire-and-forget: must outlive the cancellation that triggered us, no signal/progress.
-      void fetch(abortUrl, { method: "POST" }).catch(() => {
+      void fetch(abortUrl, {
+        method: "POST",
+        headers: {
+          [MPU_KEY_HEADER]: createResp.key,
+          [MPU_UPLOAD_ID_HEADER]: createResp.uploadId,
+        },
+      }).catch(() => {
         /* swallow: orphaned R2 parts are a soft failure */
       })
     }
@@ -218,6 +234,7 @@ export async function uploadMPU(
 
   async function doMPU(): Promise<PasteResponse> {
     const createReqUrl = isUpdate ? new URL(`${apiUrl}/mpu/create-update`) : new URL(`${apiUrl}/mpu/create`)
+    const createHeaders: Record<string, string> = {}
     if (!isUpdate) {
       if (name !== undefined) {
         createReqUrl.searchParams.set("n", name)
@@ -234,13 +251,13 @@ export async function uploadMPU(
         throw TypeError("uploadMPU: password not specified in manageUrl")
       }
       createReqUrl.searchParams.set("name", nameFromUrl)
-      createReqUrl.searchParams.set("password", passwordFromUrl)
+      createHeaders[MPU_PASSWORD_HEADER] = passwordFromUrl
     }
     if (expire !== undefined) {
       createReqUrl.searchParams.set("e", expire)
     }
 
-    const createReqResp = await fetch(createReqUrl, { method: "POST", signal: ctrl.signal })
+    const createReqResp = await fetch(createReqUrl, { method: "POST", headers: createHeaders, signal: ctrl.signal })
     if (!createReqResp.ok) {
       throw new UploadError(createReqResp.status, await createReqResp.text())
     }
@@ -260,13 +277,15 @@ export async function uploadMPU(
       : undefined
     const uploadedParts = await runWithConcurrency(numParts, concurrency, async (i) => {
       const resumeUrl = new URL(`${apiUrl}/mpu/resume`)
-      resumeUrl.searchParams.set("key", createKey)
-      resumeUrl.searchParams.set("uploadId", createUploadId)
       resumeUrl.searchParams.set("partNumber", (i + 1).toString()) // because partNumber need to nonzero
       const chunk = content.slice(i * chunkSize, (i + 1) * chunkSize)
       const resumeReqResp = await xhrSend(resumeUrl, {
         method: "PUT",
         body: chunk,
+        headers: {
+          [MPU_KEY_HEADER]: createKey,
+          [MPU_UPLOAD_ID_HEADER]: createUploadId,
+        },
         onUploadProgress: reportProgress
           ? (loaded) => {
               chunkLoaded[i] = Math.min(loaded, chunk.size)
@@ -286,8 +305,6 @@ export async function uploadMPU(
     const completeFormData = new FormData()
     const completeUrl = new URL(`${apiUrl}/mpu/complete`)
     completeUrl.searchParams.set("name", createName)
-    completeUrl.searchParams.set("key", createKey)
-    completeUrl.searchParams.set("uploadId", createUploadId)
     completeFormData.set("c", new File([JSON.stringify(uploadedParts)], content.name))
     if (expire !== undefined) {
       completeFormData.set("e", expire)
@@ -304,6 +321,10 @@ export async function uploadMPU(
     const completeReqResp = await fetch(completeUrl, {
       method: isUpdate ? "PUT" : "POST",
       body: completeFormData,
+      headers: {
+        [MPU_KEY_HEADER]: createKey,
+        [MPU_UPLOAD_ID_HEADER]: createUploadId,
+      },
       signal: ctrl.signal,
     })
     if (!completeReqResp.ok) {

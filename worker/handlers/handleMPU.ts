@@ -1,8 +1,21 @@
 import type { MPUCreateResponse } from "../../shared/interfaces.js"
-import { NAME_REGEX, PASTE_NAME_LEN, PRIVATE_PASTE_NAME_LEN } from "../../shared/constants.js"
+import {
+  MPU_KEY_HEADER,
+  MPU_PASSWORD_HEADER,
+  MPU_UPLOAD_ID_HEADER,
+  NAME_REGEX,
+  PASTE_NAME_LEN,
+  PRIVATE_PASTE_NAME_LEN,
+} from "../../shared/constants.js"
 import { dateToUnix, genRandStr, WorkerError, timingSafeEqual } from "../common.js"
 import { getPasteMetadata, pasteNameAvailable } from "../storage/storage.js"
 import { parseExpiration, parseExpirationSpec, parseSize } from "../../shared/parsers.js"
+
+function headerOrQuery(request: Request, url: URL, headerName: string, queryName: string): string | null {
+  const header = request.headers.get(headerName)
+  if (header !== null) return header
+  return url.searchParams.get(queryName)
+}
 
 function mpuExpireMetadata(url: URL, env: Env): Record<string, string> {
   const expireParam = url.searchParams.get("e") || env.DEFAULT_EXPIRATION
@@ -47,14 +60,15 @@ export async function handleMPUCreate(request: Request, env: Env): Promise<Respo
   return new Response(JSON.stringify(resp))
 }
 
-// POST /mpu/create-update?name=<name>&password=<password>
+// POST /mpu/create-update?name=<name>
+// password: X-PB-Password header (preferred) or password query (compat)
 // returns JSON { name: string, key: string, uploadId: string }
 export async function handleMPUCreateUpdate(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url)
   const name = url.searchParams.get("name")
-  const password = url.searchParams.get("password")
+  const password = headerOrQuery(request, url, MPU_PASSWORD_HEADER, "password")
   if (name === null || password === null) {
-    throw new WorkerError(400, `missing name or password (password) in searchParams`)
+    throw new WorkerError(400, `missing name or password`)
   }
 
   const metadata = await getPasteMetadata(env, name)
@@ -76,16 +90,17 @@ export async function handleMPUCreateUpdate(request: Request, env: Env): Promise
   return new Response(JSON.stringify(resp))
 }
 
-// PUT /mpu/resume?key=<key>&uploadId=<uploadId>&partNumber=<partNumber>
+// PUT /mpu/resume?partNumber=<partNumber>
+// key / uploadId: X-PB-MPU-Key and X-PB-MPU-Upload-Id headers (preferred) or query (compat)
 // return JSON { partNumber: number, etag: string }
 export async function handleMPUResume(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url)
 
-  const uploadId = url.searchParams.get("uploadId")
+  const uploadId = headerOrQuery(request, url, MPU_UPLOAD_ID_HEADER, "uploadId")
   const partNumberString = url.searchParams.get("partNumber")
-  const key = url.searchParams.get("key")
+  const key = headerOrQuery(request, url, MPU_KEY_HEADER, "key")
   if (partNumberString === null || uploadId === null || key === null) {
-    throw new WorkerError(400, "missing partNumber or uploadId or key in searchParams")
+    throw new WorkerError(400, "missing partNumber or uploadId or key")
   }
   if (request.body === null) {
     throw new WorkerError(400, "missing request body")
@@ -100,40 +115,42 @@ export async function handleMPUResume(request: Request, env: Env): Promise<Respo
     // Most commonly: uploadId has been aborted, completed, or expired. R2 may also
     // throw transient service errors here, but those are rare enough that lumping
     // them as 410 is acceptable — the client retries from /mpu/create either way.
-    console.warn(`MPU resume failed for key=${key}, uploadId=${uploadId}, part=${partNumber}: ${String(e)}`)
+    console.warn(`MPU resume failed for part=${partNumber}: ${String(e)}`)
     throw new WorkerError(410, "multipart upload no longer exists; please retry from /mpu/create")
   }
   return new Response(JSON.stringify(uploadedPart))
 }
 
-// POST /mpu/abort?key=<key>&uploadId=<uploadId>
+// POST /mpu/abort
+// key / uploadId: X-PB-MPU-Key and X-PB-MPU-Upload-Id headers (preferred) or query (compat)
 // Releases R2-side multipart state for an upload that won't be completed.
 // Knowing key + uploadId is the auth: both are returned from /mpu/create
 // to whoever initiated the upload and aren't stored elsewhere.
 // Idempotent: an unknown / already-aborted / completed uploadId still returns 204.
 export async function handleMPUAbort(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url)
-  const uploadId = url.searchParams.get("uploadId")
-  const key = url.searchParams.get("key")
+  const uploadId = headerOrQuery(request, url, MPU_UPLOAD_ID_HEADER, "uploadId")
+  const key = headerOrQuery(request, url, MPU_KEY_HEADER, "key")
   if (uploadId === null || key === null) {
-    throw new WorkerError(400, "missing uploadId or key in searchParams")
+    throw new WorkerError(400, "missing uploadId or key")
   }
   try {
     await env.R2.resumeMultipartUpload(key, uploadId).abort()
   } catch (e) {
-    console.warn(`MPU abort failed for key=${key}, uploadId=${uploadId}: ${String(e)}`)
+    console.warn(`MPU abort failed: ${String(e)}`)
   }
   return new Response(null, { status: 204 })
 }
 
-// POST /mpu/complete?name=<name>&key=<key>&uploadId=<uploadId>
+// POST /mpu/complete?name=<name>
+// key / uploadId: X-PB-MPU-Key and X-PB-MPU-Upload-Id headers (preferred) or query (compat)
 // formdata same as POST/PUT a normal paste, but
 //   - field `c` is interpreted as JSON { partNumber: number, etag: string }[]
 //   - field `n` is ignored
 export async function handleMPUComplete(request: Request, env: Env, completeBody: R2UploadedPart[]): Promise<R2Object> {
   const url = new URL(request.url)
-  const uploadId = url.searchParams.get("uploadId")
-  const key = url.searchParams.get("key")
+  const uploadId = headerOrQuery(request, url, MPU_UPLOAD_ID_HEADER, "uploadId")
+  const key = headerOrQuery(request, url, MPU_KEY_HEADER, "key")
   const name = url.searchParams.get("name")
   if (uploadId === null || key === null || name === null) {
     throw new WorkerError(400, `no uploadId or key for MPU complete`)
@@ -148,7 +165,7 @@ export async function handleMPUComplete(request: Request, env: Env, completeBody
   try {
     object = await multipartUpload.complete(completeBody)
   } catch (e) {
-    console.warn(`MPU complete failed for key=${key}, uploadId=${uploadId}: ${String(e)}`)
+    console.warn(`MPU complete failed: ${String(e)}`)
     throw new WorkerError(410, "multipart upload no longer exists; please retry from /mpu/create")
   }
   if (object.size > parseSize(env.R2_MAX_ALLOWED)!) {
@@ -156,7 +173,7 @@ export async function handleMPUComplete(request: Request, env: Env, completeBody
     try {
       await env.R2.delete(object.key)
     } catch (e) {
-      console.warn(`failed to delete oversized MPU object '${object.key}': ${String(e)}`)
+      console.warn(`failed to delete oversized MPU object: ${String(e)}`)
     }
     throw new WorkerError(413, `payload too large (max ${env.R2_MAX_ALLOWED} allowed)`)
   }

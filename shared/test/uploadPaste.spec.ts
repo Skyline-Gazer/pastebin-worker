@@ -20,6 +20,7 @@ interface XhrCall {
   method: string
   url: string
   body: BodyInit | null
+  headers: Record<string, string>
 }
 
 class FakeXHR {
@@ -28,6 +29,7 @@ class FakeXHR {
 
   private _method = ""
   private _url = ""
+  private _headers: Record<string, string> = {}
   status = 0
   responseText = ""
 
@@ -45,6 +47,11 @@ class FakeXHR {
   open(method: string, url: string) {
     this._method = method
     this._url = url
+    this._headers = {}
+  }
+
+  setRequestHeader(name: string, value: string) {
+    this._headers[name] = value
   }
 
   addEventListener(type: string, cb: () => void) {
@@ -55,7 +62,7 @@ class FakeXHR {
 
   send(body: BodyInit | null) {
     queueMicrotask(() => {
-      const call = { method: this._method, url: this._url, body }
+      const call = { method: this._method, url: this._url, body, headers: { ...this._headers } }
       FakeXHR.calls.push(call)
       const resp = FakeXHR.respond!(call)
       this.status = resp.status
@@ -165,8 +172,26 @@ describe("uploadNormal", () => {
 })
 
 describe("uploadMPU", () => {
+  function requestUrl(input: RequestInfo | URL): string {
+    if (input instanceof URL) return input.toString()
+    if (typeof input === "string") return input
+    return input.url
+  }
+
+  function requestHeaders(input: RequestInfo | URL, init?: RequestInit): Record<string, string> {
+    const headers = new Headers(input instanceof Request ? input.headers : init?.headers)
+    return Object.fromEntries(headers.entries())
+  }
+
+  function assertNoMpuSecretsInUrl(urlString: string) {
+    const url = new URL(urlString)
+    expect(url.searchParams.get("password")).toBeNull()
+    expect(url.searchParams.get("uploadId")).toBeNull()
+    expect(url.searchParams.get("key")).toBeNull()
+  }
+
   function setupHappyPath(numParts: number, complete = { url: "u", manageUrl: "m" }) {
-    const fetchCalls: { url: string; method: string; body?: BodyInit | null }[] = []
+    const fetchCalls: { url: string; method: string; body?: BodyInit | null; headers: Record<string, string> }[] = []
     const partResponses: R2UploadedPart[] = Array.from({ length: numParts }, (_, i) => ({
       partNumber: i + 1,
       etag: `etag${i + 1}`,
@@ -174,8 +199,13 @@ describe("uploadMPU", () => {
     let partIdx = 0
 
     const fetchMock = vi.fn<typeof fetch>((input, init = {}) => {
-      const url = input instanceof URL ? input.toString() : (input as string)
-      fetchCalls.push({ url, method: init.method || "GET", body: init.body as BodyInit | null })
+      const url = requestUrl(input)
+      fetchCalls.push({
+        url,
+        method: init.method || "GET",
+        body: init.body as BodyInit | null,
+        headers: requestHeaders(input, init),
+      })
       if (url.includes("/mpu/create")) {
         return Promise.resolve(jsonResp({ name: "~abcd", key: "k", uploadId: "uid" }))
       }
@@ -237,11 +267,19 @@ describe("uploadMPU", () => {
     const resumeCalls = xhrCalls.filter((c) => c.url.includes("/mpu/resume"))
     expect(resumeCalls).toHaveLength(3)
     expect(resumeCalls.every((c) => c.method === "PUT")).toBe(true)
+    for (const call of resumeCalls) {
+      assertNoMpuSecretsInUrl(call.url)
+      expect(call.headers["X-PB-MPU-Key"]).toStrictEqual("k")
+      expect(call.headers["X-PB-MPU-Upload-Id"]).toStrictEqual("uid")
+    }
     const partNumbers = resumeCalls.map((c) => new URL(c.url).searchParams.get("partNumber")).sort()
     expect(partNumbers).toEqual(["1", "2", "3"])
 
     const completeReq = fetchCalls.find((c) => c.url.includes("/mpu/complete"))!
     expect(completeReq.method).toStrictEqual("POST")
+    assertNoMpuSecretsInUrl(completeReq.url)
+    expect(completeReq.headers["x-pb-mpu-key"]).toStrictEqual("k")
+    expect(completeReq.headers["x-pb-mpu-upload-id"]).toStrictEqual("uid")
     const fd = completeReq.body as FormData
     expect(fd.get("e")).toStrictEqual("1d")
     expect(fd.get("s")).toStrictEqual("pw")
@@ -260,7 +298,8 @@ describe("uploadMPU", () => {
 
     expect(fetchCalls[0].url).toContain("/mpu/create-update")
     expect(fetchCalls[0].url).toContain("name=abcd")
-    expect(fetchCalls[0].url).toContain("password=secretpw")
+    assertNoMpuSecretsInUrl(fetchCalls[0].url)
+    expect(fetchCalls[0].headers["x-pb-password"]).toStrictEqual("secretpw")
     const completeCall = fetchCalls.find((c) => c.url.includes("/mpu/complete"))!
     expect(completeCall.method).toStrictEqual("PUT")
   })
@@ -329,8 +368,10 @@ describe("uploadMPU", () => {
     })
     expect(abortCall).toBeDefined()
     const abortUrl = new URL(abortCall![0] instanceof URL ? abortCall![0].toString() : (abortCall![0] as string))
-    expect(abortUrl.searchParams.get("key")).toStrictEqual("k")
-    expect(abortUrl.searchParams.get("uploadId")).toStrictEqual("uid")
+    assertNoMpuSecretsInUrl(abortUrl.toString())
+    const abortHeaders = new Headers(abortCall![1]?.headers)
+    expect(abortHeaders.get("X-PB-MPU-Key")).toStrictEqual("k")
+    expect(abortHeaders.get("X-PB-MPU-Upload-Id")).toStrictEqual("uid")
     expect(abortCall![1]?.method).toStrictEqual("POST")
   })
 

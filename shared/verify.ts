@@ -8,15 +8,18 @@ export function isLegalUrl(url: string): boolean {
 }
 
 export function isLegalRedirectUrl(url: string): boolean {
-  if (!URL.canParse(url)) {
+  const trimmedUrl = url.trim()
+  if (!/^https?:\/\//i.test(trimmedUrl) || !URL.canParse(trimmedUrl)) {
     return false
   }
 
-  const parsedUrl = new URL(url)
+  const parsedUrl = new URL(trimmedUrl)
+  const authority = trimmedUrl.slice(trimmedUrl.indexOf("://") + 3).split(/[/?#]/, 1)[0]
   return (
     (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") &&
     parsedUrl.username === "" &&
-    parsedUrl.password === ""
+    parsedUrl.password === "" &&
+    !authority.includes("@")
   )
 }
 

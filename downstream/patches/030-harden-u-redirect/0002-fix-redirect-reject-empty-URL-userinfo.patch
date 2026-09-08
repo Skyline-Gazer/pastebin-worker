@@ -1,0 +1,110 @@
+From 40fc3b6e591d2324a081a7f4b816d7f3693cf4d2 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Tue, 8 Sep 2026 10:33:16 +0800
+Subject: [PATCH 2/2] fix(redirect): reject empty URL userinfo
+
+Context:
+- Source review found that WHATWG URL parsing normalizes syntactically present empty userinfo to empty username and password fields.
+
+Expected behavior:
+- /u/ rejects non-empty credentials and explicit empty userinfo, including WHATWG slashless/backslash spellings.
+
+Acceptance criteria:
+- [x] https://@example.com/ returns 400.
+- [x] https://:@example.com/ returns 400.
+- [x] Non-canonical slashless/backslash HTTP(S) spellings return 400.
+- [x] Existing accepted and rejected redirect cases remain green.
+
+Constraints:
+- Narrow review fix only; no generalized URL policy or unrelated behavior.
+
+Validation:
+- RED: focused role suite; the two empty-userinfo cases returned 302.
+- GREEN: focused role suite; 20/20 passed.
+- REGRESSION: complete Worker suite; 129/129 passed.
+- ESLint, Prettier, TypeScript, and git diff checks passed.
+
+Docs:
+- N/A; regression cases document the edge behavior.
+
+Refs:
+- Skyline-Gazer/pastebin-worker#79
+- Source PR #95 review finding
+
+Upstream base:
+0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+
+Patch ID:
+030-harden-u-redirect
+
+Dependencies:
+none
+---
+ shared/verify.ts          |  9 ++++++---
+ worker/test/roles.spec.ts | 23 ++++++++++++++---------
+ 2 files changed, 20 insertions(+), 12 deletions(-)
+
+diff --git a/shared/verify.ts b/shared/verify.ts
+index 06ad604df3fe7e6714cdbda0d47a510390da29ca..1b12b92c64bfafc64d84f8e6e4f91de3bdb81a02 100644
+--- a/shared/verify.ts
++++ b/shared/verify.ts
+@@ -8,15 +8,18 @@ export function isLegalUrl(url: string): boolean {
+ }
+ 
+ export function isLegalRedirectUrl(url: string): boolean {
+-  if (!URL.canParse(url)) {
++  const trimmedUrl = url.trim()
++  if (!/^https?:\/\//i.test(trimmedUrl) || !URL.canParse(trimmedUrl)) {
+     return false
+   }
+ 
+-  const parsedUrl = new URL(url)
++  const parsedUrl = new URL(trimmedUrl)
++  const authority = trimmedUrl.slice(trimmedUrl.indexOf("://") + 3).split(/[/?#]/, 1)[0]
+   return (
+     (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") &&
+     parsedUrl.username === "" &&
+-    parsedUrl.password === ""
++    parsedUrl.password === "" &&
++    !authority.includes("@")
+   )
+ }
+ 
+diff --git a/worker/test/roles.spec.ts b/worker/test/roles.spec.ts
+index 1e0e81e7580b0f2e9a26f3938bbcbb2479eb6758..f6d2e2d467cbd0dddbd037eb8be04d984f9d8eb9 100644
+--- a/worker/test/roles.spec.ts
++++ b/worker/test/roles.spec.ts
+@@ -119,16 +119,21 @@ describe("url redirect with role u", () => {
+     expect(resp.status).toStrictEqual(400)
+   })
+ 
+-  it.each(["https://user@example.com/", "https://user:pass@example.com/"])(
+-    "should refuse an HTTP(S) URL containing credentials: %s",
+-    async (contentUrl) => {
+-      const uploadResp = await upload(ctx, { c: contentUrl })
+-      const url = uploadResp.url
++  it.each([
++    "https://user@example.com/",
++    "https://user:pass@example.com/",
++    "https://@example.com/",
++    "https://:@example.com/",
++    "https:@example.com",
++    "https:\\@example.com",
++    "https:/\\@example.com",
++  ])("should refuse an HTTP(S) URL containing credentials: %s", async (contentUrl) => {
++    const uploadResp = await upload(ctx, { c: contentUrl })
++    const url = uploadResp.url
+ 
+-      const resp = await workerFetch(ctx, addRole(url, "u"))
+-      expect(resp.status).toStrictEqual(400)
+-    },
+-  )
++    const resp = await workerFetch(ctx, addRole(url, "u"))
++    expect(resp.status).toStrictEqual(400)
++  })
+ 
+   it("should preserve an HTTP(S) redirect path and query", async () => {
+     const contentUrl = "https://example.com/path?x=1"
+-- 
+2.50.1 (Apple Git-155)
+

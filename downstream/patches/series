@@ -5,3 +5,4 @@
 010-non-expiring-paste/0001-feat-expiration-support-non-expiring-pastes.patch
 010-non-expiring-paste/0002-test-r2-use-deterministic-cleanup-payload.patch
 010-non-expiring-paste/0003-style-apply-required-prettier-formatting.patch
+020-webcrypto-generated-secrets/0001-fix-security-use-Web-Crypto-for-generated-secrets.patch

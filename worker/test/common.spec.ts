@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest"
 
-import { timingSafeEqual } from "../common.js"
+import { genRandStr, timingSafeEqual } from "../common.js"
+
+const CHAR_GEN = "ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678"
 
 describe("timingSafeEqual", () => {
   it("returns true for equal strings", () => {
@@ -36,5 +38,14 @@ describe("timingSafeEqual", () => {
     expect(timingSafeEqual("café", "cafe")).toBe(false)
     expect(timingSafeEqual("日本語", "日本語")).toBe(true)
     expect(timingSafeEqual("日本語", "日本誤")).toBe(false)
+  })
+})
+
+describe("genRandStr", () => {
+  it("generates the requested number of characters from the safe alphabet", () => {
+    const value = genRandStr(256)
+
+    expect(value).toHaveLength(256)
+    expect([...value].every((character) => CHAR_GEN.includes(character))).toBe(true)
   })
 })

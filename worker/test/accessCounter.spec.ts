@@ -1,17 +1,9 @@
-import { expect, it, beforeEach, vi, afterEach } from "vitest"
+import { expect, it } from "vitest"
 import { genRandomBlob, upload, workerFetch } from "./testUtils.js"
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test"
 import type { PasteMetadata } from "../storage/storage.js"
 
-beforeEach(() => {
-  vi.spyOn(Math, "random").mockReturnValue(0)
-})
-
-afterEach(() => {
-  vi.restoreAllMocks()
-})
-
-it("increase access counter", async () => {
+it("does not rewrite paste content during access accounting", async () => {
   const ctx = createExecutionContext()
   const content = genRandomBlob(1024)
   const name = "abc"
@@ -22,15 +14,18 @@ it("increase access counter", async () => {
     return paste?.metadata?.accessCounter
   }
 
+  const before = await env.PB.get("~" + name, "arrayBuffer")
   expect(await getCounter()).toStrictEqual(0)
 
   await workerFetch(ctx, url)
   await waitOnExecutionContext(ctx)
 
-  expect(await getCounter()).toStrictEqual(1)
+  expect(await env.PB.get("~" + name, "arrayBuffer")).toStrictEqual(before)
+  expect(await getCounter()).toStrictEqual(0)
 
   await workerFetch(ctx, url)
   await waitOnExecutionContext(ctx)
 
-  expect(await getCounter()).toStrictEqual(2)
+  expect(await env.PB.get("~" + name, "arrayBuffer")).toStrictEqual(before)
+  expect(await getCounter()).toStrictEqual(0)
 })

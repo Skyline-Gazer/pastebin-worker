@@ -38,12 +38,21 @@ export function dateToUnix(date: Date): number {
 }
 
 export function genRandStr(len: number) {
-  // TODO: switch to Web Crypto random generator
   let str = ""
   const numOfRand = CHAR_GEN.length
-  for (let i = 0; i < len; i++) {
-    str += CHAR_GEN.charAt(Math.floor(Math.random() * numOfRand))
+  const maxUnbiasedByte = 256 - (256 % numOfRand)
+  const bytes = new Uint8Array(128)
+
+  while (str.length < len) {
+    crypto.getRandomValues(bytes)
+    for (const byte of bytes) {
+      if (byte < maxUnbiasedByte) {
+        str += CHAR_GEN.charAt(byte % numOfRand)
+        if (str.length === len) break
+      }
+    }
   }
+
   return str
 }
 

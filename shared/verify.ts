@@ -7,6 +7,19 @@ export function isLegalUrl(url: string): boolean {
   return URL.canParse(url)
 }
 
+export function isLegalRedirectUrl(url: string): boolean {
+  if (!URL.canParse(url)) {
+    return false
+  }
+
+  const parsedUrl = new URL(url)
+  return (
+    (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") &&
+    parsedUrl.username === "" &&
+    parsedUrl.password === ""
+  )
+}
+
 export function verifyPassword(password: string): VerifyResult {
   if (password === "") {
     return [true, ""]

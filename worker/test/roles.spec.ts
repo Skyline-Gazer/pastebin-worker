@@ -92,8 +92,46 @@ test("meta with role m", async () => {
 
 describe("url redirect with role u", () => {
   const ctx = createExecutionContext()
-  it("should redirect", async () => {
-    const contentUrl = "https://example.com:1234/abc-def?g=hi&jk=l"
+  it.each(["http://example.com", "https://example.com:1234/abc-def?g=hi&jk=l"])(
+    "should redirect to an HTTP(S) URL: %s",
+    async (contentUrl) => {
+      const uploadResp = await upload(ctx, { c: contentUrl })
+      const url = uploadResp.url
+
+      const resp = await workerFetch(ctx, addRole(url, "u"))
+      expect(resp.status).toStrictEqual(302)
+      expect(resp.headers.get("location")).toStrictEqual(new URL(contentUrl).href)
+    },
+  )
+
+  it.each([
+    "javascript:alert(1)",
+    "data:text/plain,test",
+    "file:///tmp/test",
+    "ftp://example.com",
+    "mailto:test@example.com",
+    "custom:example",
+  ])("should refuse a non-HTTP(S) URL: %s", async (contentUrl) => {
+    const uploadResp = await upload(ctx, { c: contentUrl })
+    const url = uploadResp.url
+
+    const resp = await workerFetch(ctx, addRole(url, "u"))
+    expect(resp.status).toStrictEqual(400)
+  })
+
+  it.each(["https://user@example.com/", "https://user:pass@example.com/"])(
+    "should refuse an HTTP(S) URL containing credentials: %s",
+    async (contentUrl) => {
+      const uploadResp = await upload(ctx, { c: contentUrl })
+      const url = uploadResp.url
+
+      const resp = await workerFetch(ctx, addRole(url, "u"))
+      expect(resp.status).toStrictEqual(400)
+    },
+  )
+
+  it("should preserve an HTTP(S) redirect path and query", async () => {
+    const contentUrl = "https://example.com/path?x=1"
     const uploadResp = await upload(ctx, { c: contentUrl })
     const url = uploadResp.url
 

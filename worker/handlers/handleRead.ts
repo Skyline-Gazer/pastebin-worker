@@ -1,5 +1,5 @@
 import { decode, WorkerError, escapeHtml } from "../common.js"
-import { isLegalUrl } from "../../shared/verify.js"
+import { isLegalRedirectUrl } from "../../shared/verify.js"
 import { getDocMarkdown, getCurlIndexMarkdown, renderDocAsHtml } from "../pages/docs.js"
 import { verifyAuth } from "../pages/auth.js"
 import mime from "mime"
@@ -244,7 +244,7 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
       throw new WorkerError(400, `URL too long to be redirected (max ${MAX_URL_REDIRECT_LEN} bytes)`)
     }
     const redirectURL = await decodeMaybeStream(item.paste)
-    if (isLegalUrl(redirectURL)) {
+    if (isLegalRedirectUrl(redirectURL)) {
       return Response.redirect(redirectURL)
     } else {
       throw new WorkerError(400, "cannot parse paste content as a legal URL")

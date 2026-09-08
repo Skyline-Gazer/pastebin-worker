@@ -14,3 +14,4 @@
 050-atomic-named-paste-create/0003-fix-storage-expire-failed-named-claims-without-delet.patch
 050-atomic-named-paste-create/0004-fix-storage-keep-original-metadata-error-if-claim-cl.patch
 050-atomic-named-paste-create/0005-test-storage-assert-sanitized-500-when-named-claim-c.patch
+050-atomic-named-paste-create/0006-fix-storage-fail-closed-reclaim-and-reservation-comp.patch

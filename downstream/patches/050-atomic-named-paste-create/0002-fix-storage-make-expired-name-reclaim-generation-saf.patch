@@ -1,7 +1,7 @@
 From cfa7276786e38a3556d1bab0386422279c114588 Mon Sep 17 00:00:00 2001
 From: Ian <219239532+markd3ng@users.noreply.github.com>
 Date: Tue, 8 Sep 2026 14:52:14 +0800
-Subject: [PATCH 2/5] fix(storage): make expired name reclaim generation-safe
+Subject: [PATCH 2/6] fix(storage): make expired name reclaim generation-safe
 
 Context:
 Source review of PR #99 found that identical-body reclaim can admit two winners because Miniflare/R2 body-hash ETags do not change across metadata-only overwrites, and that expired legacy R2 objects without custom expiration metadata were no longer immediately reusable. Greptile also reported that a KV metadata put failure after a successful R2 claim stranded the name until expiry.

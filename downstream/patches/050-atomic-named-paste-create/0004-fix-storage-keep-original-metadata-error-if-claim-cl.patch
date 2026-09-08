@@ -1,7 +1,7 @@
 From 15b80c1fbf4e8800e888964055b01565cc56b0f2 Mon Sep 17 00:00:00 2001
 From: Ian <219239532+markd3ng@users.noreply.github.com>
 Date: Tue, 8 Sep 2026 15:03:50 +0800
-Subject: [PATCH 4/5] fix(storage): keep original metadata error if claim
+Subject: [PATCH 4/6] fix(storage): keep original metadata error if claim
  cleanup fails
 
 Context:

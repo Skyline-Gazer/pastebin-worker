@@ -37,8 +37,11 @@ expiration plumbing in `handleWrite.ts` beside the named-create claim path.
 3. `3939fc78bf5fecda485d7894f90cc6db63d3388d` → `0003-fix-storage-expire-failed-named-claims-without-delet.patch`
 4. `15b80c1fbf4e8800e888964055b01565cc56b0f2` → `0004-fix-storage-keep-original-metadata-error-if-claim-cl.patch`
 5. `d12bd3ce296c3dd22fe148a08437b6f320f05fb2` → `0005-test-storage-assert-sanitized-500-when-named-claim-c.patch`
+6. `85872d000c52c73773f5682b35d41f7de9106244` → `0006-fix-storage-fail-closed-reclaim-and-reservation-comp.patch`
 
 Exported commit 0005 is an assembled-series test adaptation only: Patch 040 sanitizes uncaught 500 bodies, so the source-branch assertion that the client sees `kv unavailable` is replaced with the generic uncaught body plus a console.error check that the original KV error is still logged and the cleanup throw is not. Source PR #99 HEAD remains `a3482e05...`.
+
+Exported commit 0006 is a promotion review-fix for PR #100 Greptile P1s: identical-body reservation is generation-safe expired if the body PUT misses/throws, and legacy R2 objects without custom expiry metadata are reclaimed only when KV metadata is present and expired (KV miss is fail-closed).
 
 Generation command:
 
@@ -114,6 +117,6 @@ equivalent atomic named-create guarantee, and the downstream series validates
 without it.
 
 Canonical replay: `bash downstream/scripts/check-patches.sh 0835cac4ab8f974035d31845f5c2b93b0c85b5c6` PASS.
-Assembled HEAD: `615cf39f24014bdb859018c7a515bcb7d5be4501`.
-Assembled tree: `eb642c414979d5840b8a2ed9d32b280ca0f594b9`.
-Assembled validation (Node v22.23.2, pnpm 10.28.0): `pnpm exec vitest run` 23 files / 185 tests PASS; Prettier, ESLint, `tsc --noEmit`, `pnpm build:frontend`, `wrangler deploy --dry-run` PASS.
+Assembled HEAD: `03cceb9ad5d2a2a9db50490578819a8f7635cbbe`.
+Assembled tree: `8391d9538acc4aca19f5cdbab559ceea6425437e`.
+Assembled validation (Node v22.23.2, pnpm 10.28.0): `pnpm exec vitest run` 23 files / 187 tests PASS; Prettier, ESLint, `tsc --noEmit`, `pnpm build:frontend`, `wrangler deploy --dry-run` PASS.

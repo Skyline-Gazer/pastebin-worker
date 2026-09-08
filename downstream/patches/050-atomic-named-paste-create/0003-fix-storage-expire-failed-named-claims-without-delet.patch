@@ -1,7 +1,7 @@
 From 3939fc78bf5fecda485d7894f90cc6db63d3388d Mon Sep 17 00:00:00 2001
 From: Ian <219239532+markd3ng@users.noreply.github.com>
 Date: Tue, 8 Sep 2026 14:58:57 +0800
-Subject: [PATCH 3/5] fix(storage): expire failed named claims without deleting
+Subject: [PATCH 3/6] fix(storage): expire failed named claims without deleting
  newer objects
 
 Context:

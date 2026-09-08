@@ -1,7 +1,7 @@
 From 84d10ce37cf2d8d1f0a43a8a2fd413d9e39da10c Mon Sep 17 00:00:00 2001
 From: Ian <219239532+markd3ng@users.noreply.github.com>
 Date: Tue, 8 Sep 2026 14:15:39 +0800
-Subject: [PATCH 1/5] fix(storage): atomically claim custom paste names
+Subject: [PATCH 1/6] fix(storage): atomically claim custom paste names
 
 Context:
 Concurrent custom-name POST requests can both pass the eventually consistent Workers KV availability check and silently overwrite one another.

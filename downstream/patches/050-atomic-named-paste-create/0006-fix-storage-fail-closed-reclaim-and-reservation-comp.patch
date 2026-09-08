@@ -1,0 +1,227 @@
+From 85872d000c52c73773f5682b35d41f7de9106244 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Tue, 8 Sep 2026 16:01:27 +0800
+Subject: [PATCH 6/6] fix(storage): fail-closed reclaim and reservation
+ compensation
+
+Context:
+Promotion PR #100 Greptile P1s on exported 0002: a reservation PUT can strand the name if the following body PUT misses, and a KV miss for legacy R2 objects without custom expiration metadata was treated as proof of expiry.
+
+Expected behavior:
+If identical-body reclaim wins a reservation but the body PUT returns null or throws, expire that reservation generation-safely and return null. Legacy objects without R2 expiry metadata are reclaimed only when KV metadata is present and expired; a KV miss is fail-closed and does not overwrite a live object.
+
+Acceptance criteria:
+- body PUT miss after reservation leaves the name retryable without clobbering a newer generation
+- live legacy R2 plus KV miss is not reclaimed
+- expired legacy R2 with present expired KV metadata remains reclaimable
+
+Constraints:
+- generic upstream behavior only
+- no Durable Object, lease framework, or orphan sweeper
+- do not rewrite source PR #99 HEAD a3482e05a7ddf808a48ffe2f9e0ebafc758f7e26
+- remaining KV+cleanup double-failure residual stays ACCEPTED_RESIDUAL_RISK
+
+Validation:
+- RED: writeConcurrency.spec.ts 2 failed (legacy KV miss reclaimed; reservation retry null)
+- GREEN: Node 22 pnpm exec vitest run worker/test/writeConcurrency.spec.ts -> 9 passed
+- REGRESSION: Node 22 pnpm exec vitest run -> 23 files, 187 tests passed
+- prettier --check, eslint, tsc --noEmit PASS
+
+Docs:
+- promotion README updated in the export commit on downstream/main
+
+Upstream base:
+0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+
+Patch ID:
+050-atomic-named-paste-create
+
+Dependencies:
+010-non-expiring-paste handleWrite overlap; 040-sanitize-uncaught-500 public 500 body
+
+Refs:
+- https://github.com/Skyline-Gazer/pastebin-worker/pull/100
+- Greptile P1 Reservation failure strands names
+- Greptile P1 KV misses overwrite live pastes
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ worker/storage/storage.ts            | 32 +++++++--
+ worker/test/writeConcurrency.spec.ts | 97 ++++++++++++++++++++++++++++
+ 2 files changed, 123 insertions(+), 6 deletions(-)
+
+diff --git a/worker/storage/storage.ts b/worker/storage/storage.ts
+index 165426968efe3bb2c2f3df56bae920317ac76170..6097a41f7098b8796e8a93ae95ef596ba7ce37b4 100644
+--- a/worker/storage/storage.ts
++++ b/worker/storage/storage.ts
+@@ -289,8 +289,13 @@ async function namedPasteObjectExpired(
+     return metadataExpiration < nowUnix
+   }
+ 
+-  const kvMeta = await getPasteMetadata(env, pasteName)
+-  return kvMeta === null
++  const kvMeta = await env.PB.getWithMetadata<PasteMetadataInStorage>(pasteName, {
++    type: "stream",
++  })
++  if (kvMeta.value === null || kvMeta.metadata === null) {
++    return false
++  }
++  return isExpired(migratePasteMetadata(kvMeta.metadata), nowUnix)
+ }
+ 
+ /**
+@@ -328,10 +333,25 @@ export async function createNamedPasteObject(
+   })
+   if (reserved === null) return null
+ 
+-  return await env.R2.put(pasteName, content, {
+-    onlyIf: { etagMatches: reserved.etag },
+-    customMetadata,
+-  })
++  try {
++    const replaced = await env.R2.put(pasteName, content, {
++      onlyIf: { etagMatches: reserved.etag },
++      customMetadata,
++    })
++    if (replaced !== null) return replaced
++  } catch {
++    // Best-effort generation-safe expire of this reservation below.
++  }
++
++  try {
++    await env.R2.put(pasteName, new ArrayBuffer(0), {
++      onlyIf: { etagMatches: reserved.etag },
++      customMetadata: { willExpireAtUnix: "0" },
++    })
++  } catch {
++    // Fail-closed if compensation also fails; do not clobber a newer generation.
++  }
++  return null
+ }
+ 
+ export async function pasteNameAvailable(env: Env, pasteName: string): Promise<boolean> {
+diff --git a/worker/test/writeConcurrency.spec.ts b/worker/test/writeConcurrency.spec.ts
+index 1177c12c607ac2e084bcd0c620ed5fc3a8a549a4..d75bd19cc779ff674bbc52442d7847824de714e1 100644
+--- a/worker/test/writeConcurrency.spec.ts
++++ b/worker/test/writeConcurrency.spec.ts
+@@ -84,6 +84,50 @@ function failKvPuts(namespace: KVNamespace, pasteName: string): KVNamespace {
+   })
+ }
+ 
++function r2BodyPutAfterReservationReturnsNull(bucket: R2Bucket, pasteName: string): R2Bucket {
++  const put = bucket.put.bind(bucket)
++  let etagMatchPuts = 0
++  return new Proxy(bucket, {
++    get(target, property) {
++      if (property === "put") {
++        return async (...args: Parameters<R2Bucket["put"]>) => {
++          const [key, , options] = args
++          if (
++            key === pasteName &&
++            options?.onlyIf !== undefined &&
++            typeof options.onlyIf === "object" &&
++            "etagMatches" in options.onlyIf
++          ) {
++            etagMatchPuts += 1
++            if (etagMatchPuts === 2) {
++              return null
++            }
++          }
++          return put(...args)
++        }
++      }
++      return boundMember(target, property)
++    },
++  })
++}
++
++function kvMisses(namespace: KVNamespace, pasteName: string): KVNamespace {
++  const getWithMetadata = namespace.getWithMetadata.bind(namespace) as (...args: unknown[]) => Promise<unknown>
++  return new Proxy(namespace, {
++    get(target, property) {
++      if (property === "getWithMetadata") {
++        return async (...args: unknown[]) => {
++          if (args[0] === pasteName) {
++            return { value: null, metadata: null }
++          }
++          return getWithMetadata(...args)
++        }
++      }
++      return boundMember(target, property)
++    },
++  })
++}
++
+ function r2PutThrowsOnUploadedBefore(bucket: R2Bucket): R2Bucket {
+   const put = bucket.put.bind(bucket)
+   return new Proxy(bucket, {
+@@ -213,6 +257,18 @@ describe("custom-name create concurrency", () => {
+   it("reclaims an expired legacy R2 name that has no custom expiration metadata", async () => {
+     const pasteName = "~expired-legacy-r2"
+     await env.R2.put(pasteName, "legacy expired")
++    await env.PB.put(pasteName, "", {
++      metadata: {
++        schemaVersion: 2,
++        location: "R2",
++        passwd: "legacy",
++        lastModifiedAtUnix: 5,
++        createdAtUnix: 5,
++        willExpireAtUnix: 10,
++        accessCounter: 0,
++        sizeBytes: 14,
++      },
++    })
+ 
+     const created = await createNamedPasteObject(
+       env,
+@@ -226,6 +282,47 @@ describe("custom-name create concurrency", () => {
+     expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("legacy replacement")
+   })
+ 
++  it("does not reclaim a live legacy R2 name when KV metadata is missing", async () => {
++    const pasteName = "~legacy-live-kv-miss"
++    await env.R2.put(pasteName, "live legacy")
++    const missingKvEnv = {
++      ...env,
++      PB: kvMisses(env.PB, pasteName),
++    }
++
++    const created = await createNamedPasteObject(
++      missingKvEnv,
++      pasteName,
++      new TextEncoder().encode("overwrite").buffer,
++      100,
++      20,
++    )
++
++    expect(created).toBeNull()
++    expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("live legacy")
++  })
++
++  it("expires a reservation if the following body PUT does not take the generation", async () => {
++    const pasteName = "~reservation-body-miss"
++    const replacement = new TextEncoder().encode("reserved then retried")
++    await env.R2.put(pasteName, "expired", {
++      customMetadata: { willExpireAtUnix: "10" },
++    })
++
++    const first = await createNamedPasteObject(
++      { ...env, R2: r2BodyPutAfterReservationReturnsNull(env.R2, pasteName) },
++      pasteName,
++      replacement.buffer,
++      100,
++      20,
++    )
++    expect(first).toBeNull()
++
++    const retry = await createNamedPasteObject(env, pasteName, replacement.buffer, 100, 20)
++    expect(retry).not.toBeNull()
++    expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("reserved then retried")
++  })
++
+   it("releases a new R2 name claim when KV metadata persistence fails", async () => {
+     const requestedName = "kv-fail-atomic"
+     const pasteName = `~${requestedName}`
+-- 
+2.50.1 (Apple Git-155)
+

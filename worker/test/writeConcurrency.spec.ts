@@ -1,5 +1,5 @@
 import { createExecutionContext, env } from "cloudflare:test"
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import worker from "../index.js"
 import type { PasteResponse } from "../../shared/interfaces.js"
@@ -132,6 +132,10 @@ function failKvPutsAfterReplacingR2(
 }
 
 describe("custom-name create concurrency", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it("returns one winner and one stable 409 when availability checks race", async () => {
     const requestedName = "atomic-race"
     const pasteName = `~${requestedName}`
@@ -285,6 +289,7 @@ describe("custom-name create concurrency", () => {
       R2: r2PutThrowsOnUploadedBefore(env.R2),
     }
 
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
     const failed = await worker.fetch(
       new Request(BASE_URL, {
         method: "POST",
@@ -293,7 +298,12 @@ describe("custom-name create concurrency", () => {
       failingEnv,
       createExecutionContext(),
     )
+    const body = await failed.text()
     expect(failed.status).toStrictEqual(500)
-    expect(await failed.text()).toContain("kv unavailable")
+    expect(body).toStrictEqual("Error 500: Internal Server Error\n")
+    expect(body).not.toContain("cleanup put failed")
+    expect(body).not.toContain("kv unavailable")
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("kv unavailable"))
+    expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining("cleanup put failed"))
   })
 })

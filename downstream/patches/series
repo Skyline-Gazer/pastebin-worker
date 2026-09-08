@@ -6,3 +6,5 @@
 010-non-expiring-paste/0002-test-r2-use-deterministic-cleanup-payload.patch
 010-non-expiring-paste/0003-style-apply-required-prettier-formatting.patch
 020-webcrypto-generated-secrets/0001-fix-security-use-Web-Crypto-for-generated-secrets.patch
+030-harden-u-redirect/0001-fix-redirect-restrict-URL-redirects-to-credential-fr.patch
+030-harden-u-redirect/0002-fix-redirect-reject-empty-URL-userinfo.patch

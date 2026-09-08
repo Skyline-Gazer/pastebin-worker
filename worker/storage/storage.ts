@@ -274,13 +274,34 @@ function r2ExpirationMetadata(willExpireAtUnix: number | null): Record<string, s
   return willExpireAtUnix === null ? { permanent: "1" } : { willExpireAtUnix: String(willExpireAtUnix) }
 }
 
+async function namedPasteObjectExpired(
+  env: Env,
+  existing: R2Object,
+  pasteName: string,
+  nowUnix: number,
+): Promise<boolean> {
+  if (existing.customMetadata?.permanent === "1") {
+    return false
+  }
+
+  const metadataExpiration = Number(existing.customMetadata?.willExpireAtUnix)
+  if (Number.isFinite(metadataExpiration)) {
+    return metadataExpiration < nowUnix
+  }
+
+  const kvMeta = await getPasteMetadata(env, pasteName)
+  return kvMeta === null
+}
+
 /**
  * Store a custom-name paste body only if this request wins the R2 key.
  *
  * Workers KV cannot atomically create a key, so new custom-name pastes use the
  * strongly consistent R2 object as both their body and their name claim. An
- * expired object may be replaced, but only while its observed ETag still owns
- * the key; concurrent reclaim attempts therefore still produce one winner.
+ * expired object may be replaced, but only while this request still owns the
+ * observed generation. Body-hash ETags do not change when the replacement
+ * bytes are identical, so reclaim first writes unique reservation bytes and
+ * then stores the real body against that new generation.
  */
 export async function createNamedPasteObject(
   env: Env,
@@ -297,13 +318,18 @@ export async function createNamedPasteObject(
   if (created !== null) return created
 
   const existing = await env.R2.head(pasteName)
-  const existingExpiration = Number(existing?.customMetadata?.willExpireAtUnix)
-  if (existing === null || !Number.isFinite(existingExpiration) || existingExpiration >= nowUnix) {
+  if (existing === null || !(await namedPasteObjectExpired(env, existing, pasteName, nowUnix))) {
     return null
   }
 
-  return await env.R2.put(pasteName, content, {
+  const reserved = await env.R2.put(pasteName, crypto.getRandomValues(new Uint8Array(16)), {
     onlyIf: { etagMatches: existing.etag },
+    customMetadata,
+  })
+  if (reserved === null) return null
+
+  return await env.R2.put(pasteName, content, {
+    onlyIf: { etagMatches: reserved.etag },
     customMetadata,
   })
 }

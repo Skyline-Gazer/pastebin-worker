@@ -6,6 +6,15 @@ import type { PasteResponse } from "../../shared/interfaces.js"
 import { createNamedPasteObject } from "../storage/storage.js"
 import { BASE_URL, createFormData } from "./testUtils.js"
 
+function boundMember<T extends object>(target: T, property: string | symbol): unknown {
+  const value: unknown = Reflect.get(target, property, target)
+  if (typeof value === "function") {
+    const method = value as (...args: unknown[]) => unknown
+    return method.bind(target)
+  }
+  return value
+}
+
 function synchronizeAvailabilityReads(namespace: KVNamespace, pasteName: string): KVNamespace {
   const getWithMetadata = namespace.getWithMetadata.bind(namespace) as (...args: unknown[]) => Promise<unknown>
   let matchingReads = 0
@@ -27,13 +36,50 @@ function synchronizeAvailabilityReads(namespace: KVNamespace, pasteName: string)
           return result
         }
       }
+      return boundMember(target, property)
+    },
+  })
+}
 
-      const value: unknown = Reflect.get(target, property, target)
-      if (typeof value === "function") {
-        const method = value as (...args: unknown[]) => unknown
-        return method.bind(target)
+function synchronizeR2Heads(bucket: R2Bucket, pasteName: string): R2Bucket {
+  const head = bucket.head.bind(bucket)
+  let matchingReads = 0
+  let releaseReads!: () => void
+  const bothReadsStarted = new Promise<void>((resolve) => {
+    releaseReads = resolve
+  })
+
+  return new Proxy(bucket, {
+    get(target, property) {
+      if (property === "head") {
+        return async (key: string) => {
+          const result = await head(key)
+          if (key === pasteName && matchingReads < 2) {
+            matchingReads += 1
+            if (matchingReads === 2) releaseReads()
+            await bothReadsStarted
+          }
+          return result
+        }
       }
-      return value
+      return boundMember(target, property)
+    },
+  })
+}
+
+function failKvPuts(namespace: KVNamespace, pasteName: string): KVNamespace {
+  const put = namespace.put.bind(namespace) as (key: string, ...args: unknown[]) => Promise<unknown>
+  return new Proxy(namespace, {
+    get(target, property) {
+      if (property === "put") {
+        return async (key: string, ...args: unknown[]) => {
+          if (key === pasteName) {
+            throw new Error("kv unavailable")
+          }
+          return put(key, ...args)
+        }
+      }
+      return boundMember(target, property)
     },
   })
 }
@@ -91,5 +137,75 @@ describe("custom-name create concurrency", () => {
     expect(results.filter((result) => result !== null)).toHaveLength(1)
     const winnerIndex = results.findIndex((result) => result !== null)
     expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual(new TextDecoder().decode(contents[winnerIndex]))
+  })
+
+  it("allows only one contender to reclaim an expired name with an identical body", async () => {
+    const pasteName = "~expired-identical-body"
+    const replacement = new TextEncoder().encode("same replacement").buffer
+    await env.R2.put(pasteName, "same replacement", {
+      customMetadata: { willExpireAtUnix: "10" },
+    })
+
+    const racingEnv = {
+      ...env,
+      R2: synchronizeR2Heads(env.R2, pasteName),
+    }
+    const results = await Promise.all([
+      createNamedPasteObject(racingEnv, pasteName, replacement, 100, 20),
+      createNamedPasteObject(racingEnv, pasteName, replacement, 100, 20),
+    ])
+
+    expect(results.filter((result) => result !== null)).toHaveLength(1)
+    expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("same replacement")
+  })
+
+  it("reclaims an expired legacy R2 name that has no custom expiration metadata", async () => {
+    const pasteName = "~expired-legacy-r2"
+    await env.R2.put(pasteName, "legacy expired")
+
+    const created = await createNamedPasteObject(
+      env,
+      pasteName,
+      new TextEncoder().encode("legacy replacement").buffer,
+      100,
+      20,
+    )
+
+    expect(created).not.toBeNull()
+    expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("legacy replacement")
+  })
+
+  it("releases a new R2 name claim when KV metadata persistence fails", async () => {
+    const requestedName = "kv-fail-atomic"
+    const pasteName = `~${requestedName}`
+    const failingEnv = {
+      ...env,
+      PB: failKvPuts(env.PB, pasteName),
+    }
+
+    const failed = await worker.fetch(
+      new Request(BASE_URL, {
+        method: "POST",
+        body: createFormData({ c: new Blob(["stranded"]), n: requestedName }),
+      }),
+      failingEnv,
+      createExecutionContext(),
+    )
+    expect(failed.status).toStrictEqual(500)
+
+    const retry = await worker.fetch(
+      new Request(BASE_URL, {
+        method: "POST",
+        body: createFormData({ c: new Blob(["retry"]), n: requestedName }),
+      }),
+      env,
+      createExecutionContext(),
+    )
+    expect(retry.status).toStrictEqual(200)
+    const created = await retry.json<PasteResponse>()
+    expect(created.location).toStrictEqual("R2")
+    expect(await (await worker.fetch(new Request(created.url), env, createExecutionContext())).text()).toStrictEqual(
+      "retry",
+    )
   })
 })

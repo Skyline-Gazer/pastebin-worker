@@ -1,0 +1,284 @@
+From 84d10ce37cf2d8d1f0a43a8a2fd413d9e39da10c Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Tue, 8 Sep 2026 14:15:39 +0800
+Subject: [PATCH 1/6] fix(storage): atomically claim custom paste names
+
+Context:
+Concurrent custom-name POST requests can both pass the eventually consistent Workers KV availability check and silently overwrite one another.
+
+Expected behavior:
+A direct custom-name create stores its authoritative body with a conditional R2 write. Concurrent requests for the same available name yield one success and stable 409 conflicts. Expired R2-backed names are reclaimed only with an ETag precondition.
+
+Acceptance criteria:
+- deterministic same-name race returns one 200 and one 409
+- winning content remains retrievable and reports R2 storage
+- concurrent expired-name reclaim has exactly one winner
+- existing sequential conflicts and expired-name reuse remain compatible
+
+Constraints:
+- generic upstream behavior only; no Feishu concepts
+- preserve legacy KV-backed named-paste checks
+- no Durable Object, new binding, lock framework, or MPU protocol redesign
+- do not modify upstream-sync
+
+Validation:
+- RED: Node 22 pnpm exec vitest run worker/test/writeConcurrency.spec.ts -> observed [200, 200]
+- GREEN: Node 22 focused suite -> 3 files, 21 tests passed
+- REGRESSION: Node 22 full suite -> 22 files, 158 tests passed
+- pnpm lint; prettier --check .; pnpm typecheck; pnpm build:frontend; pnpm build; git diff --check -> PASS
+
+Docs:
+- doc/api.md documents atomic conflict behavior and R2 location for direct custom names
+
+Upstream base:
+0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+
+Patch ID:
+050-atomic-named-paste-create (candidate; verify against refreshed series before export)
+
+Dependencies:
+none; replay compatibility with 010 permanent-expiration metadata will be verified before promotion
+
+Refs:
+- https://github.com/Skyline-Gazer/pastebin-worker/issues/78
+- https://github.com/Skyline-Gazer/pastebin-worker/issues/78#issuecomment-5580077325
+---
+ doc/api.md                           |  2 +-
+ worker/handlers/handleWrite.ts       | 19 +++++-
+ worker/storage/storage.ts            | 38 +++++++++++
+ worker/test/writeConcurrency.spec.ts | 95 ++++++++++++++++++++++++++++
+ 4 files changed, 150 insertions(+), 4 deletions(-)
+ create mode 100644 worker/test/writeConcurrency.spec.ts
+
+diff --git a/doc/api.md b/doc/api.md
+index bfa71d85c54795e7a2245cdc545dbedec5bb39a7..e5acda596edee06877d74314d979a2978db26a87 100644
+--- a/doc/api.md
++++ b/doc/api.md
+@@ -150,7 +150,7 @@ Upload your paste. It accept parameters in form-data:
+ 
+ - `s`: optional. The **password** which allows you to modify and delete the paste. If not specified, the worker will generate a random string as password.
+ 
+-- `n`: optional. The customized **name** of your paste. If not specified, the worker will generate a random string (4 characters by default) as the name. You need to prefix the name with `~` when fetching the paste of customized name. The name is at least 3 characters long, consisting of alphabet, digits and characters in `+_-[]*$=@,;/`.
++- `n`: optional. The customized **name** of your paste. If not specified, the worker will generate a random string (4 characters by default) as the name. You need to prefix the name with `~` when fetching the paste of customized name. The name is at least 3 characters long, consisting of alphabet, digits and characters in `+_-[]*$=@,;/`. Direct custom-name uploads are stored in R2 so the name can be claimed atomically; concurrent requests for the same available name produce one success and `409` conflicts for the other requests.
+ 
+ - `p`: optional. The flag of **private mode**. If specified to any value, the name of the paste is as long as 24 characters. No effect if `n` is used.
+ 
+diff --git a/worker/handlers/handleWrite.ts b/worker/handlers/handleWrite.ts
+index 4aeb40b36e3366d2044244bbfe54f02e49d14bba..4d86ebbd62631e3794a5e4ad5153d4d346fec775 100644
+--- a/worker/handlers/handleWrite.ts
++++ b/worker/handlers/handleWrite.ts
+@@ -1,6 +1,7 @@
+ import { verifyAuth } from "../pages/auth.js"
+-import { decode, genRandStr, WorkerError, timingSafeEqual } from "../common.js"
++import { dateToUnix, decode, genRandStr, WorkerError, timingSafeEqual } from "../common.js"
+ import {
++  createNamedPasteObject,
+   createPaste,
+   getPasteMetadata,
+   metaResponseFromMetadata,
+@@ -22,7 +23,7 @@ import {
+ 
+ interface ParsedMultipartPart {
+   filename?: string
+-  content: ReadableStream | ArrayBuffer
++  content: ArrayBuffer
+   contentAsString: () => string
+   contentLength: number
+ }
+@@ -230,6 +231,7 @@ export async function handlePostOrPut(
+     )
+   } else {
+     let pasteName: string | undefined
++    let namedPasteStoredInR2 = false
+     if (isMPUComplete) {
+       if (url.searchParams.has("name")) {
+         pasteName = url.searchParams.get("name")!
+@@ -241,6 +243,17 @@ export async function handlePostOrPut(
+       if (!(await pasteNameAvailable(env, pasteName))) {
+         throw new WorkerError(409, `name '${pasteName}' is already used`)
+       }
++      const namedR2Object = await createNamedPasteObject(
++        env,
++        pasteName,
++        content,
++        expirationSeconds === null ? null : dateToUnix(now) + expirationSeconds,
++        dateToUnix(now),
++      )
++      if (namedR2Object === null) {
++        throw new WorkerError(409, `name '${pasteName}' is already used`)
++      }
++      namedPasteStoredInR2 = true
+     } else {
+       pasteName = genRandStr(isPrivate ? PRIVATE_PASTE_NAME_LEN : PASTE_NAME_LEN)
+     }
+@@ -262,7 +275,7 @@ export async function handlePostOrPut(
+       highlightLanguage,
+       contentLength: r2Object?.size || contentLength,
+       encryptionScheme,
+-      isMPUComplete,
++      isMPUComplete: isMPUComplete || namedPasteStoredInR2,
+     })
+ 
+     return makeResponse(
+diff --git a/worker/storage/storage.ts b/worker/storage/storage.ts
+index e77934ff6e31b35b398aee87bcb0937e6e77fb66..26bff04041fc48e1df21557e0d14113f6dc569af 100644
+--- a/worker/storage/storage.ts
++++ b/worker/storage/storage.ts
+@@ -270,6 +270,44 @@ export async function createPaste(
+   return metadata
+ }
+ 
++function r2ExpirationMetadata(willExpireAtUnix: number | null): Record<string, string> {
++  return willExpireAtUnix === null ? { permanent: "1" } : { willExpireAtUnix: String(willExpireAtUnix) }
++}
++
++/**
++ * Store a custom-name paste body only if this request wins the R2 key.
++ *
++ * Workers KV cannot atomically create a key, so new custom-name pastes use the
++ * strongly consistent R2 object as both their body and their name claim. An
++ * expired object may be replaced, but only while its observed ETag still owns
++ * the key; concurrent reclaim attempts therefore still produce one winner.
++ */
++export async function createNamedPasteObject(
++  env: Env,
++  pasteName: string,
++  content: ArrayBuffer,
++  willExpireAtUnix: number | null,
++  nowUnix: number,
++): Promise<R2Object | null> {
++  const customMetadata = r2ExpirationMetadata(willExpireAtUnix)
++  const created = await env.R2.put(pasteName, content, {
++    onlyIf: { etagDoesNotMatch: "*" },
++    customMetadata,
++  })
++  if (created !== null) return created
++
++  const existing = await env.R2.head(pasteName)
++  const existingExpiration = Number(existing?.customMetadata?.willExpireAtUnix)
++  if (existing === null || !Number.isFinite(existingExpiration) || existingExpiration >= nowUnix) {
++    return null
++  }
++
++  return await env.R2.put(pasteName, content, {
++    onlyIf: { etagMatches: existing.etag },
++    customMetadata,
++  })
++}
++
+ export async function pasteNameAvailable(env: Env, pasteName: string): Promise<boolean> {
+   const item = await env.PB.getWithMetadata<PasteMetadata>(pasteName)
+   if (item.value == null) {
+diff --git a/worker/test/writeConcurrency.spec.ts b/worker/test/writeConcurrency.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..3f99dd27da0aa925af2b0e845f0f371ca093226a
+--- /dev/null
++++ b/worker/test/writeConcurrency.spec.ts
+@@ -0,0 +1,95 @@
++import { createExecutionContext, env } from "cloudflare:test"
++import { describe, expect, it } from "vitest"
++
++import worker from "../index.js"
++import type { PasteResponse } from "../../shared/interfaces.js"
++import { createNamedPasteObject } from "../storage/storage.js"
++import { BASE_URL, createFormData } from "./testUtils.js"
++
++function synchronizeAvailabilityReads(namespace: KVNamespace, pasteName: string): KVNamespace {
++  const getWithMetadata = namespace.getWithMetadata.bind(namespace) as (...args: unknown[]) => Promise<unknown>
++  let matchingReads = 0
++  let releaseReads!: () => void
++  const bothReadsStarted = new Promise<void>((resolve) => {
++    releaseReads = resolve
++  })
++
++  return new Proxy(namespace, {
++    get(target, property) {
++      if (property === "getWithMetadata") {
++        return async (...args: unknown[]) => {
++          const result = await getWithMetadata(...args)
++          if (args[0] === pasteName && matchingReads < 2) {
++            matchingReads += 1
++            if (matchingReads === 2) releaseReads()
++            await bothReadsStarted
++          }
++          return result
++        }
++      }
++
++      const value: unknown = Reflect.get(target, property, target)
++      if (typeof value === "function") {
++        const method = value as (...args: unknown[]) => unknown
++        return method.bind(target)
++      }
++      return value
++    },
++  })
++}
++
++describe("custom-name create concurrency", () => {
++  it("returns one winner and one stable 409 when availability checks race", async () => {
++    const requestedName = "atomic-race"
++    const pasteName = `~${requestedName}`
++    const racingEnv = {
++      ...env,
++      PB: synchronizeAvailabilityReads(env.PB, pasteName),
++    }
++    const attempts = await Promise.all(
++      ["first contender", "second contender"].map(async (content) => ({
++        content,
++        response: await worker.fetch(
++          new Request(BASE_URL, {
++            method: "POST",
++            body: createFormData({ c: new Blob([content]), n: requestedName }),
++          }),
++          racingEnv,
++          createExecutionContext(),
++        ),
++      })),
++    )
++
++    expect(attempts.map(({ response }) => response.status).sort()).toStrictEqual([200, 409])
++
++    const winner = attempts.find(({ response }) => response.status === 200)!
++    const loser = attempts.find(({ response }) => response.status === 409)!
++    const created = await winner.response.json<PasteResponse>()
++
++    expect(created.location).toStrictEqual("R2")
++    expect(await loser.response.text()).toStrictEqual(`Error 409: name '${pasteName}' is already used\n`)
++
++    const stored = await worker.fetch(new Request(created.url), racingEnv, createExecutionContext())
++    expect(stored.status).toStrictEqual(200)
++    expect(await stored.text()).toStrictEqual(winner.content)
++  })
++
++  it("allows only one contender to replace an expired R2 name claim", async () => {
++    const pasteName = "~expired-atomic-race"
++    await env.R2.put(pasteName, "expired", {
++      customMetadata: { willExpireAtUnix: "10" },
++    })
++
++    const contents = [
++      new TextEncoder().encode("first replacement").buffer,
++      new TextEncoder().encode("second replacement").buffer,
++    ]
++    const results = await Promise.all(
++      contents.map((content) => createNamedPasteObject(env, pasteName, content, 100, 20)),
++    )
++
++    expect(results.filter((result) => result !== null)).toHaveLength(1)
++    const winnerIndex = results.findIndex((result) => result !== null)
++    expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual(new TextDecoder().decode(contents[winnerIndex]))
++  })
++})
+
+base-commit: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+prerequisite-patch-id: 6e6f1a1b3b822a7f6055757439f06a3a2956b89a
+prerequisite-patch-id: bb8280cc63d877f55dabba700c59f2d9ce0d6307
+prerequisite-patch-id: 292fa63936f41c768c09dedce9c0b951924707f3
+prerequisite-patch-id: a18edec9995be81e122eb2ca0fc03fe3bfd7712d
+prerequisite-patch-id: 7fb6594968364a928abd12177313831c752d65e2
+prerequisite-patch-id: d9b8fd398a206be4b4b283398a4697914c5c82e1
+prerequisite-patch-id: f2ebf4e613c40007615eec143b83069eeb24c791
+-- 
+2.50.1 (Apple Git-155)
+

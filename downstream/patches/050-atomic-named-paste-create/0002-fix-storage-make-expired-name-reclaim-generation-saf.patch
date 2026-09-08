@@ -1,0 +1,329 @@
+From cfa7276786e38a3556d1bab0386422279c114588 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Tue, 8 Sep 2026 14:52:14 +0800
+Subject: [PATCH 2/6] fix(storage): make expired name reclaim generation-safe
+
+Context:
+Source review of PR #99 found that identical-body reclaim can admit two winners because Miniflare/R2 body-hash ETags do not change across metadata-only overwrites, and that expired legacy R2 objects without custom expiration metadata were no longer immediately reusable. Greptile also reported that a KV metadata put failure after a successful R2 claim stranded the name until expiry.
+
+Expected behavior:
+Expired-name reclaim still has exactly one winner when replacement bytes are identical. Legacy R2 objects without custom expiration metadata follow the existing KV expiration lookup. If KV indexing fails after this request won the R2 claim, the request fails and the incomplete claim is released so a retry can succeed without overwriting another winner.
+
+Acceptance criteria:
+- synchronized identical-body expired reclaim returns exactly one non-null claim
+- expired legacy R2 names without custom metadata are reusable immediately
+- KV metadata failure after a new named R2 claim leaves the name retryable
+- existing distinct-body race and sequential 409 tests remain green
+
+Constraints:
+- generic upstream behavior only; no Feishu concepts
+- no Durable Object, reservation namespace, or MPU redesign
+- do not modify upstream-sync
+
+Validation:
+- RED: Node 22 ./node_modules/.bin/vitest run worker/test/writeConcurrency.spec.ts -> 3 failed (identical-body two winners, legacy null, retry 409)
+- GREEN: same command -> 5 passed
+- REFACTOR: prettier --check and eslint on changed files passed
+- REGRESSION: Node 22 ./node_modules/.bin/vitest run --project Workers -> 17 files, 119 tests passed
+- tsc --noEmit passed
+
+Docs:
+- N/A; public API contract unchanged
+
+Upstream base:
+0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+
+Patch ID:
+050-atomic-named-paste-create (candidate; verify against refreshed series before export)
+
+Dependencies:
+none
+
+Refs:
+- https://github.com/Skyline-Gazer/pastebin-worker/issues/78
+- https://github.com/Skyline-Gazer/pastebin-worker/pull/99
+- Greptile P1: metadata failure strands R2 claim
+- Codex source FINDINGS on 8424a5fe0e09c85b97490103cdf91ab2117f9ff6
+---
+ worker/handlers/handleWrite.ts       |  47 +++++-----
+ worker/storage/storage.ts            |  36 ++++++--
+ worker/test/writeConcurrency.spec.ts | 126 +++++++++++++++++++++++++--
+ 3 files changed, 179 insertions(+), 30 deletions(-)
+
+diff --git a/worker/handlers/handleWrite.ts b/worker/handlers/handleWrite.ts
+index 4d86ebbd62631e3794a5e4ad5153d4d346fec775..4714804df15c258e8aa59ef401d72ecadef27ce9 100644
+--- a/worker/handlers/handleWrite.ts
++++ b/worker/handlers/handleWrite.ts
+@@ -266,26 +266,33 @@ export async function handlePostOrPut(
+     }
+ 
+     const password = passwdFromForm || genRandStr(DEFAULT_PASSWD_LEN)
+-    const newMetadata = await createPaste(env, pasteName, content, {
+-      expirationSeconds,
+-      retentionFromMPU,
+-      now,
+-      passwd: password,
+-      filename,
+-      highlightLanguage,
+-      contentLength: r2Object?.size || contentLength,
+-      encryptionScheme,
+-      isMPUComplete: isMPUComplete || namedPasteStoredInR2,
+-    })
+-
+-    return makeResponse(
+-      {
+-        ...metaResponseFromMetadata(newMetadata),
+-        url: accessUrl(pasteName),
+-        manageUrl: manageUrl(pasteName, password),
++    try {
++      const newMetadata = await createPaste(env, pasteName, content, {
+         expirationSeconds,
+-      },
+-      { etag: r2Object?.httpEtag },
+-    )
++        retentionFromMPU,
++        now,
++        passwd: password,
++        filename,
++        highlightLanguage,
++        contentLength: r2Object?.size || contentLength,
++        encryptionScheme,
++        isMPUComplete: isMPUComplete || namedPasteStoredInR2,
++      })
++
++      return makeResponse(
++        {
++          ...metaResponseFromMetadata(newMetadata),
++          url: accessUrl(pasteName),
++          manageUrl: manageUrl(pasteName, password),
++          expirationSeconds,
++        },
++        { etag: r2Object?.httpEtag },
++      )
++    } catch (error) {
++      if (namedPasteStoredInR2 && pasteName !== undefined) {
++        await env.R2.delete(pasteName)
++      }
++      throw error
++    }
+   }
+ }
+diff --git a/worker/storage/storage.ts b/worker/storage/storage.ts
+index 26bff04041fc48e1df21557e0d14113f6dc569af..165426968efe3bb2c2f3df56bae920317ac76170 100644
+--- a/worker/storage/storage.ts
++++ b/worker/storage/storage.ts
+@@ -274,13 +274,34 @@ function r2ExpirationMetadata(willExpireAtUnix: number | null): Record<string, s
+   return willExpireAtUnix === null ? { permanent: "1" } : { willExpireAtUnix: String(willExpireAtUnix) }
+ }
+ 
++async function namedPasteObjectExpired(
++  env: Env,
++  existing: R2Object,
++  pasteName: string,
++  nowUnix: number,
++): Promise<boolean> {
++  if (existing.customMetadata?.permanent === "1") {
++    return false
++  }
++
++  const metadataExpiration = Number(existing.customMetadata?.willExpireAtUnix)
++  if (Number.isFinite(metadataExpiration)) {
++    return metadataExpiration < nowUnix
++  }
++
++  const kvMeta = await getPasteMetadata(env, pasteName)
++  return kvMeta === null
++}
++
+ /**
+  * Store a custom-name paste body only if this request wins the R2 key.
+  *
+  * Workers KV cannot atomically create a key, so new custom-name pastes use the
+  * strongly consistent R2 object as both their body and their name claim. An
+- * expired object may be replaced, but only while its observed ETag still owns
+- * the key; concurrent reclaim attempts therefore still produce one winner.
++ * expired object may be replaced, but only while this request still owns the
++ * observed generation. Body-hash ETags do not change when the replacement
++ * bytes are identical, so reclaim first writes unique reservation bytes and
++ * then stores the real body against that new generation.
+  */
+ export async function createNamedPasteObject(
+   env: Env,
+@@ -297,15 +318,20 @@ export async function createNamedPasteObject(
+   if (created !== null) return created
+ 
+   const existing = await env.R2.head(pasteName)
+-  const existingExpiration = Number(existing?.customMetadata?.willExpireAtUnix)
+-  if (existing === null || !Number.isFinite(existingExpiration) || existingExpiration >= nowUnix) {
++  if (existing === null || !(await namedPasteObjectExpired(env, existing, pasteName, nowUnix))) {
+     return null
+   }
+ 
+-  return await env.R2.put(pasteName, content, {
++  const reserved = await env.R2.put(pasteName, crypto.getRandomValues(new Uint8Array(16)), {
+     onlyIf: { etagMatches: existing.etag },
+     customMetadata,
+   })
++  if (reserved === null) return null
++
++  return await env.R2.put(pasteName, content, {
++    onlyIf: { etagMatches: reserved.etag },
++    customMetadata,
++  })
+ }
+ 
+ export async function pasteNameAvailable(env: Env, pasteName: string): Promise<boolean> {
+diff --git a/worker/test/writeConcurrency.spec.ts b/worker/test/writeConcurrency.spec.ts
+index 3f99dd27da0aa925af2b0e845f0f371ca093226a..5e6d81d721a0bdc787969f93aea7e1c46f2ca2e8 100644
+--- a/worker/test/writeConcurrency.spec.ts
++++ b/worker/test/writeConcurrency.spec.ts
+@@ -6,6 +6,15 @@ import type { PasteResponse } from "../../shared/interfaces.js"
+ import { createNamedPasteObject } from "../storage/storage.js"
+ import { BASE_URL, createFormData } from "./testUtils.js"
+ 
++function boundMember<T extends object>(target: T, property: string | symbol): unknown {
++  const value: unknown = Reflect.get(target, property, target)
++  if (typeof value === "function") {
++    const method = value as (...args: unknown[]) => unknown
++    return method.bind(target)
++  }
++  return value
++}
++
+ function synchronizeAvailabilityReads(namespace: KVNamespace, pasteName: string): KVNamespace {
+   const getWithMetadata = namespace.getWithMetadata.bind(namespace) as (...args: unknown[]) => Promise<unknown>
+   let matchingReads = 0
+@@ -27,13 +36,50 @@ function synchronizeAvailabilityReads(namespace: KVNamespace, pasteName: string)
+           return result
+         }
+       }
++      return boundMember(target, property)
++    },
++  })
++}
++
++function synchronizeR2Heads(bucket: R2Bucket, pasteName: string): R2Bucket {
++  const head = bucket.head.bind(bucket)
++  let matchingReads = 0
++  let releaseReads!: () => void
++  const bothReadsStarted = new Promise<void>((resolve) => {
++    releaseReads = resolve
++  })
+ 
+-      const value: unknown = Reflect.get(target, property, target)
+-      if (typeof value === "function") {
+-        const method = value as (...args: unknown[]) => unknown
+-        return method.bind(target)
++  return new Proxy(bucket, {
++    get(target, property) {
++      if (property === "head") {
++        return async (key: string) => {
++          const result = await head(key)
++          if (key === pasteName && matchingReads < 2) {
++            matchingReads += 1
++            if (matchingReads === 2) releaseReads()
++            await bothReadsStarted
++          }
++          return result
++        }
++      }
++      return boundMember(target, property)
++    },
++  })
++}
++
++function failKvPuts(namespace: KVNamespace, pasteName: string): KVNamespace {
++  const put = namespace.put.bind(namespace) as (key: string, ...args: unknown[]) => Promise<unknown>
++  return new Proxy(namespace, {
++    get(target, property) {
++      if (property === "put") {
++        return async (key: string, ...args: unknown[]) => {
++          if (key === pasteName) {
++            throw new Error("kv unavailable")
++          }
++          return put(key, ...args)
++        }
+       }
+-      return value
++      return boundMember(target, property)
+     },
+   })
+ }
+@@ -92,4 +138,74 @@ describe("custom-name create concurrency", () => {
+     const winnerIndex = results.findIndex((result) => result !== null)
+     expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual(new TextDecoder().decode(contents[winnerIndex]))
+   })
++
++  it("allows only one contender to reclaim an expired name with an identical body", async () => {
++    const pasteName = "~expired-identical-body"
++    const replacement = new TextEncoder().encode("same replacement").buffer
++    await env.R2.put(pasteName, "same replacement", {
++      customMetadata: { willExpireAtUnix: "10" },
++    })
++
++    const racingEnv = {
++      ...env,
++      R2: synchronizeR2Heads(env.R2, pasteName),
++    }
++    const results = await Promise.all([
++      createNamedPasteObject(racingEnv, pasteName, replacement, 100, 20),
++      createNamedPasteObject(racingEnv, pasteName, replacement, 100, 20),
++    ])
++
++    expect(results.filter((result) => result !== null)).toHaveLength(1)
++    expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("same replacement")
++  })
++
++  it("reclaims an expired legacy R2 name that has no custom expiration metadata", async () => {
++    const pasteName = "~expired-legacy-r2"
++    await env.R2.put(pasteName, "legacy expired")
++
++    const created = await createNamedPasteObject(
++      env,
++      pasteName,
++      new TextEncoder().encode("legacy replacement").buffer,
++      100,
++      20,
++    )
++
++    expect(created).not.toBeNull()
++    expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("legacy replacement")
++  })
++
++  it("releases a new R2 name claim when KV metadata persistence fails", async () => {
++    const requestedName = "kv-fail-atomic"
++    const pasteName = `~${requestedName}`
++    const failingEnv = {
++      ...env,
++      PB: failKvPuts(env.PB, pasteName),
++    }
++
++    const failed = await worker.fetch(
++      new Request(BASE_URL, {
++        method: "POST",
++        body: createFormData({ c: new Blob(["stranded"]), n: requestedName }),
++      }),
++      failingEnv,
++      createExecutionContext(),
++    )
++    expect(failed.status).toStrictEqual(500)
++
++    const retry = await worker.fetch(
++      new Request(BASE_URL, {
++        method: "POST",
++        body: createFormData({ c: new Blob(["retry"]), n: requestedName }),
++      }),
++      env,
++      createExecutionContext(),
++    )
++    expect(retry.status).toStrictEqual(200)
++    const created = await retry.json<PasteResponse>()
++    expect(created.location).toStrictEqual("R2")
++    expect(await (await worker.fetch(new Request(created.url), env, createExecutionContext())).text()).toStrictEqual(
++      "retry",
++    )
++  })
+ })
+-- 
+2.50.1 (Apple Git-155)
+

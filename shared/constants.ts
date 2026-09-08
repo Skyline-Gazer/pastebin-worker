@@ -8,3 +8,6 @@ export const MIN_PASSWD_LEN = 8
 export const MAX_URL_REDIRECT_LEN = 2000
 export const PASSWD_SEP = ":"
 export const MAX_AUTO_FETCH_BYTES = 256 * 1024
+export const MPU_PASSWORD_HEADER = "X-PB-Password"
+export const MPU_KEY_HEADER = "X-PB-MPU-Key"
+export const MPU_UPLOAD_ID_HEADER = "X-PB-MPU-Upload-Id"

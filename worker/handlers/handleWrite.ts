@@ -264,10 +264,14 @@ export async function handlePostOrPut(
       )
     } catch (error) {
       if (namedR2Object !== undefined && pasteName !== undefined) {
-        await env.R2.put(pasteName, new ArrayBuffer(0), {
-          onlyIf: { uploadedBefore: new Date(namedR2Object.uploaded.getTime() + 1) },
-          customMetadata: { willExpireAtUnix: "0" },
-        })
+        try {
+          await env.R2.put(pasteName, new ArrayBuffer(0), {
+            onlyIf: { uploadedBefore: new Date(namedR2Object.uploaded.getTime() + 1) },
+            customMetadata: { willExpireAtUnix: "0" },
+          })
+        } catch {
+          // Best-effort generation-safe expire. Preserve the original failure.
+        }
       }
       throw error
     }

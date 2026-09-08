@@ -84,6 +84,28 @@ function failKvPuts(namespace: KVNamespace, pasteName: string): KVNamespace {
   })
 }
 
+function r2PutThrowsOnUploadedBefore(bucket: R2Bucket): R2Bucket {
+  const put = bucket.put.bind(bucket)
+  return new Proxy(bucket, {
+    get(target, property) {
+      if (property === "put") {
+        return async (...args: Parameters<R2Bucket["put"]>) => {
+          const options = args[2]
+          if (
+            options?.onlyIf !== undefined &&
+            typeof options.onlyIf === "object" &&
+            "uploadedBefore" in options.onlyIf
+          ) {
+            throw new Error("cleanup put failed")
+          }
+          return put(...args)
+        }
+      }
+      return boundMember(target, property)
+    },
+  })
+}
+
 function failKvPutsAfterReplacingR2(
   namespace: KVNamespace,
   bucket: R2Bucket,
@@ -252,5 +274,26 @@ describe("custom-name create concurrency", () => {
     )
     expect(failed.status).toStrictEqual(500)
     expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("newer generation")
+  })
+
+  it("preserves the original metadata error if claim cleanup throws", async () => {
+    const requestedName = "kv-fail-cleanup-throw"
+    const pasteName = `~${requestedName}`
+    const failingEnv = {
+      ...env,
+      PB: failKvPuts(env.PB, pasteName),
+      R2: r2PutThrowsOnUploadedBefore(env.R2),
+    }
+
+    const failed = await worker.fetch(
+      new Request(BASE_URL, {
+        method: "POST",
+        body: createFormData({ c: new Blob(["cleanup throw"]), n: requestedName }),
+      }),
+      failingEnv,
+      createExecutionContext(),
+    )
+    expect(failed.status).toStrictEqual(500)
+    expect(await failed.text()).toContain("kv unavailable")
   })
 })

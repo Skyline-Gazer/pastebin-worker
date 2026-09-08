@@ -20,12 +20,12 @@ it("does not rewrite paste content during access accounting", async () => {
   await workerFetch(ctx, url)
   await waitOnExecutionContext(ctx)
 
-  expect(await env.PB.get("~" + name, "arrayBuffer")).toStrictEqual(before)
+  expect(new Uint8Array(await env.PB.get("~" + name, "arrayBuffer"))).toStrictEqual(new Uint8Array(before!))
   expect(await getCounter()).toStrictEqual(0)
 
   await workerFetch(ctx, url)
   await waitOnExecutionContext(ctx)
 
-  expect(await env.PB.get("~" + name, "arrayBuffer")).toStrictEqual(before)
+  expect(new Uint8Array(await env.PB.get("~" + name, "arrayBuffer"))).toStrictEqual(new Uint8Array(before!))
   expect(await getCounter()).toStrictEqual(0)
 })

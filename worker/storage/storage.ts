@@ -88,21 +88,14 @@ export async function getPaste(env: Env, short: string, ctx: ExecutionContext): 
     const metadata = migratePasteMetadata(item.metadata)
     const expired = metadata.willExpireAtUnix < new Date().getTime() / 1000
 
-    ctx.waitUntil(
-      (async () => {
-        if (expired) {
-          await deletePaste(env, short, metadata)
-          return null
-        }
-        // Cloudflare KV has no metadata-only update. Rewriting this record with
-        // the originally-read body could clobber a concurrent paste update, so
-        // access reads deliberately do not mutate the paste record.
-      })(),
-    )
-
     if (expired) {
+      ctx.waitUntil(deletePaste(env, short, metadata))
       return null
     }
+
+    // Cloudflare KV has no metadata-only update. Rewriting this record with
+    // the originally-read body could clobber a concurrent paste update, so
+    // access reads deliberately do not mutate the paste record.
 
     if (metadata.location === "R2") {
       const object = await env.R2.get(short)

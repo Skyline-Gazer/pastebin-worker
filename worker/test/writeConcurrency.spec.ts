@@ -84,6 +84,31 @@ function failKvPuts(namespace: KVNamespace, pasteName: string): KVNamespace {
   })
 }
 
+function failKvPutsAfterReplacingR2(
+  namespace: KVNamespace,
+  bucket: R2Bucket,
+  pasteName: string,
+  newerBody: string,
+): KVNamespace {
+  const put = namespace.put.bind(namespace) as (key: string, ...args: unknown[]) => Promise<unknown>
+  return new Proxy(namespace, {
+    get(target, property) {
+      if (property === "put") {
+        return async (key: string, ...args: unknown[]) => {
+          if (key === pasteName) {
+            await bucket.put(pasteName, newerBody, {
+              customMetadata: { willExpireAtUnix: String(Math.floor(Date.now() / 1000) + 3600) },
+            })
+            throw new Error("kv unavailable")
+          }
+          return put(key, ...args)
+        }
+      }
+      return boundMember(target, property)
+    },
+  })
+}
+
 describe("custom-name create concurrency", () => {
   it("returns one winner and one stable 409 when availability checks race", async () => {
     const requestedName = "atomic-race"
@@ -207,5 +232,25 @@ describe("custom-name create concurrency", () => {
     expect(await (await worker.fetch(new Request(created.url), env, createExecutionContext())).text()).toStrictEqual(
       "retry",
     )
+  })
+
+  it("does not delete a newer R2 generation if metadata persistence fails late", async () => {
+    const requestedName = "kv-fail-newer-gen"
+    const pasteName = `~${requestedName}`
+    const failingEnv = {
+      ...env,
+      PB: failKvPutsAfterReplacingR2(env.PB, env.R2, pasteName, "newer generation"),
+    }
+
+    const failed = await worker.fetch(
+      new Request(BASE_URL, {
+        method: "POST",
+        body: createFormData({ c: new Blob(["original claim"]), n: requestedName }),
+      }),
+      failingEnv,
+      createExecutionContext(),
+    )
+    expect(failed.status).toStrictEqual(500)
+    expect(await (await env.R2.get(pasteName))!.text()).toStrictEqual("newer generation")
   })
 })

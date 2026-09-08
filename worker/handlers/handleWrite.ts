@@ -1,6 +1,7 @@
 import { verifyAuth } from "../pages/auth.js"
-import { decode, genRandStr, WorkerError, timingSafeEqual } from "../common.js"
+import { dateToUnix, decode, genRandStr, WorkerError, timingSafeEqual } from "../common.js"
 import {
+  createNamedPasteObject,
   createPaste,
   getPasteMetadata,
   metaResponseFromMetadata,
@@ -22,7 +23,7 @@ import {
 
 interface ParsedMultipartPart {
   filename?: string
-  content: ReadableStream | ArrayBuffer
+  content: ArrayBuffer
   contentAsString: () => string
   contentLength: number
 }
@@ -230,6 +231,7 @@ export async function handlePostOrPut(
     )
   } else {
     let pasteName: string | undefined
+    let namedPasteStoredInR2 = false
     if (isMPUComplete) {
       if (url.searchParams.has("name")) {
         pasteName = url.searchParams.get("name")!
@@ -241,6 +243,17 @@ export async function handlePostOrPut(
       if (!(await pasteNameAvailable(env, pasteName))) {
         throw new WorkerError(409, `name '${pasteName}' is already used`)
       }
+      const namedR2Object = await createNamedPasteObject(
+        env,
+        pasteName,
+        content,
+        expirationSeconds === null ? null : dateToUnix(now) + expirationSeconds,
+        dateToUnix(now),
+      )
+      if (namedR2Object === null) {
+        throw new WorkerError(409, `name '${pasteName}' is already used`)
+      }
+      namedPasteStoredInR2 = true
     } else {
       pasteName = genRandStr(isPrivate ? PRIVATE_PASTE_NAME_LEN : PASTE_NAME_LEN)
     }
@@ -262,7 +275,7 @@ export async function handlePostOrPut(
       highlightLanguage,
       contentLength: r2Object?.size || contentLength,
       encryptionScheme,
-      isMPUComplete,
+      isMPUComplete: isMPUComplete || namedPasteStoredInR2,
     })
 
     return makeResponse(

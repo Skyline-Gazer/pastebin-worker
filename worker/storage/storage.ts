@@ -270,6 +270,44 @@ export async function createPaste(
   return metadata
 }
 
+function r2ExpirationMetadata(willExpireAtUnix: number | null): Record<string, string> {
+  return willExpireAtUnix === null ? { permanent: "1" } : { willExpireAtUnix: String(willExpireAtUnix) }
+}
+
+/**
+ * Store a custom-name paste body only if this request wins the R2 key.
+ *
+ * Workers KV cannot atomically create a key, so new custom-name pastes use the
+ * strongly consistent R2 object as both their body and their name claim. An
+ * expired object may be replaced, but only while its observed ETag still owns
+ * the key; concurrent reclaim attempts therefore still produce one winner.
+ */
+export async function createNamedPasteObject(
+  env: Env,
+  pasteName: string,
+  content: ArrayBuffer,
+  willExpireAtUnix: number | null,
+  nowUnix: number,
+): Promise<R2Object | null> {
+  const customMetadata = r2ExpirationMetadata(willExpireAtUnix)
+  const created = await env.R2.put(pasteName, content, {
+    onlyIf: { etagDoesNotMatch: "*" },
+    customMetadata,
+  })
+  if (created !== null) return created
+
+  const existing = await env.R2.head(pasteName)
+  const existingExpiration = Number(existing?.customMetadata?.willExpireAtUnix)
+  if (existing === null || !Number.isFinite(existingExpiration) || existingExpiration >= nowUnix) {
+    return null
+  }
+
+  return await env.R2.put(pasteName, content, {
+    onlyIf: { etagMatches: existing.etag },
+    customMetadata,
+  })
+}
+
 export async function pasteNameAvailable(env: Env, pasteName: string): Promise<boolean> {
   const item = await env.PB.getWithMetadata<PasteMetadata>(pasteName)
   if (item.value == null) {

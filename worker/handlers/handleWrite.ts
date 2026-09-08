@@ -241,25 +241,32 @@ export async function handlePostOrPut(
     const r2Object = isMPUComplete ? await handleMPUComplete(request, env, uploadedParts!) : undefined
 
     const password = passwdFromForm || genRandStr(DEFAULT_PASSWD_LEN)
-    const newMetadata = await createPaste(env, pasteName, content, {
-      expirationSeconds,
-      now,
-      passwd: password,
-      filename,
-      highlightLanguage,
-      contentLength: r2Object?.size || contentLength,
-      encryptionScheme,
-      isMPUComplete: isMPUComplete || namedPasteStoredInR2,
-    })
-
-    return makeResponse(
-      {
-        ...metaResponseFromMetadata(newMetadata),
-        url: accessUrl(pasteName),
-        manageUrl: manageUrl(pasteName, password),
+    try {
+      const newMetadata = await createPaste(env, pasteName, content, {
         expirationSeconds,
-      },
-      { etag: r2Object?.httpEtag },
-    )
+        now,
+        passwd: password,
+        filename,
+        highlightLanguage,
+        contentLength: r2Object?.size || contentLength,
+        encryptionScheme,
+        isMPUComplete: isMPUComplete || namedPasteStoredInR2,
+      })
+
+      return makeResponse(
+        {
+          ...metaResponseFromMetadata(newMetadata),
+          url: accessUrl(pasteName),
+          manageUrl: manageUrl(pasteName, password),
+          expirationSeconds,
+        },
+        { etag: r2Object?.httpEtag },
+      )
+    } catch (error) {
+      if (namedPasteStoredInR2 && pasteName !== undefined) {
+        await env.R2.delete(pasteName)
+      }
+      throw error
+    }
   }
 }

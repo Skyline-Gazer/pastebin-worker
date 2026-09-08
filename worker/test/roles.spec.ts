@@ -119,16 +119,21 @@ describe("url redirect with role u", () => {
     expect(resp.status).toStrictEqual(400)
   })
 
-  it.each(["https://user@example.com/", "https://user:pass@example.com/"])(
-    "should refuse an HTTP(S) URL containing credentials: %s",
-    async (contentUrl) => {
-      const uploadResp = await upload(ctx, { c: contentUrl })
-      const url = uploadResp.url
+  it.each([
+    "https://user@example.com/",
+    "https://user:pass@example.com/",
+    "https://@example.com/",
+    "https://:@example.com/",
+    "https:@example.com",
+    "https:\\@example.com",
+    "https:/\\@example.com",
+  ])("should refuse an HTTP(S) URL containing credentials: %s", async (contentUrl) => {
+    const uploadResp = await upload(ctx, { c: contentUrl })
+    const url = uploadResp.url
 
-      const resp = await workerFetch(ctx, addRole(url, "u"))
-      expect(resp.status).toStrictEqual(400)
-    },
-  )
+    const resp = await workerFetch(ctx, addRole(url, "u"))
+    expect(resp.status).toStrictEqual(400)
+  })
 
   it("should preserve an HTTP(S) redirect path and query", async () => {
     const contentUrl = "https://example.com/path?x=1"

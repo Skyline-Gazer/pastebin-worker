@@ -81,6 +81,31 @@ describe("Pastebin", () => {
     expect((manageUrlShow as HTMLInputElement).value).toStrictEqual(mockedPasteUpload.manageUrl)
   })
 
+  it("shows a QR tooltip on the Display URL after upload", async () => {
+    render(<PasteBin config={__WRANGLER_CONFIG__} />)
+
+    const editor = screen.getByRole("textbox", { name: "Paste editor" })
+    await userEvent.type(editor, "something")
+    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
+    const displayUrl = screen.getByRole("textbox", { name: "Display URL" })
+    expect(displayUrl).toHaveValue("https://example.com/d/abcd")
+
+    const qrButton = screen.getByRole("button", { name: "QR code" })
+    expect(qrButton).toBeInTheDocument()
+    expect(screen.getAllByRole("button", { name: "QR code" })).toHaveLength(1)
+
+    await userEvent.hover(qrButton)
+    const tooltip = await screen.findByRole("tooltip")
+    const qrImage = tooltip.querySelector("img")
+    expect(qrImage).not.toBeNull()
+    expect(qrImage?.getAttribute("src")).toMatch(/^data:image\/svg/)
+
+    expect(screen.getByRole("textbox", { name: "Manage URL" })).toBeInTheDocument()
+    expect(screen.getByRole("textbox", { name: "Raw URL" })).toBeInTheDocument()
+  })
+
   it("refuse illegal settings", async () => {
     render(<PasteBin config={__WRANGLER_CONFIG__} />)
     // due to bugs https://github.com/adobe/react-spectrum/discussions/8037, we need to use duplicated name here

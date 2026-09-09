@@ -106,6 +106,29 @@ describe("Pastebin", () => {
     expect(screen.getByRole("textbox", { name: "Raw URL" })).toBeInTheDocument()
   })
 
+  it("still shows Display URL when the paste URL is too long for a QR", async () => {
+    const longName = `~${"a".repeat(8000)}`
+    server.use(
+      http.post(`${__WRANGLER_CONFIG__.DEPLOY_URL}/`, () => {
+        return HttpResponse.json({
+          ...mockedPasteUpload,
+          url: `https://example.com/${longName}`,
+          manageUrl: `https://example.com/${longName}:aaaaaaaaaaaaaaaaaa`,
+        })
+      }),
+    )
+
+    render(<PasteBin config={__WRANGLER_CONFIG__} />)
+    const editor = screen.getByRole("textbox", { name: "Paste editor" })
+    await userEvent.type(editor, "something")
+    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
+    expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue(`https://example.com/d/${longName}`)
+    expect(screen.getByRole("textbox", { name: "Raw URL" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "QR code" })).not.toBeInTheDocument()
+  })
+
   it("refuse illegal settings", async () => {
     render(<PasteBin config={__WRANGLER_CONFIG__} />)
     // due to bugs https://github.com/adobe/react-spectrum/discussions/8037, we need to use duplicated name here

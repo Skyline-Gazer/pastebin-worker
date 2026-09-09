@@ -56,12 +56,23 @@ const DISPLAY_URL_FLAGS: { syntax: string; desc: string }[] = [
   { syntax: "/foo.txt", desc: "Append a filename — shown in the header and used as the download name" },
 ]
 
+function qrImageSrc(url: string): string | null {
+  try {
+    return toSvgDataURL(generate(url), {
+      pad: 2,
+      on: "#000000",
+      off: "#ffffff",
+    })
+  } catch {
+    return null
+  }
+}
+
 function QrTooltip({ url }: { url: string }) {
-  const src = toSvgDataURL(generate(url), {
-    pad: 2,
-    on: "#000000",
-    off: "#ffffff",
-  })
+  const src = qrImageSrc(url)
+  if (!src) {
+    return null
+  }
   return (
     <Tooltip content={<img src={src} alt="" width={128} height={128} className="block bg-white rounded" />}>
       <button

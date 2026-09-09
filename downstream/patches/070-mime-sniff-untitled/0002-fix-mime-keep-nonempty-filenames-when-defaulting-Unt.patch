@@ -1,0 +1,41 @@
+From 8dfdadfc48083f112234a01321e4215e0c1ae6c5 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 09:09:46 +0800
+Subject: [PATCH 2/2] fix(mime): keep nonempty filenames when defaulting
+ Untitled
+
+Only replace missing or whitespace-only names. Do not trim a valid filename that happens to include leading or trailing spaces.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ shared/constants.ts           | 3 +--
+ shared/test/mimeSniff.spec.ts | 1 +
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/shared/constants.ts b/shared/constants.ts
+index 7753895f5d5f810329c57c8e4cdf01eb22a04f1f..7e0fc3ac8e8323f60c760af8202cfc3b3f6c6a5d 100644
+--- a/shared/constants.ts
++++ b/shared/constants.ts
+@@ -14,6 +14,5 @@ export const MPU_UPLOAD_ID_HEADER = "X-PB-MPU-Upload-Id"
+ export const DEFAULT_EDIT_FILENAME = "Untitled"
+ 
+ export function normalizePasteFilename(filename: string | undefined): string {
+-  const trimmed = filename?.trim()
+-  return trimmed ? trimmed : DEFAULT_EDIT_FILENAME
++  return filename?.trim() ? filename : DEFAULT_EDIT_FILENAME
+ }
+diff --git a/shared/test/mimeSniff.spec.ts b/shared/test/mimeSniff.spec.ts
+index f201fd7a5720415fe6f5b746ded920be9807b001..b214efc6dd2da0ffdcf79fcd0f270e401f140005 100644
+--- a/shared/test/mimeSniff.spec.ts
++++ b/shared/test/mimeSniff.spec.ts
+@@ -8,6 +8,7 @@ test("normalizePasteFilename defaults empty names to Untitled", () => {
+   expect(normalizePasteFilename("")).toStrictEqual("Untitled")
+   expect(normalizePasteFilename("   ")).toStrictEqual("Untitled")
+   expect(normalizePasteFilename("notes.txt")).toStrictEqual("notes.txt")
++  expect(normalizePasteFilename(" notes.txt ")).toStrictEqual(" notes.txt ")
+ })
+ 
+ test("sniffMimeType recognizes common binaries and ignores HTML/text", () => {
+-- 
+2.50.1 (Apple Git-155)
+

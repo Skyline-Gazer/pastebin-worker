@@ -16,3 +16,5 @@
 050-atomic-named-paste-create/0005-test-storage-assert-sanitized-500-when-named-claim-c.patch
 050-atomic-named-paste-create/0006-fix-storage-fail-closed-reclaim-and-reservation-comp.patch
 060-mpu-query-secrets/0001-fix-mpu-keep-password-uploadId-and-key-out-of-query-.patch
+070-mime-sniff-untitled/0001-fix-mime-sniff-extensionless-binaries-and-default-em.patch
+070-mime-sniff-untitled/0002-fix-mime-keep-nonempty-filenames-when-defaulting-Unt.patch

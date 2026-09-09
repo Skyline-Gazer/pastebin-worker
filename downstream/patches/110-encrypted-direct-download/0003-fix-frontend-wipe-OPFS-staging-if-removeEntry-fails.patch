@@ -1,0 +1,131 @@
+From 3adb8d4681cbdf6a6962cfb362b2b679e409ae1d Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 16:51:27 +0800
+Subject: [PATCH 3/6] fix(frontend): wipe OPFS staging if removeEntry fails
+
+Context:
+Source PR #111 Greptile P1 on e28dfaa9: swallowing removeEntry
+failure could leave decrypted plaintext in origin OPFS.
+
+Expected behavior:
+After the download object URL is created from the staged file,
+overwrite the OPFS entry with empty bytes and retry removal so a
+transient remove failure does not keep plaintext.
+
+Acceptance criteria:
+- First removeEntry rejection is retried.
+- Staging writes empty bytes before the retry.
+
+Constraints:
+- Still use OPFS when available; Blob fallback unchanged.
+- #key is still never persisted.
+
+Validation:
+- TDD: RED first removeEntry rejection left a single failed remove;
+  GREEN after wipe + retry.
+- frontend/test/opfs.spec.ts PASS
+- lint / typecheck / Prettier PASS
+
+Refs:
+- Issue #82
+- Source PR #111
+- Greptile P1 on e28dfaa9dd1f13e3fbeeca365a8306a488037d6c
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ frontend/test/opfs.spec.ts | 35 +++++++++++++++++++++++++++++++++++
+ frontend/utils/opfs.ts     | 29 +++++++++++++++++++++++++----
+ 2 files changed, 60 insertions(+), 4 deletions(-)
+
+diff --git a/frontend/test/opfs.spec.ts b/frontend/test/opfs.spec.ts
+index 6e172822afe12f1a99b226de517acc3d8dedc377..579ab2aa4f4168b8bde995a81c7019660415ffd6 100644
+--- a/frontend/test/opfs.spec.ts
++++ b/frontend/test/opfs.spec.ts
+@@ -40,6 +40,41 @@ describe("OPFS download staging", () => {
+     expect(names.join("")).not.toContain("#")
+   })
+ 
++  it("wipes then retries OPFS removal if the first removeEntry fails", async () => {
++    const removed: string[] = []
++    const writes: unknown[] = []
++    const file = new File([new Uint8Array([1, 2, 3])], "plain.txt")
++    vi.stubGlobal("navigator", {
++      storage: {
++        getDirectory: () =>
++          Promise.resolve({
++            getFileHandle: () =>
++              Promise.resolve({
++                createWritable: () =>
++                  Promise.resolve({
++                    write: (data: unknown) => {
++                      writes.push(data)
++                      return Promise.resolve()
++                    },
++                    close: () => Promise.resolve(),
++                  }),
++                getFile: () => Promise.resolve(file),
++              }),
++            removeEntry: (name: string) => {
++              removed.push(name)
++              if (removed.length === 1) return Promise.reject(new Error("busy"))
++              return Promise.resolve()
++            },
++          }),
++      },
++    })
++
++    const url = await stageDownloadBytes(new Uint8Array([1, 2, 3]), "plain.txt")
++    expect(url.startsWith("blob:")).toBe(true)
++    expect(removed).toEqual(["plain.txt", "plain.txt"])
++    expect(writes.some((data) => data instanceof Uint8Array && data.byteLength === 0)).toBe(true)
++  })
++
+   it("falls back to a Blob object URL when OPFS is unavailable", async () => {
+     vi.stubGlobal("navigator", {
+       storage: {
+diff --git a/frontend/utils/opfs.ts b/frontend/utils/opfs.ts
+index c74833493d79a21be29e16daa8556b4d13df468e..f312c391d09a6a565f5454f40367bb2431bb24f3 100644
+--- a/frontend/utils/opfs.ts
++++ b/frontend/utils/opfs.ts
+@@ -8,13 +8,34 @@ export async function stageDownloadBytes(bytes: Uint8Array, filename: string): P
+     await writable.close()
+     const file = await handle.getFile()
+     const objectUrl = URL.createObjectURL(file)
++    await wipeAndRemoveStagedFile(root, handle, filename)
++    return objectUrl
++  } catch {
++    return URL.createObjectURL(blob)
++  }
++}
++
++async function wipeAndRemoveStagedFile(
++  root: FileSystemDirectoryHandle,
++  handle: FileSystemFileHandle,
++  filename: string,
++): Promise<void> {
++  for (let attempt = 0; attempt < 2; attempt++) {
++    try {
++      const writable = await handle.createWritable({ keepExistingData: false })
++      await writable.write(new Uint8Array(0))
++      await writable.close()
++      break
++    } catch {
++      if (attempt === 1) break
++    }
++  }
++  for (let attempt = 0; attempt < 2; attempt++) {
+     try {
+       await root.removeEntry(filename)
++      return
+     } catch {
+-      // Best-effort: the object URL already holds the bytes.
++      if (attempt === 1) return
+     }
+-    return objectUrl
+-  } catch {
+-    return URL.createObjectURL(blob)
+   }
+ }
+-- 
+2.50.1 (Apple Git-155)
+

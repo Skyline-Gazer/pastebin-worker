@@ -23,3 +23,9 @@
 090-argon2id-dual-verify/0001-feat-auth-hash-BASIC_AUTH-with-Argon2id-and-dual-ver.patch
 100-local-uploads-history/0001-feat-frontend-persist-local-Manage-URL-history.patch
 100-local-uploads-history/0002-fix-frontend-fail-closed-if-localStorage-access-thro.patch
+110-encrypted-direct-download/0001-feat-frontend-decrypt-large-encrypted-Display-downlo.patch
+110-encrypted-direct-download/0002-fix-read-range-R2-objects-and-drop-OPFS-plaintext.patch
+110-encrypted-direct-download/0003-fix-frontend-wipe-OPFS-staging-if-removeEntry-fails.patch
+110-encrypted-direct-download/0004-fix-frontend-always-wipe-OPFS-after-staging-attempts.patch
+110-encrypted-direct-download/0005-fix-frontend-isolate-OPFS-staging-with-unique-names.patch
+110-encrypted-direct-download/0006-fix-test-use-schemaVersion-2-in-Range-metadata-fixtu.patch

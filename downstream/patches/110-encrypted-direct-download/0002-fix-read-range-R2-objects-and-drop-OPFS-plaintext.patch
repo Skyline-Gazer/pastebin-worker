@@ -1,0 +1,260 @@
+From 8d783b73391364a67b8ec195ff5cb45280fe9704 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 16:45:16 +0800
+Subject: [PATCH 2/6] fix(read): range R2 objects and drop OPFS plaintext
+
+Context:
+Source PR #111 Greptile on 7f8d93f4 found three in-scope issues:
+R2 Range responses buffered the full object; OPFS staging left
+decrypted plaintext and unrevoked object URLs; 416 omitted CORS
+exposure of Content-Range.
+
+Expected behavior:
+Unencrypted R2 GET with a simple byte Range uses R2 ranged get and
+returns 206 without buffering the whole object. OPFS staging removes
+the temporary file after creating the object URL, and the Display
+download revokes that URL. Unsatisfiable ranges expose Content-Range.
+
+Acceptance criteria:
+- R2 Range 206 returns only the requested bytes.
+- OPFS removeEntry is called after staging.
+- 416 includes Access-Control-Expose-Headers: Content-Range.
+
+Constraints:
+- Encrypted pastes still ignore Range.
+- No P2P, ZIP, or max-read consume.
+
+Validation:
+- TDD: RED missing R2 Range / OPFS removeEntry / 416 CORS expose;
+  GREEN after ranged R2 get, OPFS cleanup, and 416 headers.
+- vitest run: 23 files / 164 tests PASS
+- lint / typecheck / Prettier PASS
+
+Docs:
+- worker/test/range.spec.ts
+- frontend/test/opfs.spec.ts
+
+Refs:
+- Issue #82
+- Source PR #111
+- Greptile P1/P2 on 7f8d93f4bc8d6fe320bb0c23a801451244922fe3
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ frontend/pages/DisplayPaste.tsx |  1 +
+ frontend/test/opfs.spec.ts      |  6 ++++
+ frontend/utils/opfs.ts          |  8 ++++-
+ worker/handlers/handleRead.ts   | 52 +++++++++++++++++++++++----------
+ worker/storage/storage.ts       |  9 ++++--
+ worker/test/range.spec.ts       | 23 +++++++++++++--
+ 6 files changed, 79 insertions(+), 20 deletions(-)
+
+diff --git a/frontend/pages/DisplayPaste.tsx b/frontend/pages/DisplayPaste.tsx
+index 159abd2b70f6d21e606e7da56aa99458bd05cbaf..aa29f0a934fee8c233eb244136e32275f26e0887 100644
+--- a/frontend/pages/DisplayPaste.tsx
++++ b/frontend/pages/DisplayPaste.tsx
+@@ -148,6 +148,7 @@ export function DisplayPaste({ config }: { config: Env }) {
+       anchor.href = objectUrl
+       anchor.download = inferredFilename
+       anchor.click()
++      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+     } catch (e) {
+       showModal(`Error on fetching ${pasteUrl}`, (e as Error).toString())
+       console.error(e)
+diff --git a/frontend/test/opfs.spec.ts b/frontend/test/opfs.spec.ts
+index 7fbf79b2550b1ccf5bfebdcd610ff511dbc964bb..6e172822afe12f1a99b226de517acc3d8dedc377 100644
+--- a/frontend/test/opfs.spec.ts
++++ b/frontend/test/opfs.spec.ts
+@@ -8,6 +8,7 @@ describe("OPFS download staging", () => {
+ 
+   it("stages bytes in OPFS when available and does not use an encryption-key filename", async () => {
+     const names: string[] = []
++    const removed: string[] = []
+     const file = new File([new Uint8Array([1, 2, 3])], "plain.txt")
+     vi.stubGlobal("navigator", {
+       storage: {
+@@ -24,6 +25,10 @@ describe("OPFS download staging", () => {
+                 getFile: () => Promise.resolve(file),
+               })
+             },
++            removeEntry: (name: string) => {
++              removed.push(name)
++              return Promise.resolve()
++            },
+           }),
+       },
+     })
+@@ -31,6 +36,7 @@ describe("OPFS download staging", () => {
+     const url = await stageDownloadBytes(new Uint8Array([1, 2, 3]), "plain.txt")
+     expect(url.startsWith("blob:")).toBe(true)
+     expect(names).toEqual(["plain.txt"])
++    expect(removed).toEqual(["plain.txt"])
+     expect(names.join("")).not.toContain("#")
+   })
+ 
+diff --git a/frontend/utils/opfs.ts b/frontend/utils/opfs.ts
+index 002397bdd73178d37e3c11d14a196c92b2d2f732..c74833493d79a21be29e16daa8556b4d13df468e 100644
+--- a/frontend/utils/opfs.ts
++++ b/frontend/utils/opfs.ts
+@@ -7,7 +7,13 @@ export async function stageDownloadBytes(bytes: Uint8Array, filename: string): P
+     await writable.write(blob)
+     await writable.close()
+     const file = await handle.getFile()
+-    return URL.createObjectURL(file)
++    const objectUrl = URL.createObjectURL(file)
++    try {
++      await root.removeEntry(filename)
++    } catch {
++      // Best-effort: the object URL already holds the bytes.
++    }
++    return objectUrl
+   } catch {
+     return URL.createObjectURL(blob)
+   }
+diff --git a/worker/handlers/handleRead.ts b/worker/handlers/handleRead.ts
+index ac5e28cb91ef6b8f85c446295be5b55cb440e48f..69db173698b5f8ac74a62001b98cb99bb6271781 100644
+--- a/worker/handlers/handleRead.ts
++++ b/worker/handlers/handleRead.ts
+@@ -194,9 +194,36 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
+   // when not isHead, always need to get paste unless "m"
+   // when isHead, no need to get paste unless "u"
+   const shouldGetPasteContent = (!isHead && role !== "m") || (isHead && role === "u")
++  const isRawPasteGet = shouldGetPasteContent && role === undefined
++
++  let parsedRange: { start: number; end: number } | null = null
++  let r2Range: { offset: number; length: number } | undefined
++  if (isRawPasteGet) {
++    const rangeHeader = request.headers.get("Range")
++    if (rangeHeader) {
++      const meta = await getPasteMetadata(env, name)
++      if (meta && pasteAllowsByteRange(meta)) {
++        const parsed = parseBytesRange(rangeHeader, meta.sizeBytes)
++        if (parsed === "unsatisfiable") {
++          return new Response(null, {
++            status: 416,
++            headers: {
++              "Content-Range": `bytes */${meta.sizeBytes}`,
++              "Access-Control-Expose-Headers": "Content-Range",
++              "Accept-Ranges": "bytes",
++            },
++          })
++        }
++        if (parsed) {
++          parsedRange = parsed
++          r2Range = { offset: parsed.start, length: parsed.end - parsed.start + 1 }
++        }
++      }
++    }
++  }
+ 
+   const item: PasteWithMetadata | null = shouldGetPasteContent
+-    ? await getPaste(env, name, ctx)
++    ? await getPaste(env, name, ctx, r2Range ? { range: r2Range } : undefined)
+     : await getPasteWithoutContent(env, name)
+ 
+   // when paste is not found
+@@ -353,22 +380,17 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
+   if (shouldGetPasteContent && pasteAllowsByteRange(item.metadata)) {
+     headers["Accept-Ranges"] = "bytes"
+     exposeHeaders.push("Accept-Ranges")
+-    const parsed = parseBytesRange(request.headers.get("Range"), item.metadata.sizeBytes)
+-    if (parsed === "unsatisfiable") {
+-      return new Response(null, {
+-        status: 416,
+-        headers: {
+-          "Content-Range": `bytes */${item.metadata.sizeBytes}`,
+-        },
+-      })
+-    }
+-    if (parsed) {
+-      const buf = item.paste instanceof ArrayBuffer ? item.paste : await new Response(item.paste).arrayBuffer()
+-      const slice = buf.slice(parsed.start, parsed.end + 1)
+-      headers["Content-Range"] = `bytes ${parsed.start}-${parsed.end}/${item.metadata.sizeBytes}`
+-      headers["Content-Length"] = String(slice.byteLength)
++    if (parsedRange) {
++      headers["Content-Range"] = `bytes ${parsedRange.start}-${parsedRange.end}/${item.metadata.sizeBytes}`
++      headers["Content-Length"] = String(parsedRange.end - parsedRange.start + 1)
+       exposeHeaders.push("Content-Range")
+       headers["Access-Control-Expose-Headers"] = exposeHeaders.join(", ")
++      if (item.metadata.location === "R2") {
++        return new Response(item.paste, { status: 206, headers })
++      }
++      const buf = item.paste instanceof ArrayBuffer ? item.paste : await new Response(item.paste).arrayBuffer()
++      const slice = buf.slice(parsedRange.start, parsedRange.end + 1)
++      headers["Content-Length"] = String(slice.byteLength)
+       return new Response(slice, { status: 206, headers })
+     }
+     headers["Access-Control-Expose-Headers"] = exposeHeaders.join(", ")
+diff --git a/worker/storage/storage.ts b/worker/storage/storage.ts
+index 544de6d8a81398d7bdb43b82dffb09ac8c34388f..a2df527b602c5cb21689ce0055c039b7a1a4d31a 100644
+--- a/worker/storage/storage.ts
++++ b/worker/storage/storage.ts
+@@ -103,7 +103,12 @@ async function updateAccessCounter(env: Env, short: string, value: ArrayBuffer,
+   }
+ }
+ 
+-export async function getPaste(env: Env, short: string, ctx: ExecutionContext): Promise<PasteWithMetadata | null> {
++export async function getPaste(
++  env: Env,
++  short: string,
++  ctx: ExecutionContext,
++  options?: { range?: { offset: number; length: number } },
++): Promise<PasteWithMetadata | null> {
+   const item = await env.PB.getWithMetadata<PasteMetadataInStorage>(short, {
+     type: "arrayBuffer",
+   })
+@@ -130,7 +135,7 @@ export async function getPaste(env: Env, short: string, ctx: ExecutionContext):
+     }
+ 
+     if (metadata.location === "R2") {
+-      const object = await env.R2.get(short)
++      const object = await env.R2.get(short, options?.range ? { range: options.range } : undefined)
+       if (object === null) {
+         return null
+       }
+diff --git a/worker/test/range.spec.ts b/worker/test/range.spec.ts
+index 095bac28784eb2efd0ea51ecc9263e2c23119576..f1d0829b880284f7b66f82ceecb1650db2b79204 100644
+--- a/worker/test/range.spec.ts
++++ b/worker/test/range.spec.ts
+@@ -1,6 +1,7 @@
+ import { expect, test } from "vitest"
+-import { createExecutionContext } from "cloudflare:test"
+-import { upload, workerFetch } from "./testUtils.js"
++import { createExecutionContext, env } from "cloudflare:test"
++import { genRandomBlob, upload, workerFetch } from "./testUtils.js"
++import { parseSize } from "../../shared/parsers.js"
+ import { pasteAllowsByteRange } from "../byteRange.js"
+ import type { PasteMetadata } from "../storage/storage.js"
+ 
+@@ -47,6 +48,8 @@ test("unsatisfiable Range returns 416", async () => {
+     }),
+   )
+   expect(resp.status).toStrictEqual(416)
++  expect(resp.headers.get("Content-Range")).toStrictEqual("bytes */4")
++  expect(resp.headers.get("Access-Control-Expose-Headers")).toContain("Content-Range")
+ })
+ 
+ test("pasteAllowsByteRange is false for encryption or a future maxReads field", () => {
+@@ -64,3 +67,19 @@ test("pasteAllowsByteRange is false for encryption or a future maxReads field",
+   expect(pasteAllowsByteRange({ ...base, encryptionScheme: "AES-GCM" })).toBe(false)
+   expect(pasteAllowsByteRange({ ...base, maxReads: 1 })).toBe(false)
+ })
++
++test("unencrypted R2 GET honors a simple byte Range without requiring the full object as text", async () => {
++  const ctx = createExecutionContext()
++  const blob = genRandomBlob(parseSize(env.R2_THRESHOLD)! * 2)
++  const uploaded = await upload(ctx, { c: blob })
++  const resp = await workerFetch(
++    ctx,
++    new Request(uploaded.url, {
++      headers: { Range: "bytes=0-3" },
++    }),
++  )
++  expect(resp.status).toStrictEqual(206)
++  expect(resp.headers.get("Content-Range")).toStrictEqual(`bytes 0-3/${blob.size}`)
++  expect(resp.headers.get("Content-Length")).toStrictEqual("4")
++  expect(new Uint8Array(await resp.arrayBuffer())).toStrictEqual(new Uint8Array(await blob.slice(0, 4).arrayBuffer()))
++})
+-- 
+2.50.1 (Apple Git-155)
+

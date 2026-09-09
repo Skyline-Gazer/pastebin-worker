@@ -1,0 +1,111 @@
+From 14be28b871d042080f43a7c4d6e7461276f1dcdf Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 17:05:28 +0800
+Subject: [PATCH 5/6] fix(frontend): isolate OPFS staging with unique names
+
+Context:
+Source PR #111 Greptile 4/5 on 6173505: concurrent decrypted
+downloads for the same paste shared one OPFS filename, so overlapping
+wipe/remove could capture an empty file.
+
+Expected behavior:
+Each staging write uses a unique pb-dl UUID name. The public download
+filename remains the paste name and still never includes #key.
+
+Acceptance criteria:
+- OPFS getFileHandle names start with pb-dl- and do not contain #.
+- Cleanup removes that unique name, not the public paste filename.
+
+Constraints:
+- Still OPFS-when-available with Blob fallback.
+- No P2P or ZIP.
+
+Validation:
+- TDD: RED expected public filename as OPFS key;
+  GREEN after unique staging names.
+- frontend/test/opfs.spec.ts PASS
+- lint / Prettier PASS
+
+Refs:
+- Issue #82
+- Source PR #111
+- Greptile P1 on 617350508f3c476b0d5df99b4fae75a2ee56679a
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ frontend/test/opfs.spec.ts | 14 +++++++++-----
+ frontend/utils/opfs.ts     | 10 ++++++----
+ 2 files changed, 15 insertions(+), 9 deletions(-)
+
+diff --git a/frontend/test/opfs.spec.ts b/frontend/test/opfs.spec.ts
+index 1458c63a0f0da4f1163d09db595a62f20c541d97..3fc701364a3238dd0b69e329186064b53410fdc3 100644
+--- a/frontend/test/opfs.spec.ts
++++ b/frontend/test/opfs.spec.ts
+@@ -35,9 +35,10 @@ describe("OPFS download staging", () => {
+ 
+     const url = await stageDownloadBytes(new Uint8Array([1, 2, 3]), "plain.txt")
+     expect(url.startsWith("blob:")).toBe(true)
+-    expect(names).toEqual(["plain.txt"])
+-    expect(removed).toEqual(["plain.txt"])
+-    expect(names.join("")).not.toContain("#")
++    expect(names).toHaveLength(1)
++    expect(names[0]?.startsWith("pb-dl-")).toBe(true)
++    expect(names[0]).not.toContain("#")
++    expect(removed).toEqual(names)
+   })
+ 
+   it("wipes then retries OPFS removal if the first removeEntry fails", async () => {
+@@ -71,7 +72,9 @@ describe("OPFS download staging", () => {
+ 
+     const url = await stageDownloadBytes(new Uint8Array([1, 2, 3]), "plain.txt")
+     expect(url.startsWith("blob:")).toBe(true)
+-    expect(removed).toEqual(["plain.txt", "plain.txt"])
++    expect(removed).toHaveLength(2)
++    expect(removed[0]?.startsWith("pb-dl-")).toBe(true)
++    expect(removed[0]).toBe(removed[1])
+     expect(writes.some((data) => data instanceof Uint8Array && data.byteLength === 0)).toBe(true)
+   })
+ 
+@@ -100,7 +103,8 @@ describe("OPFS download staging", () => {
+ 
+     const url = await stageDownloadBytes(new Uint8Array([1, 2, 3]), "plain.txt")
+     expect(url.startsWith("blob:")).toBe(true)
+-    expect(removed).toContain("plain.txt")
++    expect(removed).toHaveLength(1)
++    expect(removed[0]?.startsWith("pb-dl-")).toBe(true)
+   })
+ 
+   it("falls back to a Blob object URL when OPFS is unavailable", async () => {
+diff --git a/frontend/utils/opfs.ts b/frontend/utils/opfs.ts
+index be4a8c4aefce5fcd8fabebb8aa8cfc0f8a4384cf..23f802f45f96923c13f0bb02fdb7c267b76c6eca 100644
+--- a/frontend/utils/opfs.ts
++++ b/frontend/utils/opfs.ts
+@@ -2,19 +2,21 @@ export async function stageDownloadBytes(bytes: Uint8Array, filename: string): P
+   const blob = new Blob([bytes as BlobPart])
+   let root: FileSystemDirectoryHandle | undefined
+   let handle: FileSystemFileHandle | undefined
++  let stagingName: string | undefined
+   try {
+     root = await navigator.storage.getDirectory()
+-    handle = await root.getFileHandle(filename, { create: true })
++    stagingName = `pb-dl-${crypto.randomUUID()}`
++    handle = await root.getFileHandle(stagingName, { create: true })
+     const writable = await handle.createWritable()
+     await writable.write(blob)
+     await writable.close()
+     const file = await handle.getFile()
+-    return URL.createObjectURL(file)
++    return URL.createObjectURL(new File([file], filename))
+   } catch {
+     return URL.createObjectURL(blob)
+   } finally {
+-    if (root && handle) {
+-      await wipeAndRemoveStagedFile(root, handle, filename)
++    if (root && handle && stagingName) {
++      await wipeAndRemoveStagedFile(root, handle, stagingName)
+     }
+   }
+ }
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,59 @@
+From d024fb6ad7a06926b611aa9d47548de2b3093753 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 17:23:24 +0800
+Subject: [PATCH 6/6] fix(test): use schemaVersion 2 in Range metadata fixture
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Context:
+Replay of Patch 110 onto assembled 010–100 made the Range helper
+fixture fail typecheck because Patch 010 widened PasteMetadata
+schemaVersion to 2. Source PR #111 remains on upstream schemaVersion 1
+and is not rewritten.
+
+Expected behavior:
+The pasteAllowsByteRange fixture type-checks on the assembled series
+without changing Range or encryption semantics.
+
+Acceptance criteria:
+- worker/test/range.spec.ts uses schemaVersion 2.
+- pasteAllowsByteRange still true for unencrypted, false for encryption
+  or a future maxReads field.
+
+Constraints:
+- Replay-adaptation only. Do not merge this branch into upstream-sync.
+- Issue #82 product behavior unchanged.
+
+Validation:
+- pnpm typecheck PASS on assembled 010–110 plus this fixture fix.
+
+Docs:
+- worker/test/range.spec.ts
+
+Refs:
+- Issue #82
+- Source PR #111 HEAD a02ea9ab46e97fa3375d2f2cc10b65ff7606a7a2
+- Patch 010 schemaVersion 2
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ worker/test/range.spec.ts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/worker/test/range.spec.ts b/worker/test/range.spec.ts
+index f1d0829b880284f7b66f82ceecb1650db2b79204..8eee7aab6d944e9a3bc58b03a0023a5dc97918b4 100644
+--- a/worker/test/range.spec.ts
++++ b/worker/test/range.spec.ts
+@@ -54,7 +54,7 @@ test("unsatisfiable Range returns 416", async () => {
+ 
+ test("pasteAllowsByteRange is false for encryption or a future maxReads field", () => {
+   const base: PasteMetadata = {
+-    schemaVersion: 1,
++    schemaVersion: 2,
+     location: "KV",
+     passwd: "x",
+     lastModifiedAtUnix: 1,
+-- 
+2.50.1 (Apple Git-155)
+

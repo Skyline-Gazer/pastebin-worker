@@ -1,0 +1,595 @@
+From ea7ba6bab1819099a02eabb605c25b2befc50049 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 16:36:52 +0800
+Subject: [PATCH 1/6] feat(frontend): decrypt large encrypted Display downloads
+
+Context:
+Issue #82 (C Encrypted/large direct download ADOPT_WITH_REDESIGN)
+requires Display URLs with #key to download usable plaintext for
+oversized encrypted pastes, without forcing the body through SSR
+__PASTE_DATA__. Optional Range is included only where it stays
+compatible with whole-body consume-on-GET later.
+
+Expected behavior:
+Oversized encrypted Display pages with #key show Download decrypted
+and stage AES-GCM plaintext via OPFS when available, otherwise a
+Blob object URL. Without #key, ciphertext/raw download remains.
+Unencrypted GET honors simple bytes=start-end as 206; encrypted
+pastes and a future maxReads field ignore Range and return 200.
+
+Acceptance criteria:
+- Encrypted Display URL with #key downloads plaintext, not ciphertext.
+- Filename drops .encrypted; #key is never persisted or logged.
+- OPFS staging when getDirectory works; Blob fallback otherwise.
+- Unencrypted Range 206 / unsatisfiable 416; encrypted Range ignored.
+- Encrypted and oversized bodies still skip SSR __PASTE_DATA__.
+
+Constraints:
+- Generic upstream patch; no Feishu concepts.
+- No P2P, WebRTC, AES-GCM-CHUNKED-only migration.
+- No Issue #83 ZIP/multi-file or Issue #84 max-read consume.
+
+Validation:
+- TDD: RED missing stageDownloadBytes / Download decrypted / 206 Range;
+  GREEN after OPFS helper, Display decrypt download, and byte-range GET.
+- Node v22.23.2 / pnpm 10.28.0
+- vitest run: 23 files / 163 tests PASS
+- lint / typecheck / Prettier PASS
+- wrangler deploy --dry-run PASS
+
+Docs:
+- README.md
+- doc/api.md
+- frontend/test/opfs.spec.ts
+- frontend/test/display.spec.tsx
+- worker/test/range.spec.ts
+
+Upstream base:
+0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+
+Patch ID:
+110-encrypted-direct-download (export after source review)
+
+Dependencies:
+none
+
+Refs:
+- Issue #82
+- Parent #61
+- PLAN: https://github.com/Skyline-Gazer/pastebin-worker/issues/82#issuecomment-5598639349
+- SPEC: https://github.com/Skyline-Gazer/pastebin-worker/issues/82#issuecomment-5598784816
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ README.md                           |  2 +-
+ doc/api.md                          |  5 ++-
+ frontend/pages/DisplayPaste.tsx     | 56 ++++++++++++++++++++++++
+ frontend/pages/DisplayPasteView.tsx | 27 ++++++++++--
+ frontend/test/display.spec.tsx      | 50 ++++++++++++++++++++++
+ frontend/test/opfs.spec.ts          | 47 ++++++++++++++++++++
+ frontend/utils/opfs.ts              | 14 ++++++
+ worker/byteRange.ts                 | 31 ++++++++++++++
+ worker/handlers/handleRead.ts       | 26 ++++++++++++
+ worker/test/range.spec.ts           | 66 +++++++++++++++++++++++++++++
+ 10 files changed, 319 insertions(+), 5 deletions(-)
+ create mode 100644 frontend/test/opfs.spec.ts
+ create mode 100644 frontend/utils/opfs.ts
+ create mode 100644 worker/byteRange.ts
+ create mode 100644 worker/test/range.spec.ts
+
+diff --git a/README.md b/README.md
+index ed72486b01a84c0b85e3eae8c50a37db034027cb..d84ef17adc525e2c1d2fdc90f67e390829dd55ed 100644
+--- a/README.md
++++ b/README.md
+@@ -8,7 +8,7 @@ This is a pastebin running on Cloudflare workers. Try it on [shz.al](https://shz
+ 
+ 1. Share your paste with as short as 4 characters, or even customized URL.
+ 1. **Syntax highlighting** powered by highlight.js.
+-1. Client-side encryption.
++1. Client-side encryption. Encrypted Display URLs with `#key` can download usable plaintext without sending the fragment to the server.
+ 1. Share **markdown** file with rendered HTML.
+ 1. URL shortener.
+ 1. Smart and tweakable handling for `Content-Type` and `Content-Disposition`.
+diff --git a/doc/api.md b/doc/api.md
+index 8afa26b9ad9ad430deb8dfed83fd9212e779ecca..f8b9632119ac567396b07a653eb150a32195ed20 100644
+--- a/doc/api.md
++++ b/doc/api.md
+@@ -14,6 +14,8 @@ The `Content-Disposition` header is set to `inline` by default. But can be overr
+ 
+ If the paste is encrypted, an `X-PB-Encryption-Scheme` header will be set to the encryption scheme. An `X-PB-Decrypted-Content-Type` header is also set to the mime type that the decrypted content would have (inferred from the same sources as `Content-Type` but ignoring the encryption-induced `application/octet-stream` fallback), so clients can decide how to render the plaintext without an extra round trip.
+ 
++Unencrypted pastes honor a simple `Range: bytes=<start>-<end>` request and respond with `206 Partial Content` plus `Content-Range`. Unsatisfiable ranges return `416`. Encrypted pastes ignore `Range` and always return the full ciphertext as `200`, so a later consume-on-GET policy can stay whole-body.
++
+ If the paste is uploaded with a `lang` parameter, an `X-PB-Highlight-Language` header will be set to the highlight language.
+ 
+ - `?a=`: optional. Set `Content-Disposition` to `attachment` if present.
+@@ -25,6 +27,7 @@ Examples: `GET /abcd?lang=js`, `GET /abcd?mime=application/json`.
+ If error occurs, the worker returns status code different from `200`:
+ 
+ - `404`: the paste of given name is not found.
++- `416`: the requested byte range is unsatisfiable.
+ - `500`: unexpected exception. You may report this to the author to give it a fix.
+ 
+ ## GET `/<name>:<passwd>`
+@@ -47,7 +50,7 @@ If error occurs, the worker returns status code different from `302`:
+ 
+ ## **GET** `/d/<name>[.<ext>]` or `/d/<name>/<filename>`
+ 
+-Return the web page that will display the content of the paste of name `<name>`. If the paste is encrypted, a key can be appended to the URL to decrypt the paste of name `<name>` in browser.
++Return the web page that will display the content of the paste of name `<name>`. If the paste is encrypted, a key can be appended to the URL hash (`#key`) to decrypt the paste of name `<name>` in browser. The fragment is never sent to the server. Encrypted and oversized bodies are not injected into `__PASTE_DATA__`; the Display page can still download usable plaintext when `#key` is present.
+ 
+ If error occurs, the worker returns status code different from `200`:
+ 
+diff --git a/frontend/pages/DisplayPaste.tsx b/frontend/pages/DisplayPaste.tsx
+index da19dd795ef666d2a1f29491851dc6112666a28a..159abd2b70f6d21e606e7da56aa99458bd05cbaf 100644
+--- a/frontend/pages/DisplayPaste.tsx
++++ b/frontend/pages/DisplayPaste.tsx
+@@ -6,6 +6,7 @@ import { MAX_AUTO_FETCH_BYTES } from "../../shared/constants.js"
+ import { detectUtf8 } from "../../shared/encoding.js"
+ import type { EncryptionScheme } from "../utils/encryption.js"
+ import { decodeKey, decrypt } from "../utils/encryption.js"
++import { stageDownloadBytes } from "../utils/opfs.js"
+ 
+ import "../style.css"
+ import "../styles/highlight-theme-light.css"
+@@ -24,6 +25,7 @@ export function DisplayPaste({ config }: { config: Env }) {
+     sizeBytes: number
+     rawUrl: string
+     contentType: string | null
++    encryptionScheme?: EncryptionScheme | null
+   } | null>(null)
+   const [mediaInfo, setMediaInfo] = useState<{
+     sizeBytes: number
+@@ -106,6 +108,54 @@ export function DisplayPaste({ config }: { config: Env }) {
+     }
+   }, [pasteUrl, name, ext, filename])
+ 
++  const downloadPendingDecrypted = useCallback(async () => {
++    const keyString = new URL(location.toString()).hash.slice(1)
++    if (!pendingInfo?.encryptionScheme || keyString.length === 0) return
++    setIsLoading(true)
++    try {
++      const resp = await fetch(pendingInfo.rawUrl)
++      if (!resp.ok) {
++        await handleFailedResp("Failed to Fetch Paste", resp)
++        return
++      }
++      const scheme = (resp.headers.get("X-PB-Encryption-Scheme") || pendingInfo.encryptionScheme) as EncryptionScheme
++      let filenameFromDisp = resp.headers.has("Content-Disposition")
++        ? parseFilenameFromContentDisposition(resp.headers.get("Content-Disposition")!) || undefined
++        : undefined
++      if (filenameFromDisp) {
++        filenameFromDisp = filenameFromDisp.replace(/\.encrypted$/, "")
++      }
++      const inferredFilename = filename || (ext && name + ext) || filenameFromDisp || metaFilename || name
++      const respBytes = await resp.bytes()
++      let key: CryptoKey
++      try {
++        key = await decodeKey(scheme, keyString)
++      } catch (err) {
++        showModal("Invalid decryption key", (err as Error).message)
++        return
++      }
++      const decrypted = await decrypt(scheme, key, respBytes)
++      if (!decrypted) {
++        showModal(
++          "Decryption failed",
++          "Could not decrypt the paste with the provided key. The URL fragment may be wrong, " +
++            "or the paste has been replaced or corrupted.",
++        )
++        return
++      }
++      const objectUrl = await stageDownloadBytes(decrypted, inferredFilename)
++      const anchor = document.createElement("a")
++      anchor.href = objectUrl
++      anchor.download = inferredFilename
++      anchor.click()
++    } catch (e) {
++      showModal(`Error on fetching ${pasteUrl}`, (e as Error).toString())
++      console.error(e)
++    } finally {
++      setIsLoading(false)
++    }
++  }, [pendingInfo, pasteUrl, name, ext, filename, metaFilename, handleFailedResp, showModal])
++
+   useEffect(() => {
+     const initialData = window.__PASTE_DATA__
+ 
+@@ -182,6 +232,7 @@ export function DisplayPaste({ config }: { config: Env }) {
+           sizeBytes: Number.isFinite(contentLength) ? contentLength : 0,
+           rawUrl: pasteUrl,
+           contentType: effectiveContentType,
++          encryptionScheme: scheme,
+         })
+       } catch (e) {
+         showModal(`Error on Fetching ${pasteUrl}`, (e as Error).toString())
+@@ -212,6 +263,11 @@ export function DisplayPaste({ config }: { config: Env }) {
+         mediaInfo={mediaInfo}
+         metaFilename={metaFilename}
+         onLoadAnyway={() => void fetchPasteBody()}
++        onDecryptDownload={
++          pendingInfo?.encryptionScheme && url.hash.slice(1).length > 0
++            ? () => void downloadPendingDecrypted()
++            : undefined
++        }
+       />
+       <ErrorModal />
+     </>
+diff --git a/frontend/pages/DisplayPasteView.tsx b/frontend/pages/DisplayPasteView.tsx
+index 9c933d130b0893dfd19aa24b7c793420b3330f68..124c620b7078fcdbb3a36de4a4d7716a6c6d8ade 100644
+--- a/frontend/pages/DisplayPasteView.tsx
++++ b/frontend/pages/DisplayPasteView.tsx
+@@ -11,6 +11,7 @@ interface PendingInfo {
+   sizeBytes: number
+   rawUrl: string
+   contentType: string | null
++  encryptionScheme?: string | null
+ }
+ 
+ interface MediaInfo {
+@@ -72,6 +73,7 @@ interface DisplayPasteViewProps {
+   mediaInfo?: MediaInfo | null
+   metaFilename?: string
+   onLoadAnyway?: () => void
++  onDecryptDownload?: () => void
+ }
+ 
+ export function DisplayPasteView(props: DisplayPasteViewProps) {
+@@ -93,6 +95,7 @@ export function DisplayPasteView(props: DisplayPasteViewProps) {
+     mediaInfo,
+     metaFilename,
+     onLoadAnyway,
++    onDecryptDownload,
+   } = props
+ 
+   const indexPageTitle = config.INDEX_PAGE_TITLE || "Pastebin"
+@@ -151,9 +154,15 @@ export function DisplayPasteView(props: DisplayPasteViewProps) {
+       <div className="text-foreground-600 mb-2">{`${placeholderName} (${formatSize(pendingInfo.sizeBytes)})`}</div>
+       <div className="w-fit text-center">
+         {placeholderReason}{" "}
+-        <Link href={`${pendingInfo.rawUrl}?a`} className="text-primary-500 inline">
+-          Download raw
+-        </Link>
++        {onDecryptDownload ? (
++          <button className="text-primary-500 inline cursor-pointer" onClick={() => onDecryptDownload()}>
++            Download decrypted
++          </button>
++        ) : (
++          <Link href={`${pendingInfo.rawUrl}?a`} className="text-primary-500 inline">
++            Download raw
++          </Link>
++        )}
+         {onLoadAnyway && (
+           <>
+             {" or "}
+@@ -212,6 +221,18 @@ export function DisplayPasteView(props: DisplayPasteViewProps) {
+                   </a>
+                 </Button>
+               </Tooltip>
++            ) : onDecryptDownload ? (
++              <Tooltip content={`Download as file`}>
++                <Button
++                  aria-label="Download"
++                  isIconOnly
++                  variant="light"
++                  className={buttonClasses}
++                  onPress={onDecryptDownload}
++                >
++                  <DownloadIcon className="size-6 inline" />
++                </Button>
++              </Tooltip>
+             ) : (
+               (pendingInfo || mediaInfo) && (
+                 <Tooltip content={`Download as file`}>
+diff --git a/frontend/test/display.spec.tsx b/frontend/test/display.spec.tsx
+index 5feccedcb45b176e206c41ecc121870d51a08c31..3d3f9c56beaf161afaf87cc2d4cc31edf46d6aa2 100644
+--- a/frontend/test/display.spec.tsx
++++ b/frontend/test/display.spec.tsx
+@@ -354,6 +354,56 @@ describe("DisplayPaste", () => {
+     expect(getCalled).toStrictEqual(false)
+   })
+ 
++  it("downloads oversized encrypted paste as plaintext when #key is present", async () => {
++    const plaintext = "secret-plain-text-body"
++    const scheme = "AES-GCM"
++    const key = await genKey(scheme)
++    const encryptedBytes = await encrypt(scheme, key, new TextEncoder().encode(plaintext))
++    const created: Blob[] = []
++    const previousCreate = URL.createObjectURL.bind(URL)
++    URL.createObjectURL = (obj: Blob | MediaSource) => {
++      if (obj instanceof Blob) created.push(obj)
++      return "blob:decrypted"
++    }
++    const setItem = vi.spyOn(Storage.prototype, "setItem")
++    server.use(
++      http.head("/abcd", () => {
++        return new HttpResponse(null, {
++          headers: {
++            "X-PB-Encryption-Scheme": "AES-GCM",
++            "X-PB-Decrypted-Content-Type": "text/plain;charset=UTF-8",
++            "Content-Type": "application/octet-stream",
++            "Content-Length": String(MAX_AUTO_FETCH_BYTES + 8),
++            "Content-Disposition": "inline; filename*=UTF-8''notes.txt.encrypted",
++          },
++        })
++      }),
++      http.get("/abcd", () => {
++        return HttpResponse.arrayBuffer(encryptedBytes.buffer as ArrayBuffer, {
++          headers: {
++            "X-PB-Encryption-Scheme": "AES-GCM",
++            "X-PB-Decrypted-Content-Type": "text/plain;charset=UTF-8",
++            "Content-Type": "application/octet-stream",
++            "Content-Disposition": "inline; filename*=UTF-8''notes.txt.encrypted",
++          },
++        })
++      }),
++    )
++    vi.stubGlobal("location", new URL(`https://example.com/d/abcd#${await encodeKey(key)}`))
++
++    render(<DisplayPaste config={__WRANGLER_CONFIG__} />)
++
++    expect(await screen.findByText("Download decrypted")).toBeInTheDocument()
++    expect(screen.queryByText("Download raw")).not.toBeInTheDocument()
++    await userEvent.click(screen.getByRole("button", { name: "Download" }))
++    await waitFor(async () => {
++      expect(created.length).toBeGreaterThan(0)
++      expect(await created[created.length - 1].text()).toStrictEqual(plaintext)
++    })
++    expect(setItem.mock.calls.flat().join(" ")).not.toContain("#")
++    URL.createObjectURL = previousCreate
++  })
++
+   it("shows placeholder for non-text non-image content", async () => {
+     server.use(
+       ...mockPaste("abcd", {
+diff --git a/frontend/test/opfs.spec.ts b/frontend/test/opfs.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..7fbf79b2550b1ccf5bfebdcd610ff511dbc964bb
+--- /dev/null
++++ b/frontend/test/opfs.spec.ts
+@@ -0,0 +1,47 @@
++import { afterEach, describe, expect, it, vi } from "vitest"
++import { stageDownloadBytes } from "../utils/opfs.js"
++
++describe("OPFS download staging", () => {
++  afterEach(() => {
++    vi.unstubAllGlobals()
++  })
++
++  it("stages bytes in OPFS when available and does not use an encryption-key filename", async () => {
++    const names: string[] = []
++    const file = new File([new Uint8Array([1, 2, 3])], "plain.txt")
++    vi.stubGlobal("navigator", {
++      storage: {
++        getDirectory: () =>
++          Promise.resolve({
++            getFileHandle: (name: string) => {
++              names.push(name)
++              return Promise.resolve({
++                createWritable: () =>
++                  Promise.resolve({
++                    write: () => Promise.resolve(),
++                    close: () => Promise.resolve(),
++                  }),
++                getFile: () => Promise.resolve(file),
++              })
++            },
++          }),
++      },
++    })
++
++    const url = await stageDownloadBytes(new Uint8Array([1, 2, 3]), "plain.txt")
++    expect(url.startsWith("blob:")).toBe(true)
++    expect(names).toEqual(["plain.txt"])
++    expect(names.join("")).not.toContain("#")
++  })
++
++  it("falls back to a Blob object URL when OPFS is unavailable", async () => {
++    vi.stubGlobal("navigator", {
++      storage: {
++        getDirectory: () => Promise.reject(new Error("denied")),
++      },
++    })
++
++    const url = await stageDownloadBytes(new Uint8Array([9, 9]), "x.bin")
++    expect(url.startsWith("blob:")).toBe(true)
++  })
++})
+diff --git a/frontend/utils/opfs.ts b/frontend/utils/opfs.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..002397bdd73178d37e3c11d14a196c92b2d2f732
+--- /dev/null
++++ b/frontend/utils/opfs.ts
+@@ -0,0 +1,14 @@
++export async function stageDownloadBytes(bytes: Uint8Array, filename: string): Promise<string> {
++  const blob = new Blob([bytes as BlobPart])
++  try {
++    const root = await navigator.storage.getDirectory()
++    const handle = await root.getFileHandle(filename, { create: true })
++    const writable = await handle.createWritable()
++    await writable.write(blob)
++    await writable.close()
++    const file = await handle.getFile()
++    return URL.createObjectURL(file)
++  } catch {
++    return URL.createObjectURL(blob)
++  }
++}
+diff --git a/worker/byteRange.ts b/worker/byteRange.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..6feeb074b29fcf247c24a866146d90f55bf75cdf
+--- /dev/null
++++ b/worker/byteRange.ts
+@@ -0,0 +1,31 @@
++import type { PasteMetadata } from "./storage/storage.js"
++
++export function pasteAllowsByteRange(metadata: PasteMetadata & { maxReads?: number }): boolean {
++  if (metadata.encryptionScheme) return false
++  if (metadata.maxReads != null) return false
++  return true
++}
++
++export function parseBytesRange(
++  header: string | null,
++  size: number,
++): { start: number; end: number } | "unsatisfiable" | null {
++  if (!header) return null
++  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim())
++  if (!match) return null
++  const startToken = match[1]
++  const endToken = match[2]
++  if (startToken === "" && endToken === "") return null
++  if (size <= 0) return "unsatisfiable"
++  if (startToken === "") {
++    const suffix = Number(endToken)
++    if (!Number.isFinite(suffix) || suffix <= 0) return "unsatisfiable"
++    return { start: Math.max(0, size - suffix), end: size - 1 }
++  }
++  const start = Number(startToken)
++  const end = endToken === "" ? size - 1 : Number(endToken)
++  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= size || end < start) {
++    return "unsatisfiable"
++  }
++  return { start, end: Math.min(end, size - 1) }
++}
+diff --git a/worker/handlers/handleRead.ts b/worker/handlers/handleRead.ts
+index c58b64343a1d760bc622fe2d1ddf64eb4691d7b9..ac5e28cb91ef6b8f85c446295be5b55cb440e48f 100644
+--- a/worker/handlers/handleRead.ts
++++ b/worker/handlers/handleRead.ts
+@@ -6,6 +6,7 @@ import mime from "mime"
+ import { makeMarkdown } from "../pages/markdown.js"
+ import type { PasteMetadata, PasteWithMetadata } from "../storage/storage.js"
+ import { getPaste, getPasteMetadata, metaResponseFromMetadata } from "../storage/storage.js"
++import { parseBytesRange, pasteAllowsByteRange } from "../byteRange.js"
+ import { parsePath } from "../../shared/parsers.js"
+ import { MAX_URL_REDIRECT_LEN } from "../../shared/constants.js"
+ import manifest from "../../dist/frontend/.vite/ssr-manifest.json"
+@@ -348,5 +349,30 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
+   if (!shouldGetPasteContent) {
+     headers["Content-Length"] = item.metadata.sizeBytes.toString()
+   }
++
++  if (shouldGetPasteContent && pasteAllowsByteRange(item.metadata)) {
++    headers["Accept-Ranges"] = "bytes"
++    exposeHeaders.push("Accept-Ranges")
++    const parsed = parseBytesRange(request.headers.get("Range"), item.metadata.sizeBytes)
++    if (parsed === "unsatisfiable") {
++      return new Response(null, {
++        status: 416,
++        headers: {
++          "Content-Range": `bytes */${item.metadata.sizeBytes}`,
++        },
++      })
++    }
++    if (parsed) {
++      const buf = item.paste instanceof ArrayBuffer ? item.paste : await new Response(item.paste).arrayBuffer()
++      const slice = buf.slice(parsed.start, parsed.end + 1)
++      headers["Content-Range"] = `bytes ${parsed.start}-${parsed.end}/${item.metadata.sizeBytes}`
++      headers["Content-Length"] = String(slice.byteLength)
++      exposeHeaders.push("Content-Range")
++      headers["Access-Control-Expose-Headers"] = exposeHeaders.join(", ")
++      return new Response(slice, { status: 206, headers })
++    }
++    headers["Access-Control-Expose-Headers"] = exposeHeaders.join(", ")
++  }
++
+   return new Response(shouldGetPasteContent ? item.paste : null, { headers })
+ }
+diff --git a/worker/test/range.spec.ts b/worker/test/range.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..095bac28784eb2efd0ea51ecc9263e2c23119576
+--- /dev/null
++++ b/worker/test/range.spec.ts
+@@ -0,0 +1,66 @@
++import { expect, test } from "vitest"
++import { createExecutionContext } from "cloudflare:test"
++import { upload, workerFetch } from "./testUtils.js"
++import { pasteAllowsByteRange } from "../byteRange.js"
++import type { PasteMetadata } from "../storage/storage.js"
++
++test("unencrypted GET honors a simple byte Range", async () => {
++  const ctx = createExecutionContext()
++  const body = "abcdefghij"
++  const uploaded = await upload(ctx, { c: body })
++  const resp = await workerFetch(
++    ctx,
++    new Request(uploaded.url, {
++      headers: { Range: "bytes=0-3" },
++    }),
++  )
++  expect(resp.status).toStrictEqual(206)
++  expect(resp.headers.get("Content-Range")).toStrictEqual("bytes 0-3/10")
++  expect(resp.headers.get("Content-Length")).toStrictEqual("4")
++  expect(await resp.text()).toStrictEqual("abcd")
++})
++
++test("encrypted GET ignores Range so future consume-on-GET stays whole-body", async () => {
++  const ctx = createExecutionContext()
++  const uploaded = await upload(ctx, {
++    c: "cipher-body",
++    "encryption-scheme": "AES-GCM",
++  })
++  const resp = await workerFetch(
++    ctx,
++    new Request(uploaded.url, {
++      headers: { Range: "bytes=0-3" },
++    }),
++  )
++  expect(resp.status).toStrictEqual(200)
++  expect(new TextDecoder().decode(await resp.arrayBuffer())).toStrictEqual("cipher-body")
++  expect(resp.headers.get("Content-Range")).toBeNull()
++})
++
++test("unsatisfiable Range returns 416", async () => {
++  const ctx = createExecutionContext()
++  const uploaded = await upload(ctx, { c: "abcd" })
++  const resp = await workerFetch(
++    ctx,
++    new Request(uploaded.url, {
++      headers: { Range: "bytes=90-99" },
++    }),
++  )
++  expect(resp.status).toStrictEqual(416)
++})
++
++test("pasteAllowsByteRange is false for encryption or a future maxReads field", () => {
++  const base: PasteMetadata = {
++    schemaVersion: 1,
++    location: "KV",
++    passwd: "x",
++    lastModifiedAtUnix: 1,
++    createdAtUnix: 1,
++    willExpireAtUnix: 9,
++    accessCounter: 0,
++    sizeBytes: 4,
++  }
++  expect(pasteAllowsByteRange(base)).toBe(true)
++  expect(pasteAllowsByteRange({ ...base, encryptionScheme: "AES-GCM" })).toBe(false)
++  expect(pasteAllowsByteRange({ ...base, maxReads: 1 })).toBe(false)
++})
+
+base-commit: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+prerequisite-patch-id: 6e6f1a1b3b822a7f6055757439f06a3a2956b89a
+prerequisite-patch-id: bb8280cc63d877f55dabba700c59f2d9ce0d6307
+prerequisite-patch-id: 292fa63936f41c768c09dedce9c0b951924707f3
+prerequisite-patch-id: a18edec9995be81e122eb2ca0fc03fe3bfd7712d
+prerequisite-patch-id: 7fb6594968364a928abd12177313831c752d65e2
+prerequisite-patch-id: d9b8fd398a206be4b4b283398a4697914c5c82e1
+prerequisite-patch-id: f2ebf4e613c40007615eec143b83069eeb24c791
+prerequisite-patch-id: 6ad43923c9ad3ed939663717809fa4661e96f6ab
+prerequisite-patch-id: 1c8a98c04997a1641ac1cc9df45e69f95dcaef15
+prerequisite-patch-id: c233d552de04f8104c3dfde89f89423feab89385
+prerequisite-patch-id: 6ac78d342fc593d80301fff4344bb005463223a0
+prerequisite-patch-id: 7c636f5c8826bcf7c64729128f8a057c6a97c59f
+prerequisite-patch-id: 30bb2ff317dc3ebebe8be3b176e7e24c0844a032
+prerequisite-patch-id: 25696ff912a94f7b2dad737e1cfe422a167c1a5d
+prerequisite-patch-id: 70595ee35b43fe7306ef36c5ffea4f1249b8c912
+prerequisite-patch-id: 4ba60b0e344bc823c5181af8c8a1379d50a8645b
+prerequisite-patch-id: 7af0827b075af64e354f1131aae72cbfd9a6f509
+prerequisite-patch-id: c2ce21a9f0373e1f9303860f6145f9d8b5ea088e
+prerequisite-patch-id: a128861995f39dbd676052826465b3bec1da7c3c
+prerequisite-patch-id: 317d38b2389df13ce09e899c96916601381962d0
+prerequisite-patch-id: fdc4e79bc0a1f9df3ce8690c5ee71fc5d7b06e70
+-- 
+2.50.1 (Apple Git-155)
+

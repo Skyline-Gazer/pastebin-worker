@@ -6,6 +6,7 @@ import { MAX_AUTO_FETCH_BYTES } from "../../shared/constants.js"
 import { detectUtf8 } from "../../shared/encoding.js"
 import type { EncryptionScheme } from "../utils/encryption.js"
 import { decodeKey, decrypt } from "../utils/encryption.js"
+import { stageDownloadBytes } from "../utils/opfs.js"
 
 import "../style.css"
 import "../styles/highlight-theme-light.css"
@@ -24,6 +25,7 @@ export function DisplayPaste({ config }: { config: Env }) {
     sizeBytes: number
     rawUrl: string
     contentType: string | null
+    encryptionScheme?: EncryptionScheme | null
   } | null>(null)
   const [mediaInfo, setMediaInfo] = useState<{
     sizeBytes: number
@@ -106,6 +108,54 @@ export function DisplayPaste({ config }: { config: Env }) {
     }
   }, [pasteUrl, name, ext, filename])
 
+  const downloadPendingDecrypted = useCallback(async () => {
+    const keyString = new URL(location.toString()).hash.slice(1)
+    if (!pendingInfo?.encryptionScheme || keyString.length === 0) return
+    setIsLoading(true)
+    try {
+      const resp = await fetch(pendingInfo.rawUrl)
+      if (!resp.ok) {
+        await handleFailedResp("Failed to Fetch Paste", resp)
+        return
+      }
+      const scheme = (resp.headers.get("X-PB-Encryption-Scheme") || pendingInfo.encryptionScheme) as EncryptionScheme
+      let filenameFromDisp = resp.headers.has("Content-Disposition")
+        ? parseFilenameFromContentDisposition(resp.headers.get("Content-Disposition")!) || undefined
+        : undefined
+      if (filenameFromDisp) {
+        filenameFromDisp = filenameFromDisp.replace(/\.encrypted$/, "")
+      }
+      const inferredFilename = filename || (ext && name + ext) || filenameFromDisp || metaFilename || name
+      const respBytes = await resp.bytes()
+      let key: CryptoKey
+      try {
+        key = await decodeKey(scheme, keyString)
+      } catch (err) {
+        showModal("Invalid decryption key", (err as Error).message)
+        return
+      }
+      const decrypted = await decrypt(scheme, key, respBytes)
+      if (!decrypted) {
+        showModal(
+          "Decryption failed",
+          "Could not decrypt the paste with the provided key. The URL fragment may be wrong, " +
+            "or the paste has been replaced or corrupted.",
+        )
+        return
+      }
+      const objectUrl = await stageDownloadBytes(decrypted, inferredFilename)
+      const anchor = document.createElement("a")
+      anchor.href = objectUrl
+      anchor.download = inferredFilename
+      anchor.click()
+    } catch (e) {
+      showModal(`Error on fetching ${pasteUrl}`, (e as Error).toString())
+      console.error(e)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [pendingInfo, pasteUrl, name, ext, filename, metaFilename, handleFailedResp, showModal])
+
   useEffect(() => {
     const initialData = window.__PASTE_DATA__
 
@@ -182,6 +232,7 @@ export function DisplayPaste({ config }: { config: Env }) {
           sizeBytes: Number.isFinite(contentLength) ? contentLength : 0,
           rawUrl: pasteUrl,
           contentType: effectiveContentType,
+          encryptionScheme: scheme,
         })
       } catch (e) {
         showModal(`Error on Fetching ${pasteUrl}`, (e as Error).toString())
@@ -212,6 +263,11 @@ export function DisplayPaste({ config }: { config: Env }) {
         mediaInfo={mediaInfo}
         metaFilename={metaFilename}
         onLoadAnyway={() => void fetchPasteBody()}
+        onDecryptDownload={
+          pendingInfo?.encryptionScheme && url.hash.slice(1).length > 0
+            ? () => void downloadPendingDecrypted()
+            : undefined
+        }
       />
       <ErrorModal />
     </>

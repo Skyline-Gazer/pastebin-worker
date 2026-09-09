@@ -148,6 +148,7 @@ export function DisplayPaste({ config }: { config: Env }) {
       anchor.href = objectUrl
       anchor.download = inferredFilename
       anchor.click()
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
     } catch (e) {
       showModal(`Error on fetching ${pasteUrl}`, (e as Error).toString())
       console.error(e)

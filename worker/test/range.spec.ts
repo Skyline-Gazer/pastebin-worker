@@ -1,6 +1,7 @@
 import { expect, test } from "vitest"
-import { createExecutionContext } from "cloudflare:test"
-import { upload, workerFetch } from "./testUtils.js"
+import { createExecutionContext, env } from "cloudflare:test"
+import { genRandomBlob, upload, workerFetch } from "./testUtils.js"
+import { parseSize } from "../../shared/parsers.js"
 import { pasteAllowsByteRange } from "../byteRange.js"
 import type { PasteMetadata } from "../storage/storage.js"
 
@@ -47,6 +48,8 @@ test("unsatisfiable Range returns 416", async () => {
     }),
   )
   expect(resp.status).toStrictEqual(416)
+  expect(resp.headers.get("Content-Range")).toStrictEqual("bytes */4")
+  expect(resp.headers.get("Access-Control-Expose-Headers")).toContain("Content-Range")
 })
 
 test("pasteAllowsByteRange is false for encryption or a future maxReads field", () => {
@@ -63,4 +66,20 @@ test("pasteAllowsByteRange is false for encryption or a future maxReads field", 
   expect(pasteAllowsByteRange(base)).toBe(true)
   expect(pasteAllowsByteRange({ ...base, encryptionScheme: "AES-GCM" })).toBe(false)
   expect(pasteAllowsByteRange({ ...base, maxReads: 1 })).toBe(false)
+})
+
+test("unencrypted R2 GET honors a simple byte Range without requiring the full object as text", async () => {
+  const ctx = createExecutionContext()
+  const blob = genRandomBlob(parseSize(env.R2_THRESHOLD)! * 2)
+  const uploaded = await upload(ctx, { c: blob })
+  const resp = await workerFetch(
+    ctx,
+    new Request(uploaded.url, {
+      headers: { Range: "bytes=0-3" },
+    }),
+  )
+  expect(resp.status).toStrictEqual(206)
+  expect(resp.headers.get("Content-Range")).toStrictEqual(`bytes 0-3/${blob.size}`)
+  expect(resp.headers.get("Content-Length")).toStrictEqual("4")
+  expect(new Uint8Array(await resp.arrayBuffer())).toStrictEqual(new Uint8Array(await blob.slice(0, 4).arrayBuffer()))
 })

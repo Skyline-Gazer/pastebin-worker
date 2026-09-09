@@ -8,6 +8,7 @@ test("normalizePasteFilename defaults empty names to Untitled", () => {
   expect(normalizePasteFilename("")).toStrictEqual("Untitled")
   expect(normalizePasteFilename("   ")).toStrictEqual("Untitled")
   expect(normalizePasteFilename("notes.txt")).toStrictEqual("notes.txt")
+  expect(normalizePasteFilename(" notes.txt ")).toStrictEqual(" notes.txt ")
 })
 
 test("sniffMimeType recognizes common binaries and ignores HTML/text", () => {

@@ -11,6 +11,5 @@ export const MAX_AUTO_FETCH_BYTES = 256 * 1024
 export const DEFAULT_EDIT_FILENAME = "Untitled"
 
 export function normalizePasteFilename(filename: string | undefined): string {
-  const trimmed = filename?.trim()
-  return trimmed ? trimmed : DEFAULT_EDIT_FILENAME
+  return filename?.trim() ? filename : DEFAULT_EDIT_FILENAME
 }

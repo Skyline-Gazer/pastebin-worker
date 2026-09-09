@@ -54,7 +54,7 @@ test("unsatisfiable Range returns 416", async () => {
 
 test("pasteAllowsByteRange is false for encryption or a future maxReads field", () => {
   const base: PasteMetadata = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     location: "KV",
     passwd: "x",
     lastModifiedAtUnix: 1,

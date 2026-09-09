@@ -103,7 +103,12 @@ async function updateAccessCounter(env: Env, short: string, value: ArrayBuffer, 
   }
 }
 
-export async function getPaste(env: Env, short: string, ctx: ExecutionContext): Promise<PasteWithMetadata | null> {
+export async function getPaste(
+  env: Env,
+  short: string,
+  ctx: ExecutionContext,
+  options?: { range?: { offset: number; length: number } },
+): Promise<PasteWithMetadata | null> {
   const item = await env.PB.getWithMetadata<PasteMetadataInStorage>(short, {
     type: "arrayBuffer",
   })
@@ -130,7 +135,7 @@ export async function getPaste(env: Env, short: string, ctx: ExecutionContext): 
     }
 
     if (metadata.location === "R2") {
-      const object = await env.R2.get(short)
+      const object = await env.R2.get(short, options?.range ? { range: options.range } : undefined)
       if (object === null) {
         return null
       }

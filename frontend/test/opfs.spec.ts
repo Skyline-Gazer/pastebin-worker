@@ -8,6 +8,7 @@ describe("OPFS download staging", () => {
 
   it("stages bytes in OPFS when available and does not use an encryption-key filename", async () => {
     const names: string[] = []
+    const removed: string[] = []
     const file = new File([new Uint8Array([1, 2, 3])], "plain.txt")
     vi.stubGlobal("navigator", {
       storage: {
@@ -24,6 +25,10 @@ describe("OPFS download staging", () => {
                 getFile: () => Promise.resolve(file),
               })
             },
+            removeEntry: (name: string) => {
+              removed.push(name)
+              return Promise.resolve()
+            },
           }),
       },
     })
@@ -31,6 +36,7 @@ describe("OPFS download staging", () => {
     const url = await stageDownloadBytes(new Uint8Array([1, 2, 3]), "plain.txt")
     expect(url.startsWith("blob:")).toBe(true)
     expect(names).toEqual(["plain.txt"])
+    expect(removed).toEqual(["plain.txt"])
     expect(names.join("")).not.toContain("#")
   })
 

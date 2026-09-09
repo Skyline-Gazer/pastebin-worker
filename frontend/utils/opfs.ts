@@ -7,7 +7,13 @@ export async function stageDownloadBytes(bytes: Uint8Array, filename: string): P
     await writable.write(blob)
     await writable.close()
     const file = await handle.getFile()
-    return URL.createObjectURL(file)
+    const objectUrl = URL.createObjectURL(file)
+    try {
+      await root.removeEntry(filename)
+    } catch {
+      // Best-effort: the object URL already holds the bytes.
+    }
+    return objectUrl
   } catch {
     return URL.createObjectURL(blob)
   }

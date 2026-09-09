@@ -194,9 +194,36 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
   // when not isHead, always need to get paste unless "m"
   // when isHead, no need to get paste unless "u"
   const shouldGetPasteContent = (!isHead && role !== "m") || (isHead && role === "u")
+  const isRawPasteGet = shouldGetPasteContent && role === undefined
+
+  let parsedRange: { start: number; end: number } | null = null
+  let r2Range: { offset: number; length: number } | undefined
+  if (isRawPasteGet) {
+    const rangeHeader = request.headers.get("Range")
+    if (rangeHeader) {
+      const meta = await getPasteMetadata(env, name)
+      if (meta && pasteAllowsByteRange(meta)) {
+        const parsed = parseBytesRange(rangeHeader, meta.sizeBytes)
+        if (parsed === "unsatisfiable") {
+          return new Response(null, {
+            status: 416,
+            headers: {
+              "Content-Range": `bytes */${meta.sizeBytes}`,
+              "Access-Control-Expose-Headers": "Content-Range",
+              "Accept-Ranges": "bytes",
+            },
+          })
+        }
+        if (parsed) {
+          parsedRange = parsed
+          r2Range = { offset: parsed.start, length: parsed.end - parsed.start + 1 }
+        }
+      }
+    }
+  }
 
   const item: PasteWithMetadata | null = shouldGetPasteContent
-    ? await getPaste(env, name, ctx)
+    ? await getPaste(env, name, ctx, r2Range ? { range: r2Range } : undefined)
     : await getPasteWithoutContent(env, name)
 
   // when paste is not found
@@ -353,22 +380,17 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
   if (shouldGetPasteContent && pasteAllowsByteRange(item.metadata)) {
     headers["Accept-Ranges"] = "bytes"
     exposeHeaders.push("Accept-Ranges")
-    const parsed = parseBytesRange(request.headers.get("Range"), item.metadata.sizeBytes)
-    if (parsed === "unsatisfiable") {
-      return new Response(null, {
-        status: 416,
-        headers: {
-          "Content-Range": `bytes */${item.metadata.sizeBytes}`,
-        },
-      })
-    }
-    if (parsed) {
-      const buf = item.paste instanceof ArrayBuffer ? item.paste : await new Response(item.paste).arrayBuffer()
-      const slice = buf.slice(parsed.start, parsed.end + 1)
-      headers["Content-Range"] = `bytes ${parsed.start}-${parsed.end}/${item.metadata.sizeBytes}`
-      headers["Content-Length"] = String(slice.byteLength)
+    if (parsedRange) {
+      headers["Content-Range"] = `bytes ${parsedRange.start}-${parsedRange.end}/${item.metadata.sizeBytes}`
+      headers["Content-Length"] = String(parsedRange.end - parsedRange.start + 1)
       exposeHeaders.push("Content-Range")
       headers["Access-Control-Expose-Headers"] = exposeHeaders.join(", ")
+      if (item.metadata.location === "R2") {
+        return new Response(item.paste, { status: 206, headers })
+      }
+      const buf = item.paste instanceof ArrayBuffer ? item.paste : await new Response(item.paste).arrayBuffer()
+      const slice = buf.slice(parsedRange.start, parsedRange.end + 1)
+      headers["Content-Length"] = String(slice.byteLength)
       return new Response(slice, { status: 206, headers })
     }
     headers["Access-Control-Expose-Headers"] = exposeHeaders.join(", ")

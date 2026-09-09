@@ -1,0 +1,93 @@
+From 03ed80a1fc7892e1930d3f0a0fec5631f94fd635 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 15:43:31 +0800
+Subject: [PATCH 2/2] fix(frontend): fail closed if localStorage access throws
+
+Context:
+Promotion PR #110 Greptile P1: canUseLocalStorage probed
+window.localStorage outside try/catch. Restricted browser contexts
+can throw on that access before load/save helpers fail closed, so
+optional history could crash initial render or report a successful
+upload/delete as failed.
+
+Expected behavior:
+If accessing localStorage throws, history helpers return empty or
+in-memory results and do not throw. Core upload/read/update/delete
+remain available.
+
+Acceptance criteria:
+- loadLocalUploads returns [] when localStorage access throws.
+- recordLocalUpload does not throw when localStorage access throws.
+
+Constraints:
+- Issue #81 semantics unchanged.
+- Source PR #109 is not rewritten.
+- No cloud sync, encryption vault, or extra storage backends.
+
+Validation:
+- TDD: RED thrown Error("blocked") from localStorage getter;
+  GREEN after try/catch around the probe.
+- frontend/test/localUploads.spec.ts PASS
+
+Docs:
+- frontend/test/localUploads.spec.ts
+
+Refs:
+- Issue #81
+- Promotion PR #110
+- Greptile P1 on bb9371f0c8cb78b13ed5e3cbd7ba1a082fc3836d
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ frontend/test/localUploads.spec.ts | 19 +++++++++++++++++++
+ frontend/utils/localUploads.ts     |  6 +++++-
+ 2 files changed, 24 insertions(+), 1 deletion(-)
+
+diff --git a/frontend/test/localUploads.spec.ts b/frontend/test/localUploads.spec.ts
+index 3d127138cf5b5982499e691debc216562c9e3535..f02454b0ddc2943b1c7ace11d67806ed28206c33 100644
+--- a/frontend/test/localUploads.spec.ts
++++ b/frontend/test/localUploads.spec.ts
+@@ -39,4 +39,23 @@ describe("local upload history", () => {
+     removeLocalUpload("https://example.com/aaaa:secret-a")
+     expect(loadLocalUploads()).toEqual([])
+   })
++
++  it("fails closed when accessing localStorage throws", () => {
++    const original = Object.getOwnPropertyDescriptor(window, "localStorage")
++    Object.defineProperty(window, "localStorage", {
++      configurable: true,
++      get() {
++        throw new Error("blocked")
++      },
++    })
++    try {
++      expect(loadLocalUploads()).toEqual([])
++      const entry = { url: "https://example.com/aaaa", manageUrl: "https://example.com/aaaa:secret-a" }
++      expect(recordLocalUpload(entry)).toEqual([entry])
++    } finally {
++      if (original) {
++        Object.defineProperty(window, "localStorage", original)
++      }
++    }
++  })
+ })
+diff --git a/frontend/utils/localUploads.ts b/frontend/utils/localUploads.ts
+index 4817561f2c8d1fc0ba7003d3e73249369d63becf..1fa74f0becc768179e442fd8ca69fc60c7b103ea 100644
+--- a/frontend/utils/localUploads.ts
++++ b/frontend/utils/localUploads.ts
+@@ -7,7 +7,11 @@ export interface LocalUpload {
+ }
+ 
+ function canUseLocalStorage(): boolean {
+-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined"
++  try {
++    return typeof window !== "undefined" && typeof window.localStorage !== "undefined"
++  } catch {
++    return false
++  }
+ }
+ 
+ export function pasteLabel(url: string): string {
+-- 
+2.50.1 (Apple Git-155)
+

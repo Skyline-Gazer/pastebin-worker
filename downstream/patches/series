@@ -21,3 +21,5 @@
 080-qr-url-tooltip/0001-feat-frontend-add-QR-tooltip-for-paste-Display-URL.patch
 080-qr-url-tooltip/0002-fix-frontend-keep-upload-results-when-Display-URL-ex.patch
 090-argon2id-dual-verify/0001-feat-auth-hash-BASIC_AUTH-with-Argon2id-and-dual-ver.patch
+100-local-uploads-history/0001-feat-frontend-persist-local-Manage-URL-history.patch
+100-local-uploads-history/0002-fix-frontend-fail-closed-if-localStorage-access-thro.patch

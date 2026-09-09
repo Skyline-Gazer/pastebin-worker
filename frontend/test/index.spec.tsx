@@ -64,6 +64,9 @@ describe("Pastebin", () => {
     const editor = screen.getByRole("textbox", { name: "Paste editor" })
     expect(editor).toBeInTheDocument()
 
+    const filename = screen.getByRole("textbox", { name: "File name" })
+    expect(filename).toHaveValue("Untitled")
+
     const submitter = screen.getByRole("button", { name: "Upload" })
     expect(submitter).toBeInTheDocument()
     expect(submitter).not.toBeEnabled()

@@ -77,7 +77,7 @@ test("meta with role m", async () => {
   const meta: MetaResponse = await metaResponse.json()
 
   expect(meta.location).toStrictEqual("KV")
-  expect(meta.filename).toBeUndefined()
+  expect(meta.filename).toStrictEqual("Untitled")
   expect(new Date(meta.lastModifiedAt).getTime()).toStrictEqual(t1.getTime())
   expect(new Date(meta.createdAt).getTime()).toStrictEqual(t1.getTime())
 

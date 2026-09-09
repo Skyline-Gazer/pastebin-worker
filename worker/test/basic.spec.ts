@@ -136,7 +136,7 @@ test("GET special static pages", async () => {
   expect(decResp.headers.get("Content-Type")).toStrictEqual("text/html;charset=UTF-8")
 
   const testPairs = [
-    [name, name],
+    [name, name + " / Untitled"],
     [name + ".jpg", name + ".jpg"],
     [name + ".jpg?lang=cpp", name + ".jpg"],
     [name + "/a.jpg", name + " / a.jpg"],

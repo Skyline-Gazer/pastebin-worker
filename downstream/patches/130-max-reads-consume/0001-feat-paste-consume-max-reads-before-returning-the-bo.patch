@@ -1,0 +1,1226 @@
+From 8adbfcb72f293fd8331c2344bbcbf302401d2806 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 20:40:58 +0800
+Subject: [PATCH 1/2] feat(paste): consume max-reads before returning the body
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Context:
+Issue #84 (C Max reads ADOPT_WITH_REDESIGN) requires an optional
+race-safe burn-after-read limit. KV cannot increment atomically, so
+a per-paste Durable Object serializes consume-before-response.
+
+This commit is the replay adaptation of accepted source HEAD
+7540a3cad785404463cab71a071deebad50081b7 onto assembled 010–120.
+Source PR #115 is not rewritten.
+
+Expected behavior:
+Form field r stores maxReads plus a new readStateVersion. Content
+GETs (raw, /a/, /u/) load the paste, consume, then return the body
+with Cache-Control: no-store, or 404 with no body if exhausted. The
+last successful consume deletes the paste via waitUntil. HEAD, /m/,
+and /d/ do not consume. /d/ skips SSR when maxReads is set. PUT
+without r clears the limit; PUT with r rotates readStateVersion.
+Unlimited pastes never touch the Durable Object. Patch 110 Range is
+disabled whenever maxReads is set.
+
+Acceptance criteria:
+- r=1: first content GET 200, second 404
+- r=2: two 200 then 404
+- invalid r is 400
+- concurrent r=1 content GETs are one 200 and one 404
+- HEAD and /m/ do not consume
+- /a/ and /u/ consume; /d/ skips __PASTE_DATA__ and does not consume
+- PUT without r restores unlimited reads
+- PUT with r starts a new counter
+- Range on a read-limited paste is ignored (200, not 206) and still
+  consumes once
+
+Constraints:
+- Replay-adapted onto assembled 010–120. Do not merge into upstream-sync.
+- Residual: losing concurrent request may load bytes into the isolate
+  before DO reject; those bytes are not returned.
+
+Replay adaptation (source branch not rewritten):
+- README.md: keep Patch 110 encrypted-Display-download bullet and
+  Patch 120 ZIP bullet; add Patch 130 max-reads bullet.
+- shared/constants.ts: keep Patch 060 MPU headers and Patch 070
+  DEFAULT_EDIT_FILENAME; add MAX_READS_CAP.
+- shared/verify.ts: keep Patch 010 parseExpirationSpec / 030
+  isLegalRedirectUrl; add parseMaxReads.
+- worker/handlers/handleWrite.ts: keep Patch 010 expiration spec,
+  Patch 050 named create, and Patch 070 filename helper; add r.
+- worker/handlers/handleRead.ts: keep Patch 110 Range helpers;
+  pasteAllowsByteRange already rejects maxReads.
+- worker/storage/storage.ts: keep schemaVersion 2, null expiration,
+  and mimeType; add maxReads / readStateVersion.
+- worker/test/maxReads.spec.ts: add assembled /u/ consume and
+  Range-off coverage.
+
+Validation:
+- Isolated source: Node v22.23.2 / pnpm 10.28.0; 22 files / 166 tests
+- Assembled validation follows this export
+
+Docs:
+- README.md, doc/api.md, doc/skill.md
+
+Refs:
+- Issue #84
+- Source PR #115 HEAD 7540a3cad785404463cab71a071deebad50081b7
+- PLAN/SPEC https://github.com/Skyline-Gazer/pastebin-worker/issues/84#issuecomment-5601383323
+- Patch ID 130-max-reads-consume
+- Upstream base 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+- Assembled 010–120 tip 2efa54a856029aa770033564b170a240f7801698
+- Dependencies: none (product). Replay stacked after 120 because
+  010–120 already changed the conflicted files.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ README.md                                 |   1 +
+ doc/api.md                                |   4 +-
+ doc/skill.md                              |   2 +
+ frontend/components/PasteSettingPanel.tsx |  16 +-
+ frontend/pages/PasteBin.tsx               |   7 +-
+ frontend/test/index.spec.tsx              |   5 +
+ frontend/utils/uploader.ts                |   1 +
+ shared/constants.ts                       |   1 +
+ shared/uploadPaste.ts                     |   7 +
+ shared/verify.ts                          |  23 ++-
+ worker-configuration.d.ts                 | Bin 503304 -> 550222 bytes
+ worker/handlers/handleRead.ts             |  42 +++--
+ worker/handlers/handleWrite.ts            |  13 +-
+ worker/index.ts                           |   2 +
+ worker/pages/display.ts                   |   4 +
+ worker/readCounter.ts                     |  27 ++++
+ worker/storage/storage.ts                 |  12 ++
+ worker/test/maxReads.spec.ts              | 181 ++++++++++++++++++++++
+ wrangler.toml                             |   9 ++
+ 19 files changed, 343 insertions(+), 14 deletions(-)
+ create mode 100644 worker/readCounter.ts
+ create mode 100644 worker/test/maxReads.spec.ts
+
+diff --git a/README.md b/README.md
+index dfee7462cca9568600e0460e5cef596c026fed5a..a60cb5bf46d9243c1b0eb685ed1951839ecf9354 100644
+--- a/README.md
++++ b/README.md
+@@ -9,6 +9,7 @@ This is a pastebin running on Cloudflare workers. Try it on [shz.al](https://shz
+ 1. Share your paste with as short as 4 characters, or even customized URL.
+ 1. **Syntax highlighting** powered by highlight.js.
+ 1. Client-side encryption. Encrypted Display URLs with `#key` can download usable plaintext without sending the fragment to the server.
++1. Optional max-reads / burn-after-read.
+ 1. Upload multiple files or a folder as one ZIP (built in the browser).
+ 1. Share **markdown** file with rendered HTML.
+ 1. URL shortener.
+diff --git a/doc/api.md b/doc/api.md
+index f8b9632119ac567396b07a653eb150a32195ed20..fc7b6cf4e9f2580ec12f27dc2aa901e9b8d4e008 100644
+--- a/doc/api.md
++++ b/doc/api.md
+@@ -156,6 +156,8 @@ Upload your paste. It accept parameters in form-data:
+ 
+ - `n`: optional. The customized **name** of your paste. If not specified, the worker will generate a random string (4 characters by default) as the name. You need to prefix the name with `~` when fetching the paste of customized name. The name is at least 3 characters long, consisting of alphabet, digits and characters in `+_-[]*$=@,;/`. Direct custom-name uploads are stored in R2 so the name can be claimed atomically; concurrent requests for the same available name produce one success and `409` conflicts for the other requests.
+ 
++- `r`: optional. Maximum number of **content reads** (positive integer, at most 1000). Each raw, `/a/` article, or `/u/` redirect GET consumes one read before the body is returned. HEAD, `/m/` metadata, and `/d/` display HTML do not consume. After the last allowed read the paste is deleted; later content GETs return `404`. Concurrent content GETs are serialized by a per-paste Durable Object. Omit for unlimited reads. Read-limited responses use `Cache-Control: no-store`. A losing concurrent request may load bytes into the isolate before the counter rejects it; those bytes are not returned.
++
+ - `p`: optional. The flag of **private mode**. If specified to any value, the name of the paste is as long as 24 characters. No effect if `n` is used.
+ 
+ - `encryption-scheme`: optional. The encryption scheme used in the uploaded paste. It will be returned as `X-PB-Encryption-Scheme` header on fetching paste. Note that this is not the encryption scheme that the backend will perform.
+@@ -197,7 +199,7 @@ If error occurs, the worker returns status code different from `200`:
+ 
+ ## **PUT** `/<name>:<passwd>`
+ 
+-Update your paste of the name `<name>` and password `<passwd>`. It accepts all the same form-data fields as `POST` (`c`, `e`, `s`, `lang`, `encryption-scheme`) **except** `n` (the name cannot be changed; supplying it returns `400`) and `p` (silently ignored). When `e` is supplied, the expiration is recalculated from the update time.
++Update your paste of the name `<name>` and password `<passwd>`. It accepts all the same form-data fields as `POST` (`c`, `e`, `s`, `r`, `lang`, `encryption-scheme`) **except** `n` (the name cannot be changed; supplying it returns `400`) and `p` (silently ignored). When `e` is supplied, the expiration is recalculated from the update time. When `r` is omitted, max-reads is cleared (unlimited).
+ 
+ The returning of `PUT` method is the same as `POST` method.
+ 
+diff --git a/doc/skill.md b/doc/skill.md
+index 8d1c2925769309dc6ad25e5e2ea1cf26d7aae490..86f3671de18cc023f9e5da9f3c699284a5e5ffaf 100644
+--- a/doc/skill.md
++++ b/doc/skill.md
+@@ -35,6 +35,7 @@ is the only way to authenticate as the owner.
+ - `-Fn=<name>` — custom name (≥3 chars, returned prefixed with `~`).
+ - `-Fe=<expire>` — expiration: integer/float with unit `s`/`m`/`h`/`d`
+   (default seconds). E.g. `-Fe=30m`, `-Fe=14d`.
++- `-Fr=<n>` — max content reads (1–1000). Omit for unlimited.
+ - `-Fs=<password>` — set a specific management password.
+ - `-Flang=<lang>` — mark for syntax highlighting on the display page.
+ - `-Fp=1` — private mode: 24-char unguessable random name.
+@@ -60,6 +61,7 @@ curl -X DELETE                   <manageUrl>
+ ```
+ 
+ `PUT` accepts the same fields as upload; `e` recalculates expiration from now.
++Omitting `r` clears max-reads (unlimited).
+ 
+ ## Other URL forms
+ 
+diff --git a/frontend/components/PasteSettingPanel.tsx b/frontend/components/PasteSettingPanel.tsx
+index 926b9644854c4caea4752e032dab8fac0980eb68..816dfc147e0fb0f34ae6a1c20d9edfb104e12085 100644
+--- a/frontend/components/PasteSettingPanel.tsx
++++ b/frontend/components/PasteSettingPanel.tsx
+@@ -1,7 +1,7 @@
+ import type { CardProps } from "./ui/index.js"
+ import { Card, CardBody, CardHeader, Divider, Input, Switch, Tooltip } from "./ui/index.js"
+ import { verifyExpiration, verifyManageUrl } from "../utils/utils.js"
+-import { verifyName, verifyPassword } from "../../shared/verify.js"
++import { verifyMaxReads, verifyName, verifyPassword } from "../../shared/verify.js"
+ import type { NameAvailability } from "../utils/useNameAvailability.js"
+ import React from "react"
+ import { CheckIcon, InfoIcon, QuestionMarkCircleIcon, SpinnerIcon, XIcon } from "./icons.js"
+@@ -16,6 +16,7 @@ export interface PasteSetting {
+   password: string
+   name: string
+   manageUrl: string
++  maxReads: string
+ 
+   doEncrypt: boolean
+ }
+@@ -132,6 +133,19 @@ export function PanelSettingsPanel({
+             errorMessage={verifyExpiration(setting.expiration, config)[1]}
+             description={verifyExpiration(setting.expiration, config)[1]}
+           />
++          <Input
++            type="text"
++            label="Max reads"
++            classNames={{
++              base: "basis-32",
++              ...inputOverrides,
++            }}
++            value={setting.maxReads}
++            onValueChange={(r) => onSettingChange({ ...setting, maxReads: r })}
++            isInvalid={!verifyMaxReads(setting.maxReads)[0]}
++            errorMessage={verifyMaxReads(setting.maxReads)[1]}
++            description={verifyMaxReads(setting.maxReads)[1]}
++          />
+           <Input
+             type="password"
+             label="Password"
+diff --git a/frontend/pages/PasteBin.tsx b/frontend/pages/PasteBin.tsx
+index 1b888778cf02a277d3f9ece3a4ee5b03dc34fa8e..bc1d941a5e9c6fdb823283a66735b598c97a5627 100644
+--- a/frontend/pages/PasteBin.tsx
++++ b/frontend/pages/PasteBin.tsx
+@@ -21,7 +21,7 @@ import {
+ } from "../../shared/constants.js"
+ 
+ import { verifyExpiration, verifyManageUrl, getMaxExpirationReadable } from "../utils/utils.js"
+-import { verifyName, verifyPassword, isLegalUrl } from "../../shared/verify.js"
++import { verifyMaxReads, verifyName, verifyPassword, isLegalUrl } from "../../shared/verify.js"
+ import { useNameAvailability } from "../utils/useNameAvailability.js"
+ import type { UploadProgress } from "../utils/uploader.js"
+ import { uploadPaste } from "../utils/uploader.js"
+@@ -48,6 +48,7 @@ export function PasteBin({ config }: { config: Env }) {
+     password: "",
+     uploadKind: "short",
+     doEncrypt: false,
++    maxReads: "",
+   })
+ 
+   const [pasteResponse, setPasteResponse] = useState<PasteResponse | undefined>(undefined)
+@@ -200,6 +201,10 @@ export function PasteBin({ config }: { config: Env }) {
+       return false
+     }
+ 
++    if (!verifyMaxReads(pasteSetting.maxReads)[0]) {
++      return false
++    }
++
+     if (verifyExpiration(pasteSetting.expiration, config)[0]) {
+       if (pasteSetting.uploadKind === "short" || pasteSetting.uploadKind === "long") {
+         return true
+diff --git a/frontend/test/index.spec.tsx b/frontend/test/index.spec.tsx
+index 427d6a629c9047cf0ce3e73024f93286202d0760..2fc72b19ef727d57216e2623a5f0ae32defc3cb4 100644
+--- a/frontend/test/index.spec.tsx
++++ b/frontend/test/index.spec.tsx
+@@ -179,6 +179,11 @@ describe("Pastebin", () => {
+     expect(expire).toBeValid()
+     await userEvent.type(expire, "xxx")
+     expect(expire).toBeInvalid()
++
++    const maxReads = screen.getByRole("textbox", { name: "Max reads" })
++    expect(maxReads).toBeValid()
++    await userEvent.type(maxReads, "0")
++    expect(maxReads).toBeInvalid()
+   })
+ })
+ 
+diff --git a/frontend/utils/uploader.ts b/frontend/utils/uploader.ts
+index a1bd07a8e4cd7fad5855820d0de300ba8fd4e188..313506fc1a1302edcc82d8858aed56e4f13e710d 100644
+--- a/frontend/utils/uploader.ts
++++ b/frontend/utils/uploader.ts
+@@ -81,6 +81,7 @@ export async function uploadPaste(
+     isPrivate: pasteSetting.uploadKind === "long",
+     password: pasteSetting.password.length ? pasteSetting.password : undefined,
+     expire: pasteSetting.expiration,
++    maxReads: pasteSetting.maxReads.trim() ? pasteSetting.maxReads.trim() : undefined,
+     name: pasteSetting.uploadKind === "custom" ? pasteSetting.name : undefined,
+     highlightLanguage: editorState.editKind === "edit" ? editorState.editHighlightLang : undefined,
+     encryptionScheme: pasteSetting.doEncrypt ? encryptionScheme : undefined,
+diff --git a/shared/constants.ts b/shared/constants.ts
+index 7e0fc3ac8e8323f60c760af8202cfc3b3f6c6a5d..8d775a8f2b09bd1d75a7e8d7cf5507fdaeff713c 100644
+--- a/shared/constants.ts
++++ b/shared/constants.ts
+@@ -12,6 +12,7 @@ export const MPU_PASSWORD_HEADER = "X-PB-Password"
+ export const MPU_KEY_HEADER = "X-PB-MPU-Key"
+ export const MPU_UPLOAD_ID_HEADER = "X-PB-MPU-Upload-Id"
+ export const DEFAULT_EDIT_FILENAME = "Untitled"
++export const MAX_READS_CAP = 1000
+ 
+ export function normalizePasteFilename(filename: string | undefined): string {
+   return filename?.trim() ? filename : DEFAULT_EDIT_FILENAME
+diff --git a/shared/uploadPaste.ts b/shared/uploadPaste.ts
+index 934fe556fa5fe891639259b6df270e014951ec77..ccf6694b355888086189ac6688d7b0b684b07add 100644
+--- a/shared/uploadPaste.ts
++++ b/shared/uploadPaste.ts
+@@ -27,6 +27,7 @@ export interface UploadOptions {
+   highlightLanguage?: string
+   encryptionScheme?: EncryptionScheme
+   expire?: string
++  maxReads?: string
+   manageUrl?: string
+ }
+ 
+@@ -144,6 +145,7 @@ export async function uploadNormal(
+     highlightLanguage,
+     encryptionScheme,
+     expire,
++    maxReads,
+     manageUrl,
+   }: UploadOptions,
+   progressCallback?: (doneBytes: number, allBytes: number) => void,
+@@ -159,6 +161,7 @@ export async function uploadNormal(
+   }
+ 
+   if (expire !== undefined) fd.set("e", expire)
++  if (maxReads !== undefined && maxReads !== "") fd.set("r", maxReads)
+   if (password !== undefined) fd.set("s", password)
+   if (!isUpdate && name !== undefined) fd.set("n", name)
+   if (encryptionScheme !== undefined) fd.set("encryption-scheme", encryptionScheme)
+@@ -193,6 +196,7 @@ export async function uploadMPU(
+     highlightLanguage,
+     encryptionScheme,
+     expire,
++    maxReads,
+     manageUrl,
+   }: UploadOptions,
+   progressCallback?: (doneBytes: number, allBytes: number) => void,
+@@ -309,6 +313,9 @@ export async function uploadMPU(
+     if (expire !== undefined) {
+       completeFormData.set("e", expire)
+     }
++    if (maxReads !== undefined && maxReads !== "") {
++      completeFormData.set("r", maxReads)
++    }
+     if (password !== undefined) {
+       completeFormData.set("s", password)
+     }
+diff --git a/shared/verify.ts b/shared/verify.ts
+index a9cae86265d161facc96cb8be00d50896e8f5438..2439e9fc92dd579f5a35ba20497253db88f4d798 100644
+--- a/shared/verify.ts
++++ b/shared/verify.ts
+@@ -1,4 +1,4 @@
+-import { MAX_PASSWD_LEN, MIN_PASSWD_LEN, NAME_REGEX } from "./constants.js"
++import { MAX_PASSWD_LEN, MAX_READS_CAP, MIN_PASSWD_LEN, NAME_REGEX } from "./constants.js"
+ import { parseExpirationReadable, parseExpirationSpec } from "./parsers.js"
+ 
+ export type VerifyResult = [ok: true, message: string] | [ok: false, error: string]
+@@ -57,3 +57,24 @@ export function verifyExpiration(expiration: string, maxExpirationSeconds: numbe
+   }
+   return [true, `Expires in ${parseExpirationReadable(expiration)!}`]
+ }
++
++export function parseMaxReads(raw: string | undefined): number | undefined | null {
++  if (raw === undefined) return undefined
++  const trimmed = raw.trim()
++  if (trimmed === "") return undefined
++  if (!/^[1-9]\d*$/.test(trimmed)) return null
++  const n = Number(trimmed)
++  if (!Number.isInteger(n) || n < 1 || n > MAX_READS_CAP) return null
++  return n
++}
++
++export function verifyMaxReads(raw: string): VerifyResult {
++  const parsed = parseMaxReads(raw)
++  if (parsed === null) {
++    return [false, `Max reads must be an integer from 1 to ${MAX_READS_CAP}`]
++  }
++  if (parsed === undefined) {
++    return [true, "Unlimited reads"]
++  }
++  return [true, `${parsed} read${parsed === 1 ? "" : "s"}`]
++}
+diff --git a/worker-configuration.d.ts b/worker-configuration.d.ts
+index 011108ed04655a017b7b3ad2eb6e560eeb16ca75..d31872b331f75e7cde27bd8d6b0e542889f4fc69 100644
+GIT binary patch
+delta 41384
+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
+
+delta 1446
+zcmZuxe{2(F7|z}G`@ZXb;L7H@b!@!_7-+`mx*v>9z-<)QFxJ`@7;&szZ?_+;YuEP5
+zMqn@*14Sksr@lc@0Tq8MaltPTQ1mZAF%r=MnhcQ0LNLrIVhl#F8|pM(a(_JU`#jHg
+z@B2Nu&(GvO@oi3Q#ay9T^he}1!t7Qt(poN*G+RZhR4n@}g(Xd;vRpKOUU8vRXe}$8
+z-&7`+`Ud+84JDR&1%-muVlA0tDV}337C;{$f_k2{Z|+IZw*?eA+$>76U<<4hHYDiv
+z&Z=@@>54kBLymN6^$M-zvX%=jYgJTgmz6lKbh~XHce$`cR-{%r94{@lIcpuOyvtp+
+z<w8UWw*^|pg*K;SGPc((w$*!`m5<oG9=k`aVUi2<9*5hztkPcR(O#QtGW%X<vZLC|
+z<f{9bEcF<ZW703HtoPdLopx8H$L^?`Bvr?l^bGB@y`CDE&0XWDT|ButjWwwy>?}3F
+znNq6#!Dv&nUku9y;|owPb7@0wam#CYB`iwX7>kBVom&&tBlX51cS8+U5BfeF>X!Np
+zyIYg`tWj!>G8fLmh@I8br)}&p7CO(6q;U*EJ8PgPYS<^!;i#8=o{HO8?htl{gB_g;
+z+|_Y8@LE1s3di3=$=gHu91Z2`9=!qPL4=rv@Z(lA4Q{5RXa8H6OD`Ew>Uz3i5Lq(d
+z<{M}U?RgVfP-eZu^-y)Is8nnIepzV?1|s*)dOIEEfjfmug;)&X*}?+hf4Eg*M9$X&
+zAZSlm4n^e%92i8Y3Gw=4t1A+E7E<mo>L<l5q9S*R>*GoE`$VbzfeA@8FuNnzB>Vqb
+zw2&uk=*bt_0-aGsvzmo7>BXa{+63nFXaU4dqb&IDJh~1SUm-~}?`srf==Z}Yk%7Ax
+z(P8F6xHW=`;xr?D^)kw4CU{*}k(q((IZP(h^|N~T{VL+&vuo%AJwA$lWnuJjHVMv7
+zWs|A-Ci>Vwzgmq6Lw8HKh@sEP*n;58wfJH9p&S1MDZn9mr4jo$C=22dSg?>JKwb#%
+zgQAVNkN#GLFC%s5DV{dkaUVi$9b$_NbM4qfN1Zst!IWDX-@ghQ>F`F}z)@uj-p9h8
+zb@*MH){bZBXi7hRpQq<SSR3t=0UTrKk}mu@1N%>L1k4J)0`>?V{ve9?Fx1$I5kp<O
+zaDNFkoW{8<J@hGVoK827;b8_0ckqjN;%Y#=jc4NcB`HA=!(1ku{DafsNYuAhmLN2$
+zONG4}gTxt<wCEp-&i5|}CvW3CI5Gug=~|TzKO8V=%A{X#E{ZFAp!W{WrXzQ7_jLF<
+zlT3wyEMlX(vdJbNWIayKfv|<NLu^1>!Ps6_2gdDWI_$m6Cc?-TVu2SNIs%(}NgBMf
+zl{CRi+1kYVZ6pJ_`bp#8&<xIPWYg4@!Ek%CKiK6~<j(3~pt-FD8oD&Qh8<+RIx44v
+z=_xV;W)6@PUK($g3lQqlykFiytZ@Qexs!}WaK(5KVb>KV=SVkSz=E0MG4x(zbo3jR
+zzmcqdl%GN)2L6BrmL4Yw)Ktgw_d&%$&KN(6r<d07l9sb#KAG44i5+bLQGr+)n*m=u
+i!z6-U;_rtXkxzp$iRWQ=8Jj-QI5AHP@UkYJVg3aExbfcr
+
+diff --git a/worker/handlers/handleRead.ts b/worker/handlers/handleRead.ts
+index 69db173698b5f8ac74a62001b98cb99bb6271781..6e92497212526dcff920a0082a131620fed99367 100644
+--- a/worker/handlers/handleRead.ts
++++ b/worker/handlers/handleRead.ts
+@@ -5,8 +5,9 @@ import { verifyAuth } from "../pages/auth.js"
+ import mime from "mime"
+ import { makeMarkdown } from "../pages/markdown.js"
+ import type { PasteMetadata, PasteWithMetadata } from "../storage/storage.js"
+-import { getPaste, getPasteMetadata, metaResponseFromMetadata } from "../storage/storage.js"
++import { deletePaste, getPaste, getPasteMetadata, metaResponseFromMetadata } from "../storage/storage.js"
+ import { parseBytesRange, pasteAllowsByteRange } from "../byteRange.js"
++import { consumePasteRead } from "../readCounter.js"
+ import { parsePath } from "../../shared/parsers.js"
+ import { MAX_URL_REDIRECT_LEN } from "../../shared/constants.js"
+ import manifest from "../../dist/frontend/.vite/ssr-manifest.json"
+@@ -36,11 +37,18 @@ function staticPageCacheHeader(env: Env): Headers {
+   return age ? { "Cache-Control": `public, max-age=${age}` } : {}
+ }
+ 
+-function pasteCacheHeader(env: Env): Headers {
++function pasteCacheHeader(env: Env, noStore = false): Headers {
++  if (noStore) return { "Cache-Control": "no-store" }
+   const age = env.CACHE_PASTE_AGE
+   return age ? { "Cache-Control": `public, max-age=${age}` } : {}
+ }
+ 
++function isContentConsume(role: string | undefined, isHead: boolean): boolean {
++  if (isHead) return false
++  if (role === "m" || role === "d") return false
++  return true
++}
++
+ function lastModifiedHeader(metadata: PasteMetadata): Headers {
+   const lastModified = metadata.lastModifiedAtUnix
+   return lastModified ? { "Last-Modified": new Date(lastModified * 1000).toUTCString() } : {}
+@@ -231,6 +239,22 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
+     throw new WorkerError(404, `paste of name '${name}' not found`)
+   }
+ 
++  const maxReads = item.metadata.maxReads
++  const noStore = maxReads !== undefined
++  if (maxReads !== undefined && isContentConsume(role, isHead)) {
++    const version = item.metadata.readStateVersion
++    if (!version) {
++      throw new WorkerError(500, `paste of name '${name}' is missing read state`)
++    }
++    const consumed = await consumePasteRead(env, name, version, maxReads)
++    if (consumed === "exhausted") {
++      throw new WorkerError(404, `paste of name '${name}' not found`)
++    }
++    if (consumed === "last") {
++      ctx.waitUntil(deletePaste(env, name, item.metadata))
++    }
++  }
++
+   const disallowedMimes = env.DISALLOWED_MIME_FOR_PASTE as readonly string[]
+   const sanitize = (m: string) => (disallowedMimes.includes(m) ? "text/plain;charset=UTF-8" : m)
+ 
+@@ -248,10 +272,10 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
+ 
+   const decryptedContentType = item.metadata.encryptionScheme ? sanitize(realMime) : null
+ 
+-  // check `if-modified-since`
++  // check `if-modified-since` (skipped for read-limited pastes)
+   const pasteLastModifiedUnix = item.metadata.lastModifiedAtUnix
+   const headerModifiedSince = request.headers.get("If-Modified-Since")
+-  if (headerModifiedSince) {
++  if (!noStore && headerModifiedSince) {
+     const headerModifiedSinceUnix = Date.parse(headerModifiedSince) / 1000
+     if (pasteLastModifiedUnix <= headerModifiedSinceUnix) {
+       return new Response(null, {
+@@ -285,7 +309,7 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
+     return new Response(shouldGetPasteContent ? makeMarkdown(await decodeMaybeStream(item.paste)) : null, {
+       headers: {
+         "Content-Type": `text/html;charset=UTF-8`,
+-        ...pasteCacheHeader(env),
++        ...pasteCacheHeader(env, noStore),
+         ...lastModifiedHeader(item.metadata),
+       },
+     })
+@@ -297,7 +321,7 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
+     return new Response(isHead ? null : JSON.stringify(returnedMetadata, null, 2), {
+       headers: {
+         "Content-Type": `application/json;charset=UTF-8`,
+-        ...pasteCacheHeader(env),
++        ...pasteCacheHeader(env, noStore),
+         ...lastModifiedHeader(item.metadata),
+       },
+     })
+@@ -312,7 +336,7 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
+         return new Response(isHead ? null : page, {
+           headers: {
+             "Content-Type": `text/html;charset=UTF-8`,
+-            ...pasteCacheHeader(env),
++            ...pasteCacheHeader(env, noStore),
+             ...lastModifiedHeader(item.metadata),
+           },
+         })
+@@ -332,7 +356,7 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
+     return new Response(isHead ? null : page, {
+       headers: {
+         "Content-Type": `text/html;charset=UTF-8`,
+-        ...pasteCacheHeader(env),
++        ...pasteCacheHeader(env, noStore),
+         ...lastModifiedHeader(item.metadata),
+       },
+     })
+@@ -341,7 +365,7 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
+   // handle default
+   const headers: Headers = {
+     "Content-Type": `${inferred_mime}`,
+-    ...pasteCacheHeader(env),
++    ...pasteCacheHeader(env, noStore),
+     ...lastModifiedHeader(item.metadata),
+   }
+   const exposeHeaders = ["Content-Disposition"]
+diff --git a/worker/handlers/handleWrite.ts b/worker/handlers/handleWrite.ts
+index bd74d96257bb99670f4102b2a6cb0d8fc74389c5..6b5cb3229314e33c0282f362d4932dbf755a9767 100644
+--- a/worker/handlers/handleWrite.ts
++++ b/worker/handlers/handleWrite.ts
+@@ -17,7 +17,7 @@ import {
+ } from "../../shared/constants.js"
+ import { storedMimeTypeForUpload } from "../mime.js"
+ import { parsePath, parseSize, parseExpiration, parseExpirationSpec } from "../../shared/parsers.js"
+-import { verifyName, verifyPassword } from "../../shared/verify.js"
++import { parseMaxReads, verifyName, verifyPassword } from "../../shared/verify.js"
+ import type { PasteResponse } from "../../shared/interfaces.js"
+ import { MaxFileSizeExceededError, MultipartParseError, parseMultipartRequest } from "@mjackson/multipart-parser"
+ import {
+@@ -120,6 +120,7 @@ export async function handlePostOrPut(
+   const isPrivate = parts.has("p")
+   const passwdFromForm = parts.get("s")?.contentAsString()
+   const expireFromForm: string | undefined = parts.get("e")?.contentAsString()
++  const maxReadsFromForm: string | undefined = parts.get("r")?.contentAsString()
+   const encryptionScheme: string | undefined = parts.get("encryption-scheme")?.contentAsString()
+   const highlightLanguage = parts.get("lang")?.contentAsString()
+   const expire = expireFromForm ? expireFromForm : env.DEFAULT_EXPIRATION
+@@ -149,6 +150,12 @@ export async function handlePostOrPut(
+     return expirationUnix
+   }
+ 
++  const maxReads = parseMaxReads(maxReadsFromForm)
++  if (maxReads === null) {
++    throw new WorkerError(400, `‘${maxReadsFromForm}’ is not a valid max-reads specification`)
++  }
++  const readStateVersion = maxReads === undefined ? undefined : genRandStr(16)
++
+   // check if password is legal
+   if (passwdFromForm) {
+     const [ok, msg] = verifyPassword(passwdFromForm)
+@@ -233,6 +240,8 @@ export async function handlePostOrPut(
+       encryptionScheme,
+       mimeType,
+       isMPUComplete,
++      maxReads,
++      readStateVersion,
+     })
+     return makeResponse(
+       {
+@@ -285,6 +294,8 @@ export async function handlePostOrPut(
+       filename: storedFilename,
+       encryptionScheme,
+       isMPUComplete,
++      maxReads,
++      readStateVersion,
+     })
+     try {
+       const newMetadata = await createPaste(env, pasteName, content, {
+diff --git a/worker/index.ts b/worker/index.ts
+index ee3a94dc865ba03f345109b7bc103c5c934da60c..fa7f504a84e52f2d68d8f1ffcfb1d405d6d4a46a 100644
+--- a/worker/index.ts
++++ b/worker/index.ts
+@@ -18,6 +18,8 @@ export default {
+   },
+ } satisfies ExportedHandler<Env>
+ 
++export { PasteReadCounter } from "./readCounter.js"
++
+ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+   try {
+     if (request.method === "OPTIONS") {
+diff --git a/worker/pages/display.ts b/worker/pages/display.ts
+index 33fb7e04f23aa88cae749ba7de0cc17e1d7c67b8..fc169c4478a5e11f56694be18e842f509a7c7474 100644
+--- a/worker/pages/display.ts
++++ b/worker/pages/display.ts
+@@ -49,6 +49,10 @@ export async function renderDisplayPage(
+     return null
+   }
+ 
++  if (metadata.maxReads !== undefined) {
++    return null
++  }
++
+   // Skip SSR for large files (>1MB) to avoid memory/CPU overhead
+   if (metadata.sizeBytes > MAX_SSR_FILE_SIZE) {
+     return null
+diff --git a/worker/readCounter.ts b/worker/readCounter.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..4a600e2b136d549f649395e750f1ea3c963c9d78
+--- /dev/null
++++ b/worker/readCounter.ts
+@@ -0,0 +1,27 @@
++import { DurableObject } from "cloudflare:workers"
++
++export class PasteReadCounter extends DurableObject {
++  async consume(maxReads: number): Promise<"ok" | "last" | "exhausted"> {
++    if (!Number.isInteger(maxReads) || maxReads < 1) return "exhausted"
++    const used = (await this.ctx.storage.get<number>("used")) ?? 0
++    if (used >= maxReads) return "exhausted"
++    const next = used + 1
++    await this.ctx.storage.put("used", next)
++    return next >= maxReads ? "last" : "ok"
++  }
++}
++
++interface ReadCounterEnv {
++  PASTE_READ_COUNTER: DurableObjectNamespace<PasteReadCounter>
++}
++
++export async function consumePasteRead(
++  env: ReadCounterEnv,
++  pasteName: string,
++  readStateVersion: string,
++  maxReads: number,
++): Promise<"ok" | "last" | "exhausted"> {
++  const ns = env.PASTE_READ_COUNTER
++  const stub = ns.get(ns.idFromName(`${pasteName}:${readStateVersion}`))
++  return await stub.consume(maxReads)
++}
+diff --git a/worker/storage/storage.ts b/worker/storage/storage.ts
+index a2df527b602c5cb21689ce0055c039b7a1a4d31a..d97a44bcd88e4b6bac38a77d584d3ceb39d4eb8a 100644
+--- a/worker/storage/storage.ts
++++ b/worker/storage/storage.ts
+@@ -22,6 +22,8 @@ export interface PasteMetadata {
+   highlightLanguage?: string
+   encryptionScheme?: string
+   mimeType?: string
++  maxReads?: number
++  readStateVersion?: string
+ }
+ 
+ interface PasteMetadataInStorage {
+@@ -39,6 +41,8 @@ interface PasteMetadataInStorage {
+   highlightLanguage?: string
+   encryptionScheme?: string
+   mimeType?: string
++  maxReads?: number
++  readStateVersion?: string
+ }
+ 
+ export function metaResponseFromMetadata(metadata: PasteMetadata): MetaResponse {
+@@ -71,6 +75,8 @@ export function migratePasteMetadata(original: PasteMetadataInStorage): PasteMet
+     highlightLanguage: original.highlightLanguage,
+     encryptionScheme: original.encryptionScheme,
+     mimeType: original.mimeType,
++    maxReads: original.maxReads,
++    readStateVersion: original.readStateVersion,
+   }
+ }
+ 
+@@ -175,6 +181,8 @@ interface WriteOptions {
+   encryptionScheme?: string
+   mimeType?: string
+   isMPUComplete: boolean
++  maxReads?: number
++  readStateVersion?: string
+ }
+ 
+ export async function updatePaste(
+@@ -221,6 +229,8 @@ export async function updatePaste(
+     accessCounter: originalMetadata.accessCounter,
+     sizeBytes: options.contentLength,
+     encryptionScheme: options.encryptionScheme,
++    maxReads: options.maxReads,
++    readStateVersion: options.readStateVersion,
+   }
+ 
+   await env.PB.put(
+@@ -271,6 +281,8 @@ export async function createPaste(
+     accessCounter: 0,
+     sizeBytes: options.contentLength,
+     encryptionScheme: options.encryptionScheme,
++    maxReads: options.maxReads,
++    readStateVersion: options.readStateVersion,
+   }
+ 
+   await env.PB.put(
+diff --git a/worker/test/maxReads.spec.ts b/worker/test/maxReads.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..4cae4298e85edfbc30f632571444637c96052609
+--- /dev/null
++++ b/worker/test/maxReads.spec.ts
+@@ -0,0 +1,181 @@
++import { expect, it, describe } from "vitest"
++import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
++import { genRandomBlob, upload, uploadExpectStatus, workerFetch, BASE_URL } from "./testUtils.js"
++
++describe("max reads (r)", () => {
++  it("rejects invalid r", async () => {
++    const ctx = createExecutionContext()
++    const blob = genRandomBlob(32)
++    await uploadExpectStatus(ctx, { c: blob, r: "0" }, 400)
++    await uploadExpectStatus(ctx, { c: blob, r: "-1" }, 400)
++    await uploadExpectStatus(ctx, { c: blob, r: "abc" }, 400)
++    await uploadExpectStatus(ctx, { c: blob, r: "1001" }, 400)
++  })
++
++  it("allows one content GET when r=1 then 404", async () => {
++    const ctx = createExecutionContext()
++    const blob = genRandomBlob(64)
++    const created = await upload(ctx, { c: blob, r: "1" })
++    const first = await workerFetch(ctx, created.url)
++    expect(first.status).toStrictEqual(200)
++    expect(first.headers.get("Cache-Control")).toStrictEqual("no-store")
++    expect(new Uint8Array(await first.arrayBuffer())).toStrictEqual(new Uint8Array(await blob.arrayBuffer()))
++    await waitOnExecutionContext(ctx)
++
++    const secondCtx = createExecutionContext()
++    const second = await workerFetch(secondCtx, created.url)
++    expect(second.status).toStrictEqual(404)
++    await waitOnExecutionContext(secondCtx)
++  })
++
++  it("allows two content GETs when r=2 then 404", async () => {
++    const ctx = createExecutionContext()
++    const blob = genRandomBlob(32)
++    const created = await upload(ctx, { c: blob, r: "2" })
++    expect((await workerFetch(ctx, created.url)).status).toStrictEqual(200)
++    await waitOnExecutionContext(ctx)
++    const ctx2 = createExecutionContext()
++    expect((await workerFetch(ctx2, created.url)).status).toStrictEqual(200)
++    await waitOnExecutionContext(ctx2)
++    const ctx3 = createExecutionContext()
++    expect((await workerFetch(ctx3, created.url)).status).toStrictEqual(404)
++    await waitOnExecutionContext(ctx3)
++  })
++
++  it("does not consume HEAD or metadata GET", async () => {
++    const ctx = createExecutionContext()
++    const blob = genRandomBlob(32)
++    const created = await upload(ctx, { c: blob, r: "1" })
++    const name = new URL(created.url).pathname.slice(1)
++
++    const head = await workerFetch(ctx, new Request(created.url, { method: "HEAD" }))
++    expect(head.status).toStrictEqual(200)
++    await waitOnExecutionContext(ctx)
++
++    const metaCtx = createExecutionContext()
++    const meta = await workerFetch(metaCtx, `${BASE_URL}/m/${name}`)
++    expect(meta.status).toStrictEqual(200)
++    await waitOnExecutionContext(metaCtx)
++
++    const getCtx = createExecutionContext()
++    expect((await workerFetch(getCtx, created.url)).status).toStrictEqual(200)
++    await waitOnExecutionContext(getCtx)
++    const gone = createExecutionContext()
++    expect((await workerFetch(gone, created.url)).status).toStrictEqual(404)
++    await waitOnExecutionContext(gone)
++  })
++
++  it("skips display SSR body for read-limited pastes and does not consume on /d/", async () => {
++    const ctx = createExecutionContext()
++    const created = await upload(ctx, { c: "hello-limited", r: "1" })
++    const name = new URL(created.url).pathname.slice(1)
++    const display = await workerFetch(ctx, `${BASE_URL}/d/${name}`)
++    expect(display.status).toStrictEqual(200)
++    const html = await display.text()
++    expect(html).not.toContain("hello-limited")
++    expect(html).not.toContain("__PASTE_DATA__")
++    await waitOnExecutionContext(ctx)
++
++    const getCtx = createExecutionContext()
++    const raw = await workerFetch(getCtx, created.url)
++    expect(raw.status).toStrictEqual(200)
++    expect(await raw.text()).toStrictEqual("hello-limited")
++    await waitOnExecutionContext(getCtx)
++  })
++
++  it("serializes concurrent r=1 content GETs to a single 200", async () => {
++    const ctx = createExecutionContext()
++    const blob = genRandomBlob(32)
++    const created = await upload(ctx, { c: blob, r: "1" })
++    await waitOnExecutionContext(ctx)
++
++    const a = createExecutionContext()
++    const b = createExecutionContext()
++    const [ra, rb] = await Promise.all([workerFetch(a, created.url), workerFetch(b, created.url)])
++    const statuses = [ra.status, rb.status].sort()
++    expect(statuses).toStrictEqual([200, 404])
++    await waitOnExecutionContext(a)
++    await waitOnExecutionContext(b)
++  })
++
++  it("consumes /a/ article GET", async () => {
++    const ctx = createExecutionContext()
++    const created = await upload(ctx, { c: "# hi\n", r: "1" })
++    const name = new URL(created.url).pathname.slice(1)
++    const article = await workerFetch(ctx, `${BASE_URL}/a/${name}`)
++    expect(article.status).toStrictEqual(200)
++    await waitOnExecutionContext(ctx)
++    const gone = createExecutionContext()
++    expect((await workerFetch(gone, created.url)).status).toStrictEqual(404)
++    await waitOnExecutionContext(gone)
++  })
++
++  it("PUT without r clears max-reads", async () => {
++    const ctx = createExecutionContext()
++    const blob = genRandomBlob(16)
++    const created = await upload(ctx, { c: blob, r: "1" })
++    await upload(ctx, { c: blob }, { method: "PUT", url: created.manageUrl })
++    expect((await workerFetch(ctx, created.url)).status).toStrictEqual(200)
++    await waitOnExecutionContext(ctx)
++    const ctx2 = createExecutionContext()
++    expect((await workerFetch(ctx2, created.url)).status).toStrictEqual(200)
++    await waitOnExecutionContext(ctx2)
++  })
++
++  it("PUT with r starts a new read counter", async () => {
++    const ctx = createExecutionContext()
++    const blob = genRandomBlob(16)
++    const created = await upload(ctx, { c: blob, r: "2" })
++    expect((await workerFetch(ctx, created.url)).status).toStrictEqual(200)
++    await waitOnExecutionContext(ctx)
++    await upload(ctx, { c: blob, r: "2" }, { method: "PUT", url: created.manageUrl })
++    const a = createExecutionContext()
++    expect((await workerFetch(a, created.url)).status).toStrictEqual(200)
++    await waitOnExecutionContext(a)
++    const b = createExecutionContext()
++    expect((await workerFetch(b, created.url)).status).toStrictEqual(200)
++    await waitOnExecutionContext(b)
++    const c = createExecutionContext()
++    expect((await workerFetch(c, created.url)).status).toStrictEqual(404)
++    await waitOnExecutionContext(c)
++  })
++
++  it("consumes /u/ redirect GET", async () => {
++    const ctx = createExecutionContext()
++    const created = await upload(ctx, { c: "https://example.com/x", r: "1" })
++    const name = new URL(created.url).pathname.slice(1)
++    const redirect = await workerFetch(ctx, `${BASE_URL}/u/${name}`)
++    expect(redirect.status).toStrictEqual(302)
++    await waitOnExecutionContext(ctx)
++    const gone = createExecutionContext()
++    expect((await workerFetch(gone, created.url)).status).toStrictEqual(404)
++    await waitOnExecutionContext(gone)
++  })
++
++  it("ignores Range on read-limited pastes and still consumes once", async () => {
++    const ctx = createExecutionContext()
++    const blob = genRandomBlob(32)
++    const created = await upload(ctx, { c: blob, r: "1" })
++    const ranged = await workerFetch(ctx, new Request(created.url, { headers: { Range: "bytes=0-3" } }))
++    expect(ranged.status).toStrictEqual(200)
++    expect(ranged.headers.get("Content-Range")).toBeNull()
++    expect(ranged.headers.get("Cache-Control")).toStrictEqual("no-store")
++    expect(new Uint8Array(await ranged.arrayBuffer())).toStrictEqual(new Uint8Array(await blob.arrayBuffer()))
++    await waitOnExecutionContext(ctx)
++    const gone = createExecutionContext()
++    expect((await workerFetch(gone, created.url)).status).toStrictEqual(404)
++    await waitOnExecutionContext(gone)
++  })
++
++  it("leaves unlimited pastes readable more than once", async () => {
++    const ctx = createExecutionContext()
++    const blob = genRandomBlob(16)
++    const created = await upload(ctx, { c: blob })
++    expect((await workerFetch(ctx, created.url)).status).toStrictEqual(200)
++    await waitOnExecutionContext(ctx)
++    const ctx2 = createExecutionContext()
++    expect((await workerFetch(ctx2, created.url)).status).toStrictEqual(200)
++    expect((await workerFetch(ctx2, created.url)).headers.get("Cache-Control")).not.toStrictEqual("no-store")
++    await waitOnExecutionContext(ctx2)
++  })
++})
+diff --git a/wrangler.toml b/wrangler.toml
+index 4d61d1895d40199cfe9ea32366a2fb6690d1e1d7..18cadb8ed8bc883378eac92faf1ab04eab4a7364 100644
+--- a/wrangler.toml
++++ b/wrangler.toml
+@@ -79,3 +79,12 @@ R2_MAX_ALLOWED = "256M"
+ 
+ # The following mimetypes will be converted to text/plain
+ DISALLOWED_MIME_FOR_PASTE = ["text/html", "audio/x-mpegurl"]
++
++# Serializes max-reads consume-before-response (unused for unlimited pastes)
++[[durable_objects.bindings]]
++name = "PASTE_READ_COUNTER"
++class_name = "PasteReadCounter"
++
++[[migrations]]
++tag = "v1-paste-read-counter"
++new_sqlite_classes = ["PasteReadCounter"]
+
+base-commit: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+prerequisite-patch-id: 6e6f1a1b3b822a7f6055757439f06a3a2956b89a
+prerequisite-patch-id: bb8280cc63d877f55dabba700c59f2d9ce0d6307
+prerequisite-patch-id: 292fa63936f41c768c09dedce9c0b951924707f3
+prerequisite-patch-id: a18edec9995be81e122eb2ca0fc03fe3bfd7712d
+prerequisite-patch-id: 7fb6594968364a928abd12177313831c752d65e2
+prerequisite-patch-id: d9b8fd398a206be4b4b283398a4697914c5c82e1
+prerequisite-patch-id: f2ebf4e613c40007615eec143b83069eeb24c791
+prerequisite-patch-id: 6ad43923c9ad3ed939663717809fa4661e96f6ab
+prerequisite-patch-id: 1c8a98c04997a1641ac1cc9df45e69f95dcaef15
+prerequisite-patch-id: c233d552de04f8104c3dfde89f89423feab89385
+prerequisite-patch-id: 6ac78d342fc593d80301fff4344bb005463223a0
+prerequisite-patch-id: 7c636f5c8826bcf7c64729128f8a057c6a97c59f
+prerequisite-patch-id: 30bb2ff317dc3ebebe8be3b176e7e24c0844a032
+prerequisite-patch-id: 25696ff912a94f7b2dad737e1cfe422a167c1a5d
+prerequisite-patch-id: 70595ee35b43fe7306ef36c5ffea4f1249b8c912
+prerequisite-patch-id: 4ba60b0e344bc823c5181af8c8a1379d50a8645b
+prerequisite-patch-id: 7af0827b075af64e354f1131aae72cbfd9a6f509
+prerequisite-patch-id: c2ce21a9f0373e1f9303860f6145f9d8b5ea088e
+prerequisite-patch-id: a128861995f39dbd676052826465b3bec1da7c3c
+prerequisite-patch-id: 317d38b2389df13ce09e899c96916601381962d0
+prerequisite-patch-id: fdc4e79bc0a1f9df3ce8690c5ee71fc5d7b06e70
+prerequisite-patch-id: c34b24303bd216f7b517595635049556ca252c00
+prerequisite-patch-id: 09d1dd390a03007452d6584f050d859f04cd1ed9
+prerequisite-patch-id: 17b18a35aaa2766b942290e3c91ccccb7829ad70
+prerequisite-patch-id: e72b7426d0b07052e9f0878f0af0ca6a448e6bfb
+prerequisite-patch-id: 986d9cec733c7c707bcb5348f26c3944cb91bcc4
+prerequisite-patch-id: 6d86662087a73376cc1e1006915f9c7b956d814a
+prerequisite-patch-id: 9f889e0f1c371231cd5ed35e8c595b74af2863e7
+-- 
+2.50.1 (Apple Git-155)
+

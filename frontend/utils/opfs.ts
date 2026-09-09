@@ -8,13 +8,34 @@ export async function stageDownloadBytes(bytes: Uint8Array, filename: string): P
     await writable.close()
     const file = await handle.getFile()
     const objectUrl = URL.createObjectURL(file)
-    try {
-      await root.removeEntry(filename)
-    } catch {
-      // Best-effort: the object URL already holds the bytes.
-    }
+    await wipeAndRemoveStagedFile(root, handle, filename)
     return objectUrl
   } catch {
     return URL.createObjectURL(blob)
+  }
+}
+
+async function wipeAndRemoveStagedFile(
+  root: FileSystemDirectoryHandle,
+  handle: FileSystemFileHandle,
+  filename: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const writable = await handle.createWritable({ keepExistingData: false })
+      await writable.write(new Uint8Array(0))
+      await writable.close()
+      break
+    } catch {
+      if (attempt === 1) break
+    }
+  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await root.removeEntry(filename)
+      return
+    } catch {
+      if (attempt === 1) return
+    }
   }
 }

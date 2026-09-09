@@ -1,0 +1,931 @@
+From dc88d36950e241753823963a1c920d976b62b299 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 18:05:16 +0800
+Subject: [PATCH] feat(frontend): zip multi-file and directory uploads
+
+Context:
+Issue #83 requires directory, multi-file, and ZIP upload UX on the
+current PasteBin uploader. Redesign against this repo only: package
+selected files client-side into one ZIP and reuse the existing
+upload/encryption/MPU pipeline. No server filesystem, no new API,
+no P2P, no new crypto.
+
+Expected behavior:
+Two or more files, or a directory picker selection, become one STORE
+ZIP paste. Nested webkitRelativePath is preserved after sanitizing
+away traversal/absolute/NUL paths. A single ordinary file stays a
+normal file upload. Encryption still uses AES-GCM on the resulting
+bytes. MPU still applies above 5 MiB.
+
+Acceptance criteria:
+- Multiple files become one ZIP named archive.zip.
+- Directory selection ZIPs with {dir}.zip and nested relative paths.
+- Traversal paths are rejected; empty safe set fails closed.
+- Existing single-file and text paste flows remain.
+- No extra ZIP dependency.
+
+Constraints:
+- Source patch vs pinned upstream 0835cac4ab8f974035d31845f5c2b93b0c85b5c6.
+- REVIEW ONLY; do not merge into upstream-sync.
+- Residual: in-memory STORE ZIP (uncompressed).
+
+Validation:
+- Node v22.23.2 / pnpm 10.28.0
+- 23 files / 177 tests PASS
+- lint, typecheck, prettier, frontend build, wrangler dry-run PASS
+
+Docs:
+- README.md feature bullet
+- PasteBin usage line
+
+Refs:
+- Issue #83
+- PLAN/SPEC https://github.com/Skyline-Gazer/pastebin-worker/issues/83#issuecomment-5599943085
+- Patch ID 120-multi-file-directory-zip
+- Upstream base 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+- Dependencies: none
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ README.md                               |   1 +
+ frontend/components/PasteInputPanel.tsx | 105 +++++++++++---
+ frontend/pages/PasteBin.tsx             |   9 +-
+ frontend/test/index.spec.tsx            |  42 ++++++
+ frontend/test/uploader.spec.ts          | 104 ++++++++++++++
+ frontend/test/zipArchive.spec.ts        | 159 +++++++++++++++++++++
+ frontend/utils/uploader.ts              |  73 ++++++----
+ frontend/utils/zipArchive.ts            | 176 ++++++++++++++++++++++++
+ 8 files changed, 616 insertions(+), 53 deletions(-)
+ create mode 100644 frontend/test/uploader.spec.ts
+ create mode 100644 frontend/test/zipArchive.spec.ts
+ create mode 100644 frontend/utils/zipArchive.ts
+
+diff --git a/README.md b/README.md
+index d84ef17adc525e2c1d2fdc90f67e390829dd55ed..dfee7462cca9568600e0460e5cef596c026fed5a 100644
+--- a/README.md
++++ b/README.md
+@@ -9,6 +9,7 @@ This is a pastebin running on Cloudflare workers. Try it on [shz.al](https://shz
+ 1. Share your paste with as short as 4 characters, or even customized URL.
+ 1. **Syntax highlighting** powered by highlight.js.
+ 1. Client-side encryption. Encrypted Display URLs with `#key` can download usable plaintext without sending the fragment to the server.
++1. Upload multiple files or a folder as one ZIP (built in the browser).
+ 1. Share **markdown** file with rendered HTML.
+ 1. URL shortener.
+ 1. Smart and tweakable handling for `Content-Type` and `Content-Disposition`.
+diff --git a/frontend/components/PasteInputPanel.tsx b/frontend/components/PasteInputPanel.tsx
+index 8644ea866c603d2aa50dcf6ce65257d35e6f1a78..14a5b7fffd2b2838fc6012168180c5da62b719fa 100644
+--- a/frontend/components/PasteInputPanel.tsx
++++ b/frontend/components/PasteInputPanel.tsx
+@@ -3,6 +3,7 @@ import { Card, CardBody, Tab, Tabs } from "./ui/index.js"
+ import type { DragEvent } from "react"
+ import { useRef, useState } from "react"
+ import { formatSize, verifyFileSize } from "../utils/utils.js"
++import { shouldZipFiles } from "../utils/zipArchive.js"
+ import { XIcon } from "./icons.js"
+ import { cardOverrides, tst } from "../utils/overrides.js"
+ import { CodeEditor } from "./CodeEditor.js"
+@@ -15,6 +16,8 @@ export interface PasteEditState {
+   editFilename?: string
+   editHighlightLang?: string
+   file: File | null
++  files: File[]
++  fromDirectory: boolean
+ }
+ 
+ interface PasteEditorProps extends CardProps {
+@@ -34,33 +37,55 @@ export function PasteInputPanel({
+   ...rest
+ }: PasteEditorProps) {
+   const fileInput = useRef<HTMLInputElement>(null)
++  const directoryInput = useRef<HTMLInputElement>(null)
+   const [isDragged, setDragged] = useState<boolean>(false)
+   const [isEditDragged, setEditDragged] = useState<boolean>(false)
+ 
+-  function setFile(file: File | null) {
+-    if (file) {
++  const selected = state.files.length > 0 ? state.files : state.file ? [state.file] : []
++  const zipping = shouldZipFiles(selected.length, state.fromDirectory)
++  const selectedBytes = selected.reduce((sum, file) => sum + file.size, 0)
++
++  function resetFileInputs() {
++    if (fileInput.current) fileInput.current.value = ""
++    if (directoryInput.current) directoryInput.current.value = ""
++  }
++
++  function setFiles(next: File[], fromDirectory: boolean) {
++    if (next.length === 0) {
++      resetFileInputs()
++      onStateChange({ ...state, editKind: "file", file: null, files: [], fromDirectory: false })
++      return
++    }
++    let total = 0
++    for (const file of next) {
+       const [ok, msg] = verifyFileSize(file.size, config)
+       if (!ok) {
+         showModal("File too large", msg)
+-        // also reset the underlying input so picking the same file again re-triggers onChange
+-        if (fileInput.current) fileInput.current.value = ""
++        resetFileInputs()
+         return
+       }
++      total += file.size
++    }
++    const [archiveOk, archiveMsg] = verifyFileSize(total + 128 * next.length + 1024, config)
++    if (!archiveOk) {
++      showModal("File too large", archiveMsg)
++      resetFileInputs()
++      return
+     }
+-    onStateChange({ ...state, editKind: "file", file })
++    onStateChange({
++      ...state,
++      editKind: "file",
++      file: next[0],
++      files: next,
++      fromDirectory,
++    })
+   }
+ 
+   function onDrop(e: DragEvent) {
+     e.preventDefault()
+-    const items = e.dataTransfer?.items
+-    if (items) {
+-      for (const item of Array.from(items)) {
+-        if (item.kind === "file") {
+-          const file = item.getAsFile()!
+-          setFile(file)
+-          break
+-        }
+-      }
++    const dropped = e.dataTransfer?.files
++    if (dropped?.length) {
++      setFiles(Array.from(dropped), false)
+     }
+     setDragged(false)
+     setEditDragged(false)
+@@ -73,10 +98,26 @@ export function PasteInputPanel({
+           type="file"
+           ref={fileInput}
+           className="hidden"
++          multiple
++          aria-label="Select files"
++          onChange={(e) => {
++            const files = e.target.files
++            if (files?.length) {
++              setFiles(Array.from(files), false)
++            }
++          }}
++        />
++        <input
++          type="file"
++          ref={directoryInput}
++          className="hidden"
++          aria-label="Select folder"
++          // @ts-expect-error webkitdirectory is a non-standard directory picker attribute
++          webkitdirectory=""
+           onChange={(e) => {
+             const files = e.target.files
+             if (files?.length) {
+-              setFile(files[0])
++              setFiles(Array.from(files), true)
+             }
+           }}
+         />
+@@ -155,23 +196,45 @@ export function PasteInputPanel({
+               onClick={() => fileInput.current?.click()}
+             >
+               <div className="text-2xl my-2 font-bold px-4 text-center break-all">
+-                {state.file !== null ? state.file.name : "Select File"}
++                {selected.length === 0 ? "Select File" : zipping ? `${selected.length} files` : selected[0]?.name}
+               </div>
+               <p className={`text-1xl text-foreground-500 ${tst} relative`}>
+                 <span>
+-                  {state.file !== null
+-                    ? `${formatSize(state.file.size)} · Click or drag to replace`
+-                    : "Click or drag & drop file here"}
++                  {selected.length === 0
++                    ? "Click or drag & drop file here"
++                    : `${formatSize(selectedBytes)}${zipping ? " · ZIP" : ""} · Click or drag to replace`}
+                 </span>
+               </p>
+-              {state.file && (
++              <div className={`mt-3 flex gap-3 text-sm text-primary ${tst}`}>
++                <button
++                  type="button"
++                  className="underline"
++                  onClick={(e) => {
++                    e.stopPropagation()
++                    fileInput.current?.click()
++                  }}
++                >
++                  Select files
++                </button>
++                <button
++                  type="button"
++                  className="underline"
++                  onClick={(e) => {
++                    e.stopPropagation()
++                    directoryInput.current?.click()
++                  }}
++                >
++                  Select folder
++                </button>
++              </div>
++              {selected.length > 0 && (
+                 <XIcon
+                   aria-label="Remove file"
+                   role="button"
+                   className={`h-6 inline absolute top-2 right-2 text-red-400 ${tst}`}
+                   onClick={(e) => {
+                     e.stopPropagation()
+-                    setFile(null)
++                    setFiles([], false)
+                   }}
+                 />
+               )}
+diff --git a/frontend/pages/PasteBin.tsx b/frontend/pages/PasteBin.tsx
+index 02af717dbe37b5ad9353d3441f4638cdfddeaa7a..1b888778cf02a277d3f9ece3a4ee5b03dc34fa8e 100644
+--- a/frontend/pages/PasteBin.tsx
++++ b/frontend/pages/PasteBin.tsx
+@@ -36,6 +36,8 @@ export function PasteBin({ config }: { config: Env }) {
+     editContent: "",
+     editFilename: DEFAULT_EDIT_FILENAME,
+     file: null,
++    files: [],
++    fromDirectory: false,
+     editHighlightLang: "plaintext",
+   })
+ 
+@@ -124,6 +126,8 @@ export function PasteBin({ config }: { config: Env }) {
+             editKind: "edit",
+             editContent: await resp.text(),
+             file: null,
++            files: [],
++            fromDirectory: false,
+             editHighlightLang: contentLang || undefined,
+             editFilename: pasteFilename || DEFAULT_EDIT_FILENAME,
+           })
+@@ -188,7 +192,7 @@ export function PasteBin({ config }: { config: Env }) {
+   function canUpload(): boolean {
+     if (editorState.editKind === "edit" && editorState.editContent.length === 0) {
+       return false
+-    } else if (editorState.editKind === "file" && editorState.file === null) {
++    } else if (editorState.editKind === "file" && editorState.file === null && editorState.files.length === 0) {
+       return false
+     }
+ 
+@@ -225,7 +229,8 @@ export function PasteBin({ config }: { config: Env }) {
+       </div>
+       <p className="my-2">A pastebin running on Cloudflare Workers.</p>
+       <p className="my-2">
+-        <b>Usage</b>: paste text or drop a file, then share the returned URL. You can also use{" "}
++        <b>Usage</b>: paste text, drop a file, or select multiple files / a folder (uploaded as one ZIP), then share the
++        returned URL. You can also use{" "}
+         <Link className={tst} href={`${config.DEPLOY_URL}/doc/curl`}>
+           curl
+         </Link>
+diff --git a/frontend/test/index.spec.tsx b/frontend/test/index.spec.tsx
+index d633529c0e1c1b22dcc164f198c0d5bbf4c6cbc9..427d6a629c9047cf0ce3e73024f93286202d0760 100644
+--- a/frontend/test/index.spec.tsx
++++ b/frontend/test/index.spec.tsx
+@@ -183,6 +183,11 @@ describe("Pastebin", () => {
+ })
+ 
+ describe("Pastebin admin page", () => {
++  afterEach(() => {
++    vi.unstubAllGlobals()
++    stubBrowerFunctions()
++  })
++
+   it("renders admin page", async () => {
+     vi.stubGlobal("location", new URL("https://example.com/abcd:xxxxxxxxx"))
+     render(<PasteBin config={__WRANGLER_CONFIG__} />)
+@@ -193,3 +198,40 @@ describe("Pastebin admin page", () => {
+     expect((editor as HTMLTextAreaElement).value).toStrictEqual(mockedPasteContent)
+   })
+ })
++
++describe("Pastebin multi-file ZIP", () => {
++  it("selects multiple files, uploads, and reset does not keep the selection", async () => {
++    render(<PasteBin config={__WRANGLER_CONFIG__} />)
++    await userEvent.click(screen.getByRole("button", { name: "File" }))
++    await userEvent.upload(screen.getByLabelText("Select files"), [
++      new File(["alpha"], "a.txt", { type: "text/plain" }),
++      new File(["beta"], "b.txt", { type: "text/plain" }),
++    ])
++    expect(screen.getByText(/2 files/)).toBeInTheDocument()
++    expect(screen.getByText(/· ZIP/)).toBeInTheDocument()
++
++    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
++    await vi.waitFor(() => {
++      expect(screen.getByRole("textbox", { name: "Raw URL" })).toHaveValue(mockedPasteUpload.url)
++    })
++
++    await userEvent.click(screen.getByLabelText("Remove file"))
++    expect(screen.queryByText(/2 files/)).not.toBeInTheDocument()
++    expect(screen.getByRole("button", { name: /^(Upload|Update)$/ })).toBeDisabled()
++  })
++
++  it("uploads a single ordinary file without showing a ZIP summary", async () => {
++    render(<PasteBin config={__WRANGLER_CONFIG__} />)
++    await userEvent.click(screen.getByRole("button", { name: "File" }))
++    await userEvent.upload(screen.getByLabelText("Select files"), [
++      new File(["hello"], "solo.txt", { type: "text/plain" }),
++    ])
++    expect(screen.getByText("solo.txt")).toBeInTheDocument()
++    expect(screen.queryByText(/· ZIP/)).not.toBeInTheDocument()
++
++    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
++    await vi.waitFor(() => {
++      expect(screen.getByRole("textbox", { name: "Raw URL" })).toHaveValue(mockedPasteUpload.url)
++    })
++  })
++})
+diff --git a/frontend/test/uploader.spec.ts b/frontend/test/uploader.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..66b6e9ee15d8170745a14891601d2ad2bf158f16
+--- /dev/null
++++ b/frontend/test/uploader.spec.ts
+@@ -0,0 +1,104 @@
++import { describe, expect, it } from "vitest"
++import type { PasteEditState } from "../components/PasteInputPanel.js"
++import { decrypt, decodeKey } from "../utils/encryption.js"
++import { prepareUploadContent } from "../utils/uploader.js"
++
++function fileWithPath(name: string, content: string, relativePath = ""): File {
++  const file = new File([content], name)
++  if (relativePath) {
++    Object.defineProperty(file, "webkitRelativePath", { value: relativePath })
++  }
++  return file
++}
++
++function readU32(bytes: Uint8Array, offset: number): number {
++  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(offset, true)
++}
++
++function readU16(bytes: Uint8Array, offset: number): number {
++  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint16(offset, true)
++}
++
++function unzipStore(bytes: Uint8Array): Map<string, string> {
++  const out = new Map<string, string>()
++  let offset = 0
++  while (offset + 4 <= bytes.length) {
++    const sig = readU32(bytes, offset)
++    if (sig === 0x02014b50 || sig === 0x06054b50) break
++    if (sig !== 0x04034b50) throw new Error(`bad zip ${sig.toString(16)}`)
++    const size = readU32(bytes, offset + 18)
++    const nameLen = readU16(bytes, offset + 26)
++    const extraLen = readU16(bytes, offset + 28)
++    const name = new TextDecoder().decode(bytes.subarray(offset + 30, offset + 30 + nameLen))
++    const dataStart = offset + 30 + nameLen + extraLen
++    out.set(name, new TextDecoder().decode(bytes.subarray(dataStart, dataStart + size)))
++    offset = dataStart + size
++  }
++  return out
++}
++
++function fileState(partial: Partial<PasteEditState> & Pick<PasteEditState, "file">): PasteEditState {
++  return {
++    editKind: "file",
++    editContent: "",
++    files: [],
++    fromDirectory: false,
++    ...partial,
++  }
++}
++
++describe("prepareUploadContent", () => {
++  it("leaves a single ordinary file unchanged", async () => {
++    const file = fileWithPath("solo.txt", "hello")
++    const prepared = await prepareUploadContent(fileState({ file, files: [file] }), false, () => undefined)
++    expect(prepared.name).toBe("solo.txt")
++    expect(await prepared.text()).toBe("hello")
++  })
++
++  it("packs multiple files into one ZIP for the existing upload pipeline", async () => {
++    const files = [fileWithPath("a.txt", "alpha"), fileWithPath("b.txt", "beta")]
++    const prepared = await prepareUploadContent(
++      fileState({ file: files[0], files, fromDirectory: false }),
++      false,
++      () => undefined,
++    )
++    expect(prepared.name).toBe("archive.zip")
++    const entries = unzipStore(new Uint8Array(await prepared.arrayBuffer()))
++    expect(entries.get("a.txt")).toBe("alpha")
++    expect(entries.get("b.txt")).toBe("beta")
++  })
++
++  it("encrypts the ZIP with existing AES-GCM", async () => {
++    const files = [fileWithPath("a.txt", "alpha"), fileWithPath("b.txt", "beta")]
++    let key: string | undefined
++    const prepared = await prepareUploadContent(
++      fileState({ file: files[0], files, fromDirectory: false }),
++      true,
++      (k) => {
++        key = k
++      },
++    )
++    expect(key).toBeTruthy()
++    expect(prepared.name).toBe("archive.zip")
++    const plaintext = await decrypt(
++      "AES-GCM",
++      await decodeKey("AES-GCM", key!),
++      new Uint8Array(await prepared.arrayBuffer()),
++    )
++    expect(plaintext).not.toBeNull()
++    const entries = unzipStore(plaintext!)
++    expect(entries.get("a.txt")).toBe("alpha")
++  })
++
++  it("uses a directory name for a directory ZIP", async () => {
++    const file = fileWithPath("a.txt", "A", "docs/a.txt")
++    const prepared = await prepareUploadContent(
++      fileState({ file, files: [file], fromDirectory: true }),
++      false,
++      () => undefined,
++    )
++    expect(prepared.name).toBe("docs.zip")
++    const entries = unzipStore(new Uint8Array(await prepared.arrayBuffer()))
++    expect(entries.get("docs/a.txt")).toBe("A")
++  })
++})
+diff --git a/frontend/test/zipArchive.spec.ts b/frontend/test/zipArchive.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..dc0dda221f31d58a1fbfe5f81fcfcb434383bae2
+--- /dev/null
++++ b/frontend/test/zipArchive.spec.ts
+@@ -0,0 +1,159 @@
++import { describe, expect, it } from "vitest"
++import {
++  archiveNameForSelection,
++  buildZipArchive,
++  sanitizeArchivePath,
++  shouldZipFiles,
++  uniqueArchivePath,
++} from "../utils/zipArchive.js"
++
++function fileWithPath(name: string, content: string, relativePath = ""): File {
++  const file = new File([content], name)
++  if (relativePath) {
++    Object.defineProperty(file, "webkitRelativePath", { value: relativePath })
++  }
++  return file
++}
++
++function readU32(bytes: Uint8Array, offset: number): number {
++  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(offset, true)
++}
++
++function readU16(bytes: Uint8Array, offset: number): number {
++  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint16(offset, true)
++}
++
++/** Minimal STORE ZIP reader for tests. */
++function unzipStore(bytes: Uint8Array): Map<string, Uint8Array> {
++  const out = new Map<string, Uint8Array>()
++  let offset = 0
++  while (offset + 4 <= bytes.length) {
++    const sig = readU32(bytes, offset)
++    if (sig === 0x02014b50 || sig === 0x06054b50) break
++    if (sig !== 0x04034b50) throw new Error(`unexpected local signature ${sig.toString(16)} at ${offset}`)
++    const method = readU16(bytes, offset + 8)
++    if (method !== 0) throw new Error(`expected STORE, got method ${method}`)
++    const crc = readU32(bytes, offset + 14)
++    const size = readU32(bytes, offset + 18)
++    const nameLen = readU16(bytes, offset + 26)
++    const extraLen = readU16(bytes, offset + 28)
++    const name = new TextDecoder().decode(bytes.subarray(offset + 30, offset + 30 + nameLen))
++    const dataStart = offset + 30 + nameLen + extraLen
++    const data = bytes.subarray(dataStart, dataStart + size)
++    expect(crc32(data)).toBe(crc)
++    out.set(name, data.slice())
++    offset = dataStart + size
++  }
++  return out
++}
++
++function crc32(data: Uint8Array): number {
++  let crc = 0xffffffff
++  for (const b of data) {
++    crc ^= b
++    for (let i = 0; i < 8; i++) {
++      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1))
++    }
++  }
++  return (crc ^ 0xffffffff) >>> 0
++}
++
++describe("sanitizeArchivePath", () => {
++  it("keeps nested relative paths", () => {
++    expect(sanitizeArchivePath("photos/2024/a.png")).toBe("photos/2024/a.png")
++  })
++
++  it("normalizes backslashes", () => {
++    expect(sanitizeArchivePath("photos\\a.png")).toBe("photos/a.png")
++  })
++
++  it("rejects parent traversal", () => {
++    expect(sanitizeArchivePath("../secret")).toBeNull()
++    expect(sanitizeArchivePath("a/../../b")).toBeNull()
++  })
++
++  it("rejects absolute and drive-letter paths", () => {
++    expect(sanitizeArchivePath("/etc/passwd")).toBeNull()
++    expect(sanitizeArchivePath("C:\\Windows\\a.txt")).toBeNull()
++  })
++
++  it("rejects NUL", () => {
++    expect(sanitizeArchivePath("a\0.txt")).toBeNull()
++  })
++})
++
++describe("uniqueArchivePath", () => {
++  it("suffixes colliding basenames deterministically", () => {
++    const used = new Set<string>(["note.txt"])
++    expect(uniqueArchivePath("note.txt", used)).toBe("note-2.txt")
++    used.add("note-2.txt")
++    expect(uniqueArchivePath("note.txt", used)).toBe("note-3.txt")
++  })
++})
++
++describe("shouldZipFiles / archiveNameForSelection", () => {
++  it("does not zip a single ordinary file", () => {
++    expect(shouldZipFiles(1, false)).toBe(false)
++  })
++
++  it("zips two or more files", () => {
++    expect(shouldZipFiles(2, false)).toBe(true)
++  })
++
++  it("zips a directory selection even with one file", () => {
++    expect(shouldZipFiles(1, true)).toBe(true)
++  })
++
++  it("names the archive from the directory when present", () => {
++    expect(archiveNameForSelection([{ name: "a.txt", relativePath: "docs/a.txt" }], true)).toBe("docs.zip")
++  })
++
++  it("uses archive.zip for a flat multi-file set", () => {
++    expect(
++      archiveNameForSelection(
++        [
++          { name: "a.txt", relativePath: "" },
++          { name: "b.txt", relativePath: "" },
++        ],
++        false,
++      ),
++    ).toBe("archive.zip")
++  })
++})
++
++describe("buildZipArchive", () => {
++  it("packs multiple files into one ZIP with original bytes", async () => {
++    const zip = await buildZipArchive([fileWithPath("a.txt", "alpha"), fileWithPath("b.txt", "beta")], {
++      fromDirectory: false,
++    })
++    expect(zip.name).toBe("archive.zip")
++    const entries = unzipStore(new Uint8Array(await zip.arrayBuffer()))
++    expect(new TextDecoder().decode(entries.get("a.txt"))).toBe("alpha")
++    expect(new TextDecoder().decode(entries.get("b.txt"))).toBe("beta")
++  })
++
++  it("preserves nested directory relative paths", async () => {
++    const zip = await buildZipArchive(
++      [fileWithPath("a.txt", "A", "docs/nested/a.txt"), fileWithPath("b.txt", "B", "docs/b.txt")],
++      { fromDirectory: true },
++    )
++    expect(zip.name).toBe("docs.zip")
++    const entries = unzipStore(new Uint8Array(await zip.arrayBuffer()))
++    expect([...entries.keys()].sort()).toEqual(["docs/b.txt", "docs/nested/a.txt"])
++    expect(new TextDecoder().decode(entries.get("docs/nested/a.txt"))).toBe("A")
++  })
++
++  it("skips traversal paths and still archives the rest", async () => {
++    const zip = await buildZipArchive([fileWithPath("ok.txt", "ok"), fileWithPath("evil.txt", "no", "../evil.txt")], {
++      fromDirectory: false,
++    })
++    const entries = unzipStore(new Uint8Array(await zip.arrayBuffer()))
++    expect([...entries.keys()]).toEqual(["ok.txt"])
++  })
++
++  it("fails when every path is unsafe", async () => {
++    await expect(
++      buildZipArchive([fileWithPath("evil.txt", "no", "../evil.txt")], { fromDirectory: false }),
++    ).rejects.toThrow(/No safe files to archive/)
++  })
++})
+diff --git a/frontend/utils/uploader.ts b/frontend/utils/uploader.ts
+index 71c28e8b66a66c071063a31065cda74dd6822e91..a1bd07a8e4cd7fad5855820d0de300ba8fd4e188 100644
+--- a/frontend/utils/uploader.ts
++++ b/frontend/utils/uploader.ts
+@@ -7,6 +7,7 @@ import { encodeKey, encrypt, genKey } from "./encryption.js"
+ import type { UploadOptions } from "../../shared/uploadPaste.js"
+ import { UploadError, uploadMPU, uploadNormal } from "../../shared/uploadPaste.js"
+ import { DEFAULT_EDIT_FILENAME } from "../../shared/constants.js"
++import { buildZipArchive, shouldZipFiles } from "./zipArchive.js"
+ 
+ async function genAndEncrypt(scheme: EncryptionScheme, content: string | Uint8Array) {
+   const key = await genKey(scheme)
+@@ -25,6 +26,47 @@ export interface UploadProgress {
+   totalBytes: number
+ }
+ 
++function selectedFiles(editorState: PasteEditState): File[] {
++  if (editorState.files.length > 0) return editorState.files
++  return editorState.file ? [editorState.file] : []
++}
++
++export async function prepareUploadContent(
++  editorState: PasteEditState,
++  doEncrypt: boolean,
++  onEncryptionKeyChange: (k: string | undefined) => void,
++): Promise<File> {
++  let file: File
++  if (editorState.editKind === "file") {
++    const files = selectedFiles(editorState)
++    if (files.length === 0) {
++      throw new ErrorWithTitle("Error on Preparing Upload", "No file selected")
++    }
++    if (shouldZipFiles(files.length, editorState.fromDirectory)) {
++      file = await buildZipArchive(files, { fromDirectory: editorState.fromDirectory })
++    } else {
++      const only = files[0]
++      if (!only) {
++        throw new ErrorWithTitle("Error on Preparing Upload", "No file selected")
++      }
++      file = only
++    }
++  } else {
++    if (editorState.editContent.length === 0) {
++      throw new ErrorWithTitle("Error on Preparing Upload", "Empty paste")
++    }
++    file = new File([editorState.editContent], editorState.editFilename || DEFAULT_EDIT_FILENAME)
++  }
++
++  if (doEncrypt) {
++    const { key, ciphertext } = await genAndEncrypt(encryptionScheme, await file.bytes())
++    onEncryptionKeyChange(key)
++    return new File([ciphertext as BlobPart], file.name)
++  }
++  onEncryptionKeyChange(undefined)
++  return file
++}
++
+ export async function uploadPaste(
+   pasteSetting: PasteSetting,
+   editorState: PasteEditState,
+@@ -33,37 +75,8 @@ export async function uploadPaste(
+   onProgress?: (progress: UploadProgress | undefined) => void,
+   signal?: AbortSignal,
+ ): Promise<PasteResponse> {
+-  async function constructContent(): Promise<File> {
+-    if (editorState.editKind === "file") {
+-      if (editorState.file === null) {
+-        throw new ErrorWithTitle("Error on Preparing Upload", "No file selected")
+-      }
+-      if (pasteSetting.doEncrypt) {
+-        const { key, ciphertext } = await genAndEncrypt(encryptionScheme, await editorState.file.bytes())
+-        const file = new File([ciphertext as BlobPart], editorState.file.name)
+-        onEncryptionKeyChange(key)
+-        return file
+-      } else {
+-        onEncryptionKeyChange(undefined)
+-        return editorState.file
+-      }
+-    } else {
+-      if (editorState.editContent.length === 0) {
+-        throw new ErrorWithTitle("Error on Preparing Upload", "Empty paste")
+-      }
+-      if (pasteSetting.doEncrypt) {
+-        const { key, ciphertext } = await genAndEncrypt(encryptionScheme, editorState.editContent)
+-        onEncryptionKeyChange(key)
+-        return new File([ciphertext as BlobPart], editorState.editFilename || DEFAULT_EDIT_FILENAME)
+-      } else {
+-        onEncryptionKeyChange(undefined)
+-        return new File([editorState.editContent], editorState.editFilename || DEFAULT_EDIT_FILENAME)
+-      }
+-    }
+-  }
+-
+   const options: UploadOptions = {
+-    content: await constructContent(),
++    content: await prepareUploadContent(editorState, pasteSetting.doEncrypt, onEncryptionKeyChange),
+     isUpdate: pasteSetting.uploadKind === "manage",
+     isPrivate: pasteSetting.uploadKind === "long",
+     password: pasteSetting.password.length ? pasteSetting.password : undefined,
+diff --git a/frontend/utils/zipArchive.ts b/frontend/utils/zipArchive.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..8771db2af38c796463556939d5a897594663295b
+--- /dev/null
++++ b/frontend/utils/zipArchive.ts
+@@ -0,0 +1,176 @@
++/** Client-side STORE ZIP for multi-file / directory uploads. No extra dependency. */
++
++const CRC_TABLE = (() => {
++  const table = new Uint32Array(256)
++  for (let i = 0; i < 256; i++) {
++    let c = i
++    for (let j = 0; j < 8; j++) {
++      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
++    }
++    table[i] = c
++  }
++  return table
++})()
++
++function crc32(data: Uint8Array): number {
++  let crc = 0xffffffff
++  for (const b of data) {
++    crc = CRC_TABLE[(crc ^ b) & 0xff] ^ (crc >>> 8)
++  }
++  return (crc ^ 0xffffffff) >>> 0
++}
++
++export function sanitizeArchivePath(raw: string): string | null {
++  if (raw.includes("\0")) return null
++  const trimmed = raw.trim()
++  if (!trimmed) return null
++  if (/^[a-zA-Z]:/.test(trimmed) || trimmed.startsWith("/") || trimmed.startsWith("\\")) return null
++  const normalized = trimmed.replaceAll("\\", "/")
++  if (normalized.startsWith("/")) return null
++  const parts: string[] = []
++  for (const part of normalized.split("/")) {
++    if (part === "" || part === ".") continue
++    if (part === "..") return null
++    parts.push(part)
++  }
++  if (parts.length === 0) return null
++  return parts.join("/")
++}
++
++export function uniqueArchivePath(desired: string, used: Set<string>): string {
++  if (!used.has(desired)) return desired
++  const lastSlash = desired.lastIndexOf("/")
++  const lastDot = desired.lastIndexOf(".")
++  const split = lastDot > lastSlash ? lastDot : desired.length
++  const stem = desired.slice(0, split)
++  const ext = desired.slice(split)
++  let n = 2
++  let candidate = `${stem}-${n}${ext}`
++  while (used.has(candidate)) {
++    n++
++    candidate = `${stem}-${n}${ext}`
++  }
++  return candidate
++}
++
++export function shouldZipFiles(fileCount: number, fromDirectory: boolean): boolean {
++  return fromDirectory || fileCount >= 2
++}
++
++export interface ArchiveNameSource {
++  name: string
++  relativePath?: string
++}
++
++export function archiveNameForSelection(files: ArchiveNameSource[], fromDirectory: boolean): string {
++  if (fromDirectory) {
++    for (const file of files) {
++      const sanitized = sanitizeArchivePath(file.relativePath || file.name)
++      if (sanitized?.includes("/")) {
++        return `${sanitized.split("/")[0]}.zip`
++      }
++    }
++  }
++  return "archive.zip"
++}
++
++function fileRelativePath(file: File): string {
++  const withRel = file as File & { webkitRelativePath?: string }
++  const rel = withRel.webkitRelativePath || ""
++  return rel || file.name
++}
++
++interface ZipEntry {
++  name: Uint8Array
++  data: Uint8Array
++  crc: number
++}
++
++function encodeStoreZip(files: { name: string; data: Uint8Array }[]): Uint8Array {
++  const entries: ZipEntry[] = files.map((file) => ({
++    name: new TextEncoder().encode(file.name),
++    data: file.data,
++    crc: crc32(file.data),
++  }))
++  let localSize = 0
++  let centralSize = 0
++  for (const entry of entries) {
++    localSize += 30 + entry.name.length + entry.data.length
++    centralSize += 46 + entry.name.length
++  }
++  const out = new Uint8Array(localSize + centralSize + 22)
++  const view = new DataView(out.buffer)
++  let offset = 0
++  const localOffsets: number[] = []
++  for (const entry of entries) {
++    localOffsets.push(offset)
++    view.setUint32(offset, 0x04034b50, true)
++    view.setUint16(offset + 4, 20, true)
++    view.setUint16(offset + 6, 0x0800, true)
++    view.setUint16(offset + 8, 0, true)
++    view.setUint16(offset + 10, 0, true)
++    view.setUint16(offset + 12, 0, true)
++    view.setUint32(offset + 14, entry.crc, true)
++    view.setUint32(offset + 18, entry.data.length, true)
++    view.setUint32(offset + 22, entry.data.length, true)
++    view.setUint16(offset + 26, entry.name.length, true)
++    view.setUint16(offset + 28, 0, true)
++    out.set(entry.name, offset + 30)
++    out.set(entry.data, offset + 30 + entry.name.length)
++    offset += 30 + entry.name.length + entry.data.length
++  }
++  const centralStart = offset
++  for (const [i, entry] of entries.entries()) {
++    view.setUint32(offset, 0x02014b50, true)
++    view.setUint16(offset + 4, 20, true)
++    view.setUint16(offset + 6, 20, true)
++    view.setUint16(offset + 8, 0x0800, true)
++    view.setUint16(offset + 10, 0, true)
++    view.setUint16(offset + 12, 0, true)
++    view.setUint16(offset + 14, 0, true)
++    view.setUint32(offset + 16, entry.crc, true)
++    view.setUint32(offset + 20, entry.data.length, true)
++    view.setUint32(offset + 24, entry.data.length, true)
++    view.setUint16(offset + 28, entry.name.length, true)
++    view.setUint16(offset + 30, 0, true)
++    view.setUint16(offset + 32, 0, true)
++    view.setUint16(offset + 34, 0, true)
++    view.setUint16(offset + 36, 0, true)
++    view.setUint32(offset + 38, 0, true)
++    view.setUint32(offset + 42, localOffsets[i], true)
++    out.set(entry.name, offset + 46)
++    offset += 46 + entry.name.length
++  }
++  view.setUint32(offset, 0x06054b50, true)
++  view.setUint16(offset + 4, 0, true)
++  view.setUint16(offset + 6, 0, true)
++  view.setUint16(offset + 8, entries.length, true)
++  view.setUint16(offset + 10, entries.length, true)
++  view.setUint32(offset + 12, offset - centralStart, true)
++  view.setUint32(offset + 16, centralStart, true)
++  view.setUint16(offset + 20, 0, true)
++  return out
++}
++
++export async function buildZipArchive(files: File[], options: { fromDirectory: boolean }): Promise<File> {
++  const used = new Set<string>()
++  const packed: { name: string; data: Uint8Array }[] = []
++  const nameSources: ArchiveNameSource[] = []
++  for (const file of files) {
++    const relativePath = fileRelativePath(file)
++    nameSources.push({ name: file.name, relativePath })
++    const sanitized = sanitizeArchivePath(relativePath)
++    if (!sanitized) continue
++    const name = uniqueArchivePath(sanitized, used)
++    used.add(name)
++    packed.push({ name, data: new Uint8Array(await file.arrayBuffer()) })
++  }
++  if (packed.length === 0) {
++    throw new Error("No safe files to archive")
++  }
++  const bytes = encodeStoreZip(packed)
++  const archiveName = archiveNameForSelection(nameSources, options.fromDirectory)
++  const copy = new ArrayBuffer(bytes.byteLength)
++  new Uint8Array(copy).set(bytes)
++  return new File([copy], archiveName, { type: "application/zip" })
++}
+
+base-commit: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+prerequisite-patch-id: 6e6f1a1b3b822a7f6055757439f06a3a2956b89a
+prerequisite-patch-id: bb8280cc63d877f55dabba700c59f2d9ce0d6307
+prerequisite-patch-id: 292fa63936f41c768c09dedce9c0b951924707f3
+prerequisite-patch-id: a18edec9995be81e122eb2ca0fc03fe3bfd7712d
+prerequisite-patch-id: 7fb6594968364a928abd12177313831c752d65e2
+prerequisite-patch-id: d9b8fd398a206be4b4b283398a4697914c5c82e1
+prerequisite-patch-id: f2ebf4e613c40007615eec143b83069eeb24c791
+prerequisite-patch-id: 6ad43923c9ad3ed939663717809fa4661e96f6ab
+prerequisite-patch-id: 1c8a98c04997a1641ac1cc9df45e69f95dcaef15
+prerequisite-patch-id: c233d552de04f8104c3dfde89f89423feab89385
+prerequisite-patch-id: 6ac78d342fc593d80301fff4344bb005463223a0
+prerequisite-patch-id: 7c636f5c8826bcf7c64729128f8a057c6a97c59f
+prerequisite-patch-id: 30bb2ff317dc3ebebe8be3b176e7e24c0844a032
+prerequisite-patch-id: 25696ff912a94f7b2dad737e1cfe422a167c1a5d
+prerequisite-patch-id: 70595ee35b43fe7306ef36c5ffea4f1249b8c912
+prerequisite-patch-id: 4ba60b0e344bc823c5181af8c8a1379d50a8645b
+prerequisite-patch-id: 7af0827b075af64e354f1131aae72cbfd9a6f509
+prerequisite-patch-id: c2ce21a9f0373e1f9303860f6145f9d8b5ea088e
+prerequisite-patch-id: a128861995f39dbd676052826465b3bec1da7c3c
+prerequisite-patch-id: 317d38b2389df13ce09e899c96916601381962d0
+prerequisite-patch-id: fdc4e79bc0a1f9df3ce8690c5ee71fc5d7b06e70
+prerequisite-patch-id: c34b24303bd216f7b517595635049556ca252c00
+prerequisite-patch-id: 09d1dd390a03007452d6584f050d859f04cd1ed9
+prerequisite-patch-id: 17b18a35aaa2766b942290e3c91ccccb7829ad70
+prerequisite-patch-id: e72b7426d0b07052e9f0878f0af0ca6a448e6bfb
+prerequisite-patch-id: 986d9cec733c7c707bcb5348f26c3944cb91bcc4
+prerequisite-patch-id: 6d86662087a73376cc1e1006915f9c7b956d814a
+-- 
+2.50.1 (Apple Git-155)
+

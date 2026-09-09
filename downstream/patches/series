@@ -29,3 +29,4 @@
 110-encrypted-direct-download/0004-fix-frontend-always-wipe-OPFS-after-staging-attempts.patch
 110-encrypted-direct-download/0005-fix-frontend-isolate-OPFS-staging-with-unique-names.patch
 110-encrypted-direct-download/0006-fix-test-use-schemaVersion-2-in-Range-metadata-fixtu.patch
+120-multi-file-directory-zip/0001-feat-frontend-zip-multi-file-and-directory-uploads.patch

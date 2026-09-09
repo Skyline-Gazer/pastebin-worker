@@ -54,6 +54,7 @@
   },
   "dependencies": {
     "@mjackson/multipart-parser": "^0.10.1",
+    "@noble/hashes": "^2.4.0",
     "@tailwindcss/vite": "^4.3.2",
     "@types/bcrypt": "^6.0.0",
     "@types/react": "^19.2.17",

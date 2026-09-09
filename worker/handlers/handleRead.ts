@@ -6,6 +6,7 @@ import mime from "mime"
 import { makeMarkdown } from "../pages/markdown.js"
 import type { PasteMetadata, PasteWithMetadata } from "../storage/storage.js"
 import { getPaste, getPasteMetadata, metaResponseFromMetadata } from "../storage/storage.js"
+import { parseBytesRange, pasteAllowsByteRange } from "../byteRange.js"
 import { parsePath } from "../../shared/parsers.js"
 import { MAX_URL_REDIRECT_LEN } from "../../shared/constants.js"
 import manifest from "../../dist/frontend/.vite/ssr-manifest.json"
@@ -347,5 +348,30 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
   if (!shouldGetPasteContent) {
     headers["Content-Length"] = item.metadata.sizeBytes.toString()
   }
+
+  if (shouldGetPasteContent && pasteAllowsByteRange(item.metadata)) {
+    headers["Accept-Ranges"] = "bytes"
+    exposeHeaders.push("Accept-Ranges")
+    const parsed = parseBytesRange(request.headers.get("Range"), item.metadata.sizeBytes)
+    if (parsed === "unsatisfiable") {
+      return new Response(null, {
+        status: 416,
+        headers: {
+          "Content-Range": `bytes */${item.metadata.sizeBytes}`,
+        },
+      })
+    }
+    if (parsed) {
+      const buf = item.paste instanceof ArrayBuffer ? item.paste : await new Response(item.paste).arrayBuffer()
+      const slice = buf.slice(parsed.start, parsed.end + 1)
+      headers["Content-Range"] = `bytes ${parsed.start}-${parsed.end}/${item.metadata.sizeBytes}`
+      headers["Content-Length"] = String(slice.byteLength)
+      exposeHeaders.push("Content-Range")
+      headers["Access-Control-Expose-Headers"] = exposeHeaders.join(", ")
+      return new Response(slice, { status: 206, headers })
+    }
+    headers["Access-Control-Expose-Headers"] = exposeHeaders.join(", ")
+  }
+
   return new Response(shouldGetPasteContent ? item.paste : null, { headers })
 }

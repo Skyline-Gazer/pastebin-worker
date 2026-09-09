@@ -14,6 +14,8 @@ The `Content-Disposition` header is set to `inline` by default. But can be overr
 
 If the paste is encrypted, an `X-PB-Encryption-Scheme` header will be set to the encryption scheme. An `X-PB-Decrypted-Content-Type` header is also set to the mime type that the decrypted content would have (inferred from the same sources as `Content-Type` but ignoring the encryption-induced `application/octet-stream` fallback), so clients can decide how to render the plaintext without an extra round trip.
 
+Unencrypted pastes honor a simple `Range: bytes=<start>-<end>` request and respond with `206 Partial Content` plus `Content-Range`. Unsatisfiable ranges return `416`. Encrypted pastes ignore `Range` and always return the full ciphertext as `200`, so a later consume-on-GET policy can stay whole-body.
+
 If the paste is uploaded with a `lang` parameter, an `X-PB-Highlight-Language` header will be set to the highlight language.
 
 - `?a=`: optional. Set `Content-Disposition` to `attachment` if present.
@@ -25,6 +27,7 @@ Examples: `GET /abcd?lang=js`, `GET /abcd?mime=application/json`.
 If error occurs, the worker returns status code different from `200`:
 
 - `404`: the paste of given name is not found.
+- `416`: the requested byte range is unsatisfiable.
 - `500`: unexpected exception. You may report this to the author to give it a fix.
 
 ## GET `/<name>:<passwd>`
@@ -47,7 +50,7 @@ If error occurs, the worker returns status code different from `302`:
 
 ## **GET** `/d/<name>[.<ext>]` or `/d/<name>/<filename>`
 
-Return the web page that will display the content of the paste of name `<name>`. If the paste is encrypted, a key can be appended to the URL to decrypt the paste of name `<name>` in browser.
+Return the web page that will display the content of the paste of name `<name>`. If the paste is encrypted, a key can be appended to the URL hash (`#key`) to decrypt the paste of name `<name>` in browser. The fragment is never sent to the server. Encrypted and oversized bodies are not injected into `__PASTE_DATA__`; the Display page can still download usable plaintext when `#key` is present.
 
 If error occurs, the worker returns status code different from `200`:
 

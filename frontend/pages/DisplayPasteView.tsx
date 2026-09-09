@@ -11,6 +11,7 @@ interface PendingInfo {
   sizeBytes: number
   rawUrl: string
   contentType: string | null
+  encryptionScheme?: string | null
 }
 
 interface MediaInfo {
@@ -72,6 +73,7 @@ interface DisplayPasteViewProps {
   mediaInfo?: MediaInfo | null
   metaFilename?: string
   onLoadAnyway?: () => void
+  onDecryptDownload?: () => void
 }
 
 export function DisplayPasteView(props: DisplayPasteViewProps) {
@@ -93,6 +95,7 @@ export function DisplayPasteView(props: DisplayPasteViewProps) {
     mediaInfo,
     metaFilename,
     onLoadAnyway,
+    onDecryptDownload,
   } = props
 
   const indexPageTitle = config.INDEX_PAGE_TITLE || "Pastebin"
@@ -151,9 +154,15 @@ export function DisplayPasteView(props: DisplayPasteViewProps) {
       <div className="text-foreground-600 mb-2">{`${placeholderName} (${formatSize(pendingInfo.sizeBytes)})`}</div>
       <div className="w-fit text-center">
         {placeholderReason}{" "}
-        <Link href={`${pendingInfo.rawUrl}?a`} className="text-primary-500 inline">
-          Download raw
-        </Link>
+        {onDecryptDownload ? (
+          <button className="text-primary-500 inline cursor-pointer" onClick={() => onDecryptDownload()}>
+            Download decrypted
+          </button>
+        ) : (
+          <Link href={`${pendingInfo.rawUrl}?a`} className="text-primary-500 inline">
+            Download raw
+          </Link>
+        )}
         {onLoadAnyway && (
           <>
             {" or "}
@@ -210,6 +219,18 @@ export function DisplayPasteView(props: DisplayPasteViewProps) {
                   <a href={downloadUrl} download={pasteFile.name}>
                     <DownloadIcon className="size-6 inline" />
                   </a>
+                </Button>
+              </Tooltip>
+            ) : onDecryptDownload ? (
+              <Tooltip content={`Download as file`}>
+                <Button
+                  aria-label="Download"
+                  isIconOnly
+                  variant="light"
+                  className={buttonClasses}
+                  onPress={onDecryptDownload}
+                >
+                  <DownloadIcon className="size-6 inline" />
                 </Button>
               </Tooltip>
             ) : (

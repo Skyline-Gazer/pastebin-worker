@@ -354,6 +354,56 @@ describe("DisplayPaste", () => {
     expect(getCalled).toStrictEqual(false)
   })
 
+  it("downloads oversized encrypted paste as plaintext when #key is present", async () => {
+    const plaintext = "secret-plain-text-body"
+    const scheme = "AES-GCM"
+    const key = await genKey(scheme)
+    const encryptedBytes = await encrypt(scheme, key, new TextEncoder().encode(plaintext))
+    const created: Blob[] = []
+    const previousCreate = URL.createObjectURL.bind(URL)
+    URL.createObjectURL = (obj: Blob | MediaSource) => {
+      if (obj instanceof Blob) created.push(obj)
+      return "blob:decrypted"
+    }
+    const setItem = vi.spyOn(Storage.prototype, "setItem")
+    server.use(
+      http.head("/abcd", () => {
+        return new HttpResponse(null, {
+          headers: {
+            "X-PB-Encryption-Scheme": "AES-GCM",
+            "X-PB-Decrypted-Content-Type": "text/plain;charset=UTF-8",
+            "Content-Type": "application/octet-stream",
+            "Content-Length": String(MAX_AUTO_FETCH_BYTES + 8),
+            "Content-Disposition": "inline; filename*=UTF-8''notes.txt.encrypted",
+          },
+        })
+      }),
+      http.get("/abcd", () => {
+        return HttpResponse.arrayBuffer(encryptedBytes.buffer as ArrayBuffer, {
+          headers: {
+            "X-PB-Encryption-Scheme": "AES-GCM",
+            "X-PB-Decrypted-Content-Type": "text/plain;charset=UTF-8",
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": "inline; filename*=UTF-8''notes.txt.encrypted",
+          },
+        })
+      }),
+    )
+    vi.stubGlobal("location", new URL(`https://example.com/d/abcd#${await encodeKey(key)}`))
+
+    render(<DisplayPaste config={__WRANGLER_CONFIG__} />)
+
+    expect(await screen.findByText("Download decrypted")).toBeInTheDocument()
+    expect(screen.queryByText("Download raw")).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "Download" }))
+    await waitFor(async () => {
+      expect(created.length).toBeGreaterThan(0)
+      expect(await created[created.length - 1].text()).toStrictEqual(plaintext)
+    })
+    expect(setItem.mock.calls.flat().join(" ")).not.toContain("#")
+    URL.createObjectURL = previousCreate
+  })
+
   it("shows placeholder for non-text non-image content", async () => {
     server.use(
       ...mockPaste("abcd", {

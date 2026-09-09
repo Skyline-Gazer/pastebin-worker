@@ -1,0 +1,377 @@
+From bc623333873216f7847ef423f33f300bb3795659 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 15:04:17 +0800
+Subject: [PATCH] feat(frontend): persist local Manage URL history
+
+Context:
+Issue #81 (C Local uploads sidebar ADOPT_WITH_REDESIGN) requires
+client-side manage-URL history on the official PasteBin UI. The gap
+is in upstream-owned frontend code, so this lives on an isolated
+patch branch from the pinned upstream SHA.
+
+Expected behavior:
+After a successful upload or update, the browser records the Manage
+URL locally (max 50). A compact Recent uploads list on the current
+index UI (not dashboard-sidebar chrome) shows public paste names.
+Clicking an item fills the Manage URL field. A privacy note states
+the list stays on this device. Successful delete removes that item.
+Encryption keys are not stored.
+
+Acceptance criteria:
+- After upload, Recent uploads and a privacy note are visible.
+- List labels do not include the Manage URL password.
+- Clicking a recent item restores the Manage URL field.
+- Store caps at 50 and fails closed on localStorage errors.
+
+Constraints:
+- Generic upstream patch; no Feishu concepts.
+- No cloud sync, accounts, server history, analytics, or extension.
+- Do not copy fork sidebar chrome.
+
+Validation:
+- TDD: RED missing Recent uploads heading / localUploads module;
+  GREEN after localStorage helper + compact panel.
+- Node v22.23.2 / pnpm 10.28.0
+- Frontend tests: 2 files / 6 tests PASS
+- lint / typecheck / Prettier PASS
+- frontend production build PASS
+
+Docs:
+- README.md features list
+- frontend/test/index.spec.tsx
+- frontend/test/localUploads.spec.ts
+
+Upstream base:
+0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+
+Patch ID:
+100-local-uploads-history (export after source review)
+
+Dependencies:
+none
+
+Refs:
+- Issue #81
+- Parent #61
+- PLAN/SPEC: https://github.com/Skyline-Gazer/pastebin-worker/issues/81#issuecomment-5597582608
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+(cherry picked from commit 9317899b48ece3d18ed5fe1eec4a84daa05d8bf1)
+---
+ README.md                                  |  1 +
+ frontend/components/RecentUploadsPanel.tsx | 40 ++++++++++++++
+ frontend/pages/PasteBin.tsx                | 16 ++++++
+ frontend/test/index.spec.tsx               | 21 ++++++++
+ frontend/test/localUploads.spec.ts         | 42 +++++++++++++++
+ frontend/utils/localUploads.ts             | 62 ++++++++++++++++++++++
+ 6 files changed, 182 insertions(+)
+ create mode 100644 frontend/components/RecentUploadsPanel.tsx
+ create mode 100644 frontend/test/localUploads.spec.ts
+ create mode 100644 frontend/utils/localUploads.ts
+
+diff --git a/README.md b/README.md
+index 75e527dc9f30d7db4e56e14a3ed3fe9160b2fe8a..ed72486b01a84c0b85e3eae8c50a37db034027cb 100644
+--- a/README.md
++++ b/README.md
+@@ -13,6 +13,7 @@ This is a pastebin running on Cloudflare workers. Try it on [shz.al](https://shz
+ 1. URL shortener.
+ 1. Smart and tweakable handling for `Content-Type` and `Content-Disposition`.
+ 1. QR code tooltip on the uploaded Display URL.
++1. Optional **recent uploads** list in the web UI. Manage URLs are stored in this browser only (max 50) and are not synced.
+ 
+ ## Usage
+ 
+diff --git a/frontend/components/RecentUploadsPanel.tsx b/frontend/components/RecentUploadsPanel.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..2129625851b9c3581bcfc1cdb0cf8d9339dc7516
+--- /dev/null
++++ b/frontend/components/RecentUploadsPanel.tsx
+@@ -0,0 +1,40 @@
++import { Card, CardBody, CardHeader } from "./ui/index.js"
++import { cardOverrides, tst } from "../utils/overrides.js"
++import { pasteLabel, type LocalUpload } from "../utils/localUploads.js"
++
++interface RecentUploadsPanelProps {
++  uploads: LocalUpload[]
++  onSelect: (manageUrl: string) => void
++  className?: string
++}
++
++export function RecentUploadsPanel({ uploads, onSelect, className = "" }: RecentUploadsPanelProps) {
++  if (uploads.length === 0) return null
++
++  return (
++    <Card className={`w-full ${className}`} classNames={cardOverrides}>
++      <CardHeader>
++        <h2 className="text-lg font-medium">Recent uploads</h2>
++      </CardHeader>
++      <CardBody className="pt-0">
++        <p className={`text-small text-default-500 mb-3 ${tst}`}>
++          Manage URLs are stored on this device only and are not synced. Anyone with this browser profile can update or
++          delete those pastes.
++        </p>
++        <ul className="flex flex-col gap-1">
++          {uploads.map((item) => (
++            <li key={item.manageUrl}>
++              <button
++                type="button"
++                className={`w-full text-left px-2 py-1.5 rounded-lg hover:bg-default-100 ${tst}`}
++                onClick={() => onSelect(item.manageUrl)}
++              >
++                {pasteLabel(item.url)}
++              </button>
++            </li>
++          ))}
++        </ul>
++      </CardBody>
++    </Card>
++  )
++}
+diff --git a/frontend/pages/PasteBin.tsx b/frontend/pages/PasteBin.tsx
+index 7c20744b66e448464efdf83af88057f11d0e1b93..02af717dbe37b5ad9353d3441f4638cdfddeaa7a 100644
+--- a/frontend/pages/PasteBin.tsx
++++ b/frontend/pages/PasteBin.tsx
+@@ -7,6 +7,7 @@ import { useErrorModal } from "../components/ErrorModal.js"
+ import type { PasteSetting } from "../components/PasteSettingPanel.js"
+ import { PanelSettingsPanel } from "../components/PasteSettingPanel.js"
+ import { UploadedPanel } from "../components/UploadedPanel.js"
++import { RecentUploadsPanel } from "../components/RecentUploadsPanel.js"
+ import type { PasteEditState } from "../components/PasteInputPanel.js"
+ import { PasteInputPanel } from "../components/PasteInputPanel.js"
+ 
+@@ -25,6 +26,7 @@ import { useNameAvailability } from "../utils/useNameAvailability.js"
+ import type { UploadProgress } from "../utils/uploader.js"
+ import { uploadPaste } from "../utils/uploader.js"
+ import { tst } from "../utils/overrides.js"
++import { loadLocalUploads, recordLocalUpload, removeLocalUpload, type LocalUpload } from "../utils/localUploads.js"
+ 
+ import "../style.css"
+ 
+@@ -48,6 +50,7 @@ export function PasteBin({ config }: { config: Env }) {
+ 
+   const [pasteResponse, setPasteResponse] = useState<PasteResponse | undefined>(undefined)
+   const [uploadedEncryptionKey, setUploadedEncryptionKey] = useState<string | undefined>(undefined)
++  const [recentUploads, setRecentUploads] = useState<LocalUpload[]>([])
+ 
+   const [isUploadPending, startUpload] = useTransition()
+   const [isDeletePending, startDelete] = useTransition()
+@@ -65,6 +68,10 @@ export function PasteBin({ config }: { config: Env }) {
+     pasteSetting.uploadKind === "custom",
+   )
+ 
++  useEffect(() => {
++    setRecentUploads(loadLocalUploads())
++  }, [])
++
+   // handle admin URL
+   useEffect(() => {
+     // SSR environment check
+@@ -145,6 +152,7 @@ export function PasteBin({ config }: { config: Env }) {
+         )
+         setPasteResponse(uploaded)
+         setPasteSetting({ ...pasteSetting, uploadKind: "manage", manageUrl: uploaded.manageUrl })
++        setRecentUploads(recordLocalUpload({ url: uploaded.url, manageUrl: uploaded.manageUrl }))
+       } catch (e) {
+         if ((e as Error).name !== "AbortError") {
+           handleError("Error on Uploading Paste", e as Error)
+@@ -166,6 +174,7 @@ export function PasteBin({ config }: { config: Env }) {
+         if (resp.ok) {
+           showModal("Deleted Successfully", "It may takes 60 seconds for the deletion to propagate to the world")
+           setPasteResponse(undefined)
++          setRecentUploads(removeLocalUpload(pasteSetting.manageUrl))
+           setPasteSetting({ ...pasteSetting, uploadKind: "short", manageUrl: "" })
+         } else {
+           await handleFailedResp("Error on Delete Paste", resp)
+@@ -315,6 +324,13 @@ export function PasteBin({ config }: { config: Env }) {
+             />
+           )}
+         </div>
++        <RecentUploadsPanel
++          className="mt-4 mx-2 lg:mx-0"
++          uploads={recentUploads}
++          onSelect={(manageUrl) => {
++            setPasteSetting({ ...pasteSetting, uploadKind: "manage", manageUrl })
++          }}
++        />
+       </div>
+       {footer}
+       <ErrorModal />
+diff --git a/frontend/test/index.spec.tsx b/frontend/test/index.spec.tsx
+index 09b0376c61c22af8d676b4a7a65758a8e8228f6e..d633529c0e1c1b22dcc164f198c0d5bbf4c6cbc9 100644
+--- a/frontend/test/index.spec.tsx
++++ b/frontend/test/index.spec.tsx
+@@ -40,6 +40,7 @@ beforeAll(() => {
+ afterEach(() => {
+   server.resetHandlers()
+   cleanup()
++  localStorage.clear()
+ })
+ 
+ afterAll(() => {
+@@ -82,6 +83,26 @@ describe("Pastebin", () => {
+ 
+     const manageUrlShow = screen.getByRole("textbox", { name: "Manage URL" })
+     expect((manageUrlShow as HTMLInputElement).value).toStrictEqual(mockedPasteUpload.manageUrl)
++
++    expect(screen.getByRole("heading", { name: "Recent uploads" })).toBeInTheDocument()
++    expect(screen.getByText(/stored on this device/i)).toBeInTheDocument()
++    const recent = screen.getByRole("button", { name: "abcd" })
++    expect(recent).toBeInTheDocument()
++    expect(recent).not.toHaveTextContent("aaaaaaaaaaaaaaaaaa")
++  })
++
++  it("restores a recent upload into the Manage URL field", async () => {
++    render(<PasteBin config={__WRANGLER_CONFIG__} />)
++    const editor = screen.getByRole("textbox", { name: "Paste editor" })
++    await userEvent.type(editor, "something")
++    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
++    await screen.findByRole("textbox", { name: "Raw URL" })
++
++    cleanup()
++    render(<PasteBin config={__WRANGLER_CONFIG__} />)
++    await userEvent.click(screen.getByRole("button", { name: "abcd" }))
++    const manageUrl = screen.getByPlaceholderText("Manage URL")
++    expect((manageUrl as HTMLInputElement).value).toStrictEqual(mockedPasteUpload.manageUrl)
+   })
+ 
+   it("renders a permanent upload expiration as Never", async () => {
+diff --git a/frontend/test/localUploads.spec.ts b/frontend/test/localUploads.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..3d127138cf5b5982499e691debc216562c9e3535
+--- /dev/null
++++ b/frontend/test/localUploads.spec.ts
+@@ -0,0 +1,42 @@
++import { afterEach, describe, expect, it } from "vitest"
++import { loadLocalUploads, pasteLabel, recordLocalUpload, removeLocalUpload } from "../utils/localUploads.js"
++
++describe("local upload history", () => {
++  afterEach(() => {
++    localStorage.clear()
++  })
++
++  it("records newest first, caps at 50, and labels by public name", () => {
++    const first = recordLocalUpload({
++      url: "https://example.com/aaaa",
++      manageUrl: "https://example.com/aaaa:secret-a",
++    })
++    expect(pasteLabel(first[0].url)).toBe("aaaa")
++    expect(first[0].manageUrl).toBe("https://example.com/aaaa:secret-a")
++
++    recordLocalUpload({
++      url: "https://example.com/bbbb",
++      manageUrl: "https://example.com/bbbb:secret-b",
++    })
++    const loaded = loadLocalUploads()
++    expect(loaded.map((e) => pasteLabel(e.url))).toEqual(["bbbb", "aaaa"])
++
++    for (let i = 0; i < 60; i++) {
++      recordLocalUpload({
++        url: `https://example.com/n${i}`,
++        manageUrl: `https://example.com/n${i}:secret`,
++      })
++    }
++    expect(loadLocalUploads()).toHaveLength(50)
++    expect(pasteLabel(loadLocalUploads()[0].url)).toBe("n59")
++  })
++
++  it("removes a manage URL from history", () => {
++    recordLocalUpload({
++      url: "https://example.com/aaaa",
++      manageUrl: "https://example.com/aaaa:secret-a",
++    })
++    removeLocalUpload("https://example.com/aaaa:secret-a")
++    expect(loadLocalUploads()).toEqual([])
++  })
++})
+diff --git a/frontend/utils/localUploads.ts b/frontend/utils/localUploads.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..4817561f2c8d1fc0ba7003d3e73249369d63becf
+--- /dev/null
++++ b/frontend/utils/localUploads.ts
+@@ -0,0 +1,62 @@
++const STORAGE_KEY = "pb.localUploads"
++const MAX_LOCAL_UPLOADS = 50
++
++export interface LocalUpload {
++  url: string
++  manageUrl: string
++}
++
++function canUseLocalStorage(): boolean {
++  return typeof window !== "undefined" && typeof window.localStorage !== "undefined"
++}
++
++export function pasteLabel(url: string): string {
++  try {
++    const path = new URL(url).pathname.replace(/^\//, "")
++    return path.split("/")[0] || url
++  } catch {
++    return url
++  }
++}
++
++export function loadLocalUploads(): LocalUpload[] {
++  if (!canUseLocalStorage()) return []
++  try {
++    const raw = localStorage.getItem(STORAGE_KEY)
++    if (!raw) return []
++    const parsed: unknown = JSON.parse(raw)
++    if (!Array.isArray(parsed)) return []
++    const entries: LocalUpload[] = []
++    for (const item of parsed) {
++      if (!item || typeof item !== "object") continue
++      const url = (item as { url?: unknown }).url
++      const manageUrl = (item as { manageUrl?: unknown }).manageUrl
++      if (typeof url !== "string" || typeof manageUrl !== "string") continue
++      if (!url || !manageUrl) continue
++      entries.push({ url, manageUrl })
++    }
++    return entries.slice(0, MAX_LOCAL_UPLOADS)
++  } catch {
++    return []
++  }
++}
++
++function saveLocalUploads(entries: LocalUpload[]): LocalUpload[] {
++  const next = entries.slice(0, MAX_LOCAL_UPLOADS)
++  if (!canUseLocalStorage()) return next
++  try {
++    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
++  } catch {
++    return next
++  }
++  return next
++}
++
++export function recordLocalUpload(entry: LocalUpload): LocalUpload[] {
++  const existing = loadLocalUploads().filter((item) => item.manageUrl !== entry.manageUrl)
++  return saveLocalUploads([entry, ...existing])
++}
++
++export function removeLocalUpload(manageUrl: string): LocalUpload[] {
++  return saveLocalUploads(loadLocalUploads().filter((item) => item.manageUrl !== manageUrl))
++}
+
+base-commit: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+prerequisite-patch-id: 6e6f1a1b3b822a7f6055757439f06a3a2956b89a
+prerequisite-patch-id: bb8280cc63d877f55dabba700c59f2d9ce0d6307
+prerequisite-patch-id: 292fa63936f41c768c09dedce9c0b951924707f3
+prerequisite-patch-id: a18edec9995be81e122eb2ca0fc03fe3bfd7712d
+prerequisite-patch-id: 7fb6594968364a928abd12177313831c752d65e2
+prerequisite-patch-id: d9b8fd398a206be4b4b283398a4697914c5c82e1
+prerequisite-patch-id: f2ebf4e613c40007615eec143b83069eeb24c791
+prerequisite-patch-id: 6ad43923c9ad3ed939663717809fa4661e96f6ab
+prerequisite-patch-id: 1c8a98c04997a1641ac1cc9df45e69f95dcaef15
+prerequisite-patch-id: c233d552de04f8104c3dfde89f89423feab89385
+prerequisite-patch-id: 6ac78d342fc593d80301fff4344bb005463223a0
+prerequisite-patch-id: 7c636f5c8826bcf7c64729128f8a057c6a97c59f
+prerequisite-patch-id: 30bb2ff317dc3ebebe8be3b176e7e24c0844a032
+prerequisite-patch-id: 25696ff912a94f7b2dad737e1cfe422a167c1a5d
+prerequisite-patch-id: 70595ee35b43fe7306ef36c5ffea4f1249b8c912
+prerequisite-patch-id: 4ba60b0e344bc823c5181af8c8a1379d50a8645b
+prerequisite-patch-id: 7af0827b075af64e354f1131aae72cbfd9a6f509
+prerequisite-patch-id: c2ce21a9f0373e1f9303860f6145f9d8b5ea088e
+prerequisite-patch-id: a128861995f39dbd676052826465b3bec1da7c3c
+-- 
+2.50.1 (Apple Git-155)
+

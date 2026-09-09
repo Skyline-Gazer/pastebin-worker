@@ -1,0 +1,70 @@
+From 2823460f23d0a6db8cca1365ad18770b8f045c8c Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 23:05:53 +0800
+Subject: [PATCH 2/2] fix(write): keep maxReads on createPaste after MIME
+ helper split
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Context:
+Replay of Patch 130 onto assembled 010–120 left POST create wiring
+wrong: cherry-pick put maxReads on storedMimeTypeForUpload (Patch 070)
+and omitted it from createPaste. PUT updatePaste was already correct.
+Source PR #115 is not rewritten.
+
+Expected behavior:
+POST create stores maxReads and readStateVersion on paste metadata.
+MIME sniff options stay filename / encryptionScheme / isMPUComplete.
+
+Acceptance criteria:
+- createPaste receives maxReads and readStateVersion
+- storedMimeTypeForUpload does not take those fields
+- r=1 POST still burns after the first content GET
+
+Constraints:
+- Replay-adaptation only. Do not merge into upstream-sync.
+
+Validation:
+- Node v22.23.2 / pnpm 10.28.0
+- 30 files / 243 tests PASS
+- lint, typecheck, Prettier, frontend build, wrangler dry-run PASS
+
+Docs:
+- N/A (wiring only)
+
+Refs:
+- Issue #84
+- Source PR #115 HEAD 7540a3cad785404463cab71a071deebad50081b7
+- Patch ID 130-max-reads-consume
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ worker/handlers/handleWrite.ts | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/worker/handlers/handleWrite.ts b/worker/handlers/handleWrite.ts
+index 6b5cb3229314e33c0282f362d4932dbf755a9767..e0632d3a9af6be010b6b935625cebe3525ceb6db 100644
+--- a/worker/handlers/handleWrite.ts
++++ b/worker/handlers/handleWrite.ts
+@@ -294,8 +294,6 @@ export async function handlePostOrPut(
+       filename: storedFilename,
+       encryptionScheme,
+       isMPUComplete,
+-      maxReads,
+-      readStateVersion,
+     })
+     try {
+       const newMetadata = await createPaste(env, pasteName, content, {
+@@ -309,6 +307,8 @@ export async function handlePostOrPut(
+         encryptionScheme,
+         mimeType,
+         isMPUComplete: isMPUComplete || namedR2Object !== undefined,
++        maxReads,
++        readStateVersion,
+       })
+ 
+       return makeResponse(
+-- 
+2.50.1 (Apple Git-155)
+

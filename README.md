@@ -13,6 +13,7 @@ This is a pastebin running on Cloudflare workers. Try it on [shz.al](https://shz
 1. URL shortener.
 1. Smart and tweakable handling for `Content-Type` and `Content-Disposition`.
 1. QR code tooltip on the uploaded Display URL.
+1. Optional **recent uploads** list in the web UI. Manage URLs are stored in this browser only (max 50) and are not synced.
 
 ## Usage
 

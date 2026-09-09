@@ -40,6 +40,7 @@ beforeAll(() => {
 afterEach(() => {
   server.resetHandlers()
   cleanup()
+  localStorage.clear()
 })
 
 afterAll(() => {
@@ -82,6 +83,26 @@ describe("Pastebin", () => {
 
     const manageUrlShow = screen.getByRole("textbox", { name: "Manage URL" })
     expect((manageUrlShow as HTMLInputElement).value).toStrictEqual(mockedPasteUpload.manageUrl)
+
+    expect(screen.getByRole("heading", { name: "Recent uploads" })).toBeInTheDocument()
+    expect(screen.getByText(/stored on this device/i)).toBeInTheDocument()
+    const recent = screen.getByRole("button", { name: "abcd" })
+    expect(recent).toBeInTheDocument()
+    expect(recent).not.toHaveTextContent("aaaaaaaaaaaaaaaaaa")
+  })
+
+  it("restores a recent upload into the Manage URL field", async () => {
+    render(<PasteBin config={__WRANGLER_CONFIG__} />)
+    const editor = screen.getByRole("textbox", { name: "Paste editor" })
+    await userEvent.type(editor, "something")
+    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
+    await screen.findByRole("textbox", { name: "Raw URL" })
+
+    cleanup()
+    render(<PasteBin config={__WRANGLER_CONFIG__} />)
+    await userEvent.click(screen.getByRole("button", { name: "abcd" }))
+    const manageUrl = screen.getByPlaceholderText("Manage URL")
+    expect((manageUrl as HTMLInputElement).value).toStrictEqual(mockedPasteUpload.manageUrl)
   })
 
   it("renders a permanent upload expiration as Never", async () => {

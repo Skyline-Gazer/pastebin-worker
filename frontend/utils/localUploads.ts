@@ -7,7 +7,11 @@ export interface LocalUpload {
 }
 
 function canUseLocalStorage(): boolean {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined"
+  try {
+    return typeof window !== "undefined" && typeof window.localStorage !== "undefined"
+  } catch {
+    return false
+  }
 }
 
 export function pasteLabel(url: string): string {

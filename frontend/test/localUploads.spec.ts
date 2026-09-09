@@ -39,4 +39,23 @@ describe("local upload history", () => {
     removeLocalUpload("https://example.com/aaaa:secret-a")
     expect(loadLocalUploads()).toEqual([])
   })
+
+  it("fails closed when accessing localStorage throws", () => {
+    const original = Object.getOwnPropertyDescriptor(window, "localStorage")
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("blocked")
+      },
+    })
+    try {
+      expect(loadLocalUploads()).toEqual([])
+      const entry = { url: "https://example.com/aaaa", manageUrl: "https://example.com/aaaa:secret-a" }
+      expect(recordLocalUpload(entry)).toEqual([entry])
+    } finally {
+      if (original) {
+        Object.defineProperty(window, "localStorage", original)
+      }
+    }
+  })
 })

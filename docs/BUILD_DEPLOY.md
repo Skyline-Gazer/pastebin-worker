@@ -211,3 +211,26 @@ Do not roll back by manually editing the generated integration tree or trying to
 ## 10. Cloudflare-specific note
 
 Keep Pastebin and Feishu Add-on deployment configuration independent. They may share environment documentation, but a failure in one deployment should not require mixing their source ownership boundaries.
+
+## 11. Tip Worker vs assembled release
+
+Three checkouts are easy to confuse. Only the assembled tree understands downstream Pastebin tokens such as `e=never` and `e=max`.
+
+1. **Official upstream / `goshujin` / `upstream-sync`**
+   Unpatched Pastebin. This Worker cannot parse `e=never` or `e=max`. Those tokens live in Patch 010 (`010-non-expiring-paste`) and exist only after the ordered series is replayed onto the pinned upstream commit.
+2. **`downstream/main` source tree**
+   Downstream control branch. It stores exported patches and the Feishu Add-on. Upstream-owned Worker source on this branch SHOULD match the pinned official-upstream baseline. Checking out `downstream/main` and deploying that tree without assembly does **not** produce a Worker that understands `e=never` / `e=max`.
+3. **Assembled release**
+   Exact pinned upstream SHA + `downstream/patches/series` replayed with `git am` (no `--3way`). That disposable tree is the product Pastebin Worker.
+
+### `deploy.yml` branch trigger
+
+The checked-in `.github/workflows/deploy.yml` still deploys **pushes to `goshujin` only**. That is the official-upstream-shaped branch, not `downstream/main` and not an assembled worktree.
+
+This is intentional until a separate owner-authorized deploy change exists:
+
+- Do not retarget deploy.yml to downstream/main as an opportunistic fix.
+- Do not treat a green `goshujin` deploy as proof that `e=never` / `e=max` (or any later patch) is live.
+- Downstream product deploys use the candidate/provenance path and an owner-controlled handoff; they are not this workflow.
+
+Issue #86 records D-REL-001 (tip vs assembled `e=never`/`e=max`) and D-CI-001 (`deploy.yml` still on `goshujin`).

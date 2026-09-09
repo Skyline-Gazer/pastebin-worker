@@ -1,0 +1,114 @@
+From 03ca08c9d6b1b9d97b89d233ba9dbb9a49af1b85 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 11:39:30 +0800
+Subject: [PATCH 2/2] fix(frontend): keep upload results when Display URL
+ exceeds QR capacity
+
+Context:
+Greptile P1 on PR #105: custom paste names have no upper bound
+(NAME_REGEX is {3,}), so generate(url) can throw during render and
+replace a successful upload result with a failed React tree.
+
+Expected behavior:
+If the Display URL cannot be encoded as a QR, omit the QR control.
+Display URL, Raw URL, and Manage URL still render.
+
+Acceptance criteria:
+- Oversized Display URL still shows the upload result panel.
+- QR button is absent when encoding fails.
+- Normal-length Display URL still shows the QR tooltip.
+
+Constraints:
+- Same source PR; do not merge into upstream-sync.
+- No new QR product surface.
+
+Validation:
+- TDD: RED test reproduced the crash (lean-qr error 4, empty document).
+- GREEN after try/catch around generate/toSvgDataURL.
+- Frontend tests: 3 files / 27 tests PASS
+- lint / typecheck / Prettier PASS
+
+Docs:
+- frontend/test/index.spec.tsx
+
+Refs:
+- Issue #73
+- PR #105
+- Greptile P1 on UploadedPanel.tsx:60
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ frontend/components/UploadedPanel.tsx | 21 ++++++++++++++++-----
+ frontend/test/index.spec.tsx          | 23 +++++++++++++++++++++++
+ 2 files changed, 39 insertions(+), 5 deletions(-)
+
+diff --git a/frontend/components/UploadedPanel.tsx b/frontend/components/UploadedPanel.tsx
+index 3d4ab4dde8c81baf2962ef7aa2697d437ad3e8ce..3dfeba905a49034779e467cd34d3a2abe0c3e9f5 100644
+--- a/frontend/components/UploadedPanel.tsx
++++ b/frontend/components/UploadedPanel.tsx
+@@ -56,12 +56,23 @@ const DISPLAY_URL_FLAGS: { syntax: string; desc: string }[] = [
+   { syntax: "/foo.txt", desc: "Append a filename — shown in the header and used as the download name" },
+ ]
+ 
++function qrImageSrc(url: string): string | null {
++  try {
++    return toSvgDataURL(generate(url), {
++      pad: 2,
++      on: "#000000",
++      off: "#ffffff",
++    })
++  } catch {
++    return null
++  }
++}
++
+ function QrTooltip({ url }: { url: string }) {
+-  const src = toSvgDataURL(generate(url), {
+-    pad: 2,
+-    on: "#000000",
+-    off: "#ffffff",
+-  })
++  const src = qrImageSrc(url)
++  if (!src) {
++    return null
++  }
+   return (
+     <Tooltip content={<img src={src} alt="" width={128} height={128} className="block bg-white rounded" />}>
+       <button
+diff --git a/frontend/test/index.spec.tsx b/frontend/test/index.spec.tsx
+index 897d277ea51c769f0010ab11ac3ff10c1c8f5803..09b0376c61c22af8d676b4a7a65758a8e8228f6e 100644
+--- a/frontend/test/index.spec.tsx
++++ b/frontend/test/index.spec.tsx
+@@ -128,6 +128,29 @@ describe("Pastebin", () => {
+     expect(screen.getByRole("textbox", { name: "Raw URL" })).toBeInTheDocument()
+   })
+ 
++  it("still shows Display URL when the paste URL is too long for a QR", async () => {
++    const longName = `~${"a".repeat(8000)}`
++    server.use(
++      http.post(`${__WRANGLER_CONFIG__.DEPLOY_URL}/`, () => {
++        return HttpResponse.json({
++          ...mockedPasteUpload,
++          url: `https://example.com/${longName}`,
++          manageUrl: `https://example.com/${longName}:aaaaaaaaaaaaaaaaaa`,
++        })
++      }),
++    )
++
++    render(<PasteBin config={__WRANGLER_CONFIG__} />)
++    const editor = screen.getByRole("textbox", { name: "Paste editor" })
++    await userEvent.type(editor, "something")
++    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
++    await new Promise((resolve) => setTimeout(resolve, 1000))
++
++    expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue(`https://example.com/d/${longName}`)
++    expect(screen.getByRole("textbox", { name: "Raw URL" })).toBeInTheDocument()
++    expect(screen.queryByRole("button", { name: "QR code" })).not.toBeInTheDocument()
++  })
++
+   it("refuse illegal settings", async () => {
+     render(<PasteBin config={__WRANGLER_CONFIG__} />)
+     // due to bugs https://github.com/adobe/react-spectrum/discussions/8037, we need to use duplicated name here
+-- 
+2.50.1 (Apple Git-155)
+

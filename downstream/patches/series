@@ -18,3 +18,5 @@
 060-mpu-query-secrets/0001-fix-mpu-keep-password-uploadId-and-key-out-of-query-.patch
 070-mime-sniff-untitled/0001-fix-mime-sniff-extensionless-binaries-and-default-em.patch
 070-mime-sniff-untitled/0002-fix-mime-keep-nonempty-filenames-when-defaulting-Unt.patch
+080-qr-url-tooltip/0001-feat-frontend-add-QR-tooltip-for-paste-Display-URL.patch
+080-qr-url-tooltip/0002-fix-frontend-keep-upload-results-when-Display-URL-ex.patch

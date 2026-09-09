@@ -294,8 +294,6 @@ export async function handlePostOrPut(
       filename: storedFilename,
       encryptionScheme,
       isMPUComplete,
-      maxReads,
-      readStateVersion,
     })
     try {
       const newMetadata = await createPaste(env, pasteName, content, {
@@ -309,6 +307,8 @@ export async function handlePostOrPut(
         encryptionScheme,
         mimeType,
         isMPUComplete: isMPUComplete || namedR2Object !== undefined,
+        maxReads,
+        readStateVersion,
       })
 
       return makeResponse(

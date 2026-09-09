@@ -1,0 +1,127 @@
+From eece31ddd67e3700dd637d08f9702b2c5738a2f4 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 16:59:06 +0800
+Subject: [PATCH 4/6] fix(frontend): always wipe OPFS after staging attempts
+
+Context:
+Source PR #111 Greptile P1 on 972bc5e2: if getFile or object-URL
+creation failed after OPFS write, the outer catch returned a Blob
+URL without cleanup, leaving plaintext in origin storage.
+
+Expected behavior:
+Any OPFS handle created for staging is wiped and removed in finally,
+including when later staging steps fail. removeEntry is retried and
+a later microtask cleanup is queued if retries exhaust.
+
+Acceptance criteria:
+- getFile failure after write still calls removeEntry.
+- Successful staging still removes the OPFS entry.
+
+Constraints:
+- OPFS staging remains the happy path; Blob fallback unchanged.
+
+Validation:
+- TDD: RED getFile rejection left OPFS file; GREEN after finally wipe.
+- frontend/test/opfs.spec.ts PASS
+- lint / Prettier PASS
+
+Refs:
+- Issue #82
+- Source PR #111
+- Greptile P1 on 972bc5e2f5946388262b10c77d2945209210bf46
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ frontend/test/opfs.spec.ts | 28 ++++++++++++++++++++++++++++
+ frontend/utils/opfs.ts     | 23 +++++++++++++++++------
+ 2 files changed, 45 insertions(+), 6 deletions(-)
+
+diff --git a/frontend/test/opfs.spec.ts b/frontend/test/opfs.spec.ts
+index 579ab2aa4f4168b8bde995a81c7019660415ffd6..1458c63a0f0da4f1163d09db595a62f20c541d97 100644
+--- a/frontend/test/opfs.spec.ts
++++ b/frontend/test/opfs.spec.ts
+@@ -75,6 +75,34 @@ describe("OPFS download staging", () => {
+     expect(writes.some((data) => data instanceof Uint8Array && data.byteLength === 0)).toBe(true)
+   })
+ 
++  it("wipes OPFS if getFile fails after plaintext was written", async () => {
++    const removed: string[] = []
++    vi.stubGlobal("navigator", {
++      storage: {
++        getDirectory: () =>
++          Promise.resolve({
++            getFileHandle: () =>
++              Promise.resolve({
++                createWritable: () =>
++                  Promise.resolve({
++                    write: () => Promise.resolve(),
++                    close: () => Promise.resolve(),
++                  }),
++                getFile: () => Promise.reject(new Error("getFile failed")),
++              }),
++            removeEntry: (name: string) => {
++              removed.push(name)
++              return Promise.resolve()
++            },
++          }),
++      },
++    })
++
++    const url = await stageDownloadBytes(new Uint8Array([1, 2, 3]), "plain.txt")
++    expect(url.startsWith("blob:")).toBe(true)
++    expect(removed).toContain("plain.txt")
++  })
++
+   it("falls back to a Blob object URL when OPFS is unavailable", async () => {
+     vi.stubGlobal("navigator", {
+       storage: {
+diff --git a/frontend/utils/opfs.ts b/frontend/utils/opfs.ts
+index f312c391d09a6a565f5454f40367bb2431bb24f3..be4a8c4aefce5fcd8fabebb8aa8cfc0f8a4384cf 100644
+--- a/frontend/utils/opfs.ts
++++ b/frontend/utils/opfs.ts
+@@ -1,17 +1,21 @@
+ export async function stageDownloadBytes(bytes: Uint8Array, filename: string): Promise<string> {
+   const blob = new Blob([bytes as BlobPart])
++  let root: FileSystemDirectoryHandle | undefined
++  let handle: FileSystemFileHandle | undefined
+   try {
+-    const root = await navigator.storage.getDirectory()
+-    const handle = await root.getFileHandle(filename, { create: true })
++    root = await navigator.storage.getDirectory()
++    handle = await root.getFileHandle(filename, { create: true })
+     const writable = await handle.createWritable()
+     await writable.write(blob)
+     await writable.close()
+     const file = await handle.getFile()
+-    const objectUrl = URL.createObjectURL(file)
+-    await wipeAndRemoveStagedFile(root, handle, filename)
+-    return objectUrl
++    return URL.createObjectURL(file)
+   } catch {
+     return URL.createObjectURL(blob)
++  } finally {
++    if (root && handle) {
++      await wipeAndRemoveStagedFile(root, handle, filename)
++    }
+   }
+ }
+ 
+@@ -35,7 +39,14 @@ async function wipeAndRemoveStagedFile(
+       await root.removeEntry(filename)
+       return
+     } catch {
+-      if (attempt === 1) return
++      if (attempt === 1) {
++        queueMicrotask(() => {
++          void navigator.storage
++            .getDirectory()
++            .then((laterRoot) => laterRoot.removeEntry(filename))
++            .catch(() => undefined)
++        })
++      }
+     }
+   }
+ }
+-- 
+2.50.1 (Apple Git-155)
+

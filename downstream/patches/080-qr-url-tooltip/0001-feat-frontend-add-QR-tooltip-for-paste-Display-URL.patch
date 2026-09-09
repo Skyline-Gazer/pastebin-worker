@@ -1,0 +1,300 @@
+From 4ded1065c13a519b699fbe6898fb350f3206b608 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 11:33:29 +0800
+Subject: [PATCH 1/2] feat(frontend): add QR tooltip for paste Display URL
+
+Context:
+Issue #73 (C QR ADOPT) requires a small self-contained QR for the
+paste URL on the official upload-result UI. The gap is in
+UploadedPanel, which is upstream-owned, so this lives on an isolated
+patch branch from the pinned upstream SHA.
+
+Expected behavior:
+After upload, Display URL shows a QR control. Hover/focus opens a
+tooltip encoding that public share URL (including #key when encrypted).
+Manage URL is not QR-encoded. Existing copy buttons and URL fields
+keep their layout.
+
+Acceptance criteria:
+- After a successful upload, a QR control is present on Display URL.
+- Hovering it reveals a QR image of the Display URL.
+- Exactly one QR control; Manage URL has none.
+- Dependency is lean-qr only.
+
+Constraints:
+- Generic upstream patch; no Feishu concepts.
+- No QR redesign, sharing platform, analytics, or navigation overhaul.
+- Do not QR the secret Manage URL.
+
+Validation:
+- TDD: RED frontend test failed looking for button "QR code"; GREEN
+  after lean-qr tooltip on Display URL.
+- Node v22.23.2 / pnpm 10.28.0
+- Frontend tests: 3 files / 26 tests PASS
+- Worker tests: 16 files / 114 tests PASS
+- lint / typecheck / Prettier PASS
+- frontend production build PASS
+
+Docs:
+- README.md features list
+- frontend/test/index.spec.tsx
+
+Upstream base:
+0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+
+Patch ID:
+080-qr-url-tooltip (export after source review)
+
+Dependencies:
+none
+
+Refs:
+- Issue #73
+- Parent #61
+- PLAN/SPEC: https://github.com/Skyline-Gazer/pastebin-worker/issues/73#issuecomment-5595324052
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ README.md                             |  1 +
+ frontend/components/UploadedPanel.tsx | 56 +++++++++++++++++++--------
+ frontend/components/icons.tsx         | 22 +++++++++++
+ frontend/test/index.spec.tsx          | 25 ++++++++++++
+ package.json                          |  1 +
+ pnpm-lock.yaml                        |  9 +++++
+ 6 files changed, 98 insertions(+), 16 deletions(-)
+
+diff --git a/README.md b/README.md
+index 78b40f019654d3b7e65f6c4e2eedfc5ff81e7cdc..b89cd45665ec552df05db4db442031183c17ea14 100644
+--- a/README.md
++++ b/README.md
+@@ -12,6 +12,7 @@ This is a pastebin running on Cloudflare workers. Try it on [shz.al](https://shz
+ 1. Share **markdown** file with rendered HTML.
+ 1. URL shortener.
+ 1. Smart and tweakable handling for `Content-Type` and `Content-Disposition`.
++1. QR code tooltip on the uploaded Display URL.
+ 
+ ## Usage
+ 
+diff --git a/frontend/components/UploadedPanel.tsx b/frontend/components/UploadedPanel.tsx
+index 3230bfcd542ebaf4238b39c231490239ae0892d4..3d4ab4dde8c81baf2962ef7aa2697d437ad3e8ce 100644
+--- a/frontend/components/UploadedPanel.tsx
++++ b/frontend/components/UploadedPanel.tsx
+@@ -1,5 +1,7 @@
+ import type React from "react"
+ import { useState } from "react"
++import { generate } from "lean-qr"
++import { toSvgDataURL } from "lean-qr/extras/svg"
+ 
+ import type { CardProps } from "./ui/index.js"
+ import {
+@@ -19,7 +21,7 @@ import { tst } from "../utils/overrides.js"
+ import type { UploadProgress } from "../utils/uploader.js"
+ import { formatSize } from "../utils/utils.js"
+ import { CopyWidget } from "./CopyWidget.js"
+-import { ChevronDownIcon, InfoIcon } from "./icons.js"
++import { ChevronDownIcon, InfoIcon, QrCodeIcon } from "./icons.js"
+ 
+ interface UploadedPanelProps extends CardProps {
+   isLoading: boolean
+@@ -54,6 +56,25 @@ const DISPLAY_URL_FLAGS: { syntax: string; desc: string }[] = [
+   { syntax: "/foo.txt", desc: "Append a filename — shown in the header and used as the download name" },
+ ]
+ 
++function QrTooltip({ url }: { url: string }) {
++  const src = toSvgDataURL(generate(url), {
++    pad: 2,
++    on: "#000000",
++    off: "#ffffff",
++  })
++  return (
++    <Tooltip content={<img src={src} alt="" width={128} height={128} className="block bg-white rounded" />}>
++      <button
++        type="button"
++        aria-label="QR code"
++        className="inline-flex items-center ml-1 text-default-400 hover:text-default-600 focus:outline-none focus-visible:ring-1 focus-visible:ring-default-400 rounded"
++      >
++        <QrCodeIcon className="size-3" />
++      </button>
++    </Tooltip>
++  )
++}
++
+ function InfoTooltip({ children }: { children: React.ReactNode }) {
+   return (
+     <Tooltip content={<div className="px-1 py-1 text-small max-w-[22rem]">{children}</div>}>
+@@ -156,21 +177,24 @@ export function UploadedPanel({
+                 {...inputProps}
+                 label={"Display URL"}
+                 labelExtra={
+-                  <UrlTooltip
+-                    desc={
+-                      <>
+-                        Browser-friendly view with syntax highlighting.
+-                        {encryptionKey && (
+-                          <>
+-                            {" "}
+-                            The decryption key sits after the <code className="font-mono">#</code> in the URL and is
+-                            never sent to the server — it stays in the browser for client-side decryption.
+-                          </>
+-                        )}
+-                      </>
+-                    }
+-                    flags={DISPLAY_URL_FLAGS}
+-                  />
++                  <>
++                    <UrlTooltip
++                      desc={
++                        <>
++                          Browser-friendly view with syntax highlighting.
++                          {encryptionKey && (
++                            <>
++                              {" "}
++                              The decryption key sits after the <code className="font-mono">#</code> in the URL and is
++                              never sent to the server — it stays in the browser for client-side decryption.
++                            </>
++                          )}
++                        </>
++                      }
++                      flags={DISPLAY_URL_FLAGS}
++                    />
++                    <QrTooltip url={makeDecryptionUrl(pasteResponse.url, encryptionKey)} />
++                  </>
+                 }
+                 color={encryptionKey ? "success" : "default"}
+                 className="mb-2"
+diff --git a/frontend/components/icons.tsx b/frontend/components/icons.tsx
+index fef889c45eb87579ed5e78b7b3103d4b071d735e..40a410f50f1b33ef8e25564fa2d1b2d3c615a4ec 100644
+--- a/frontend/components/icons.tsx
++++ b/frontend/components/icons.tsx
+@@ -116,6 +116,28 @@ export const CheckIcon = (props: HTMLAttributes<SVGElement>) => (
+   </svg>
+ )
+ 
++export const QrCodeIcon = (props: HTMLAttributes<SVGElement>) => (
++  <svg
++    xmlns="http://www.w3.org/2000/svg"
++    fill="none"
++    viewBox="0 0 24 24"
++    strokeWidth={1.5}
++    stroke="currentColor"
++    {...props}
++  >
++    <path
++      strokeLinecap="round"
++      strokeLinejoin="round"
++      d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z"
++    />
++    <path
++      strokeLinecap="round"
++      strokeLinejoin="round"
++      d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z"
++    />
++  </svg>
++)
++
+ export const InfoIcon = (props: HTMLAttributes<SVGElement>) => (
+   <svg
+     xmlns="http://www.w3.org/2000/svg"
+diff --git a/frontend/test/index.spec.tsx b/frontend/test/index.spec.tsx
+index ac9f0b752beb458c33ad045545259f592eb4f90d..897d277ea51c769f0010ab11ac3ff10c1c8f5803 100644
+--- a/frontend/test/index.spec.tsx
++++ b/frontend/test/index.spec.tsx
+@@ -103,6 +103,31 @@ describe("Pastebin", () => {
+     }
+   })
+ 
++  it("shows a QR tooltip on the Display URL after upload", async () => {
++    render(<PasteBin config={__WRANGLER_CONFIG__} />)
++
++    const editor = screen.getByRole("textbox", { name: "Paste editor" })
++    await userEvent.type(editor, "something")
++    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
++    await new Promise((resolve) => setTimeout(resolve, 1000))
++
++    const displayUrl = screen.getByRole("textbox", { name: "Display URL" })
++    expect(displayUrl).toHaveValue("https://example.com/d/abcd")
++
++    const qrButton = screen.getByRole("button", { name: "QR code" })
++    expect(qrButton).toBeInTheDocument()
++    expect(screen.getAllByRole("button", { name: "QR code" })).toHaveLength(1)
++
++    await userEvent.hover(qrButton)
++    const tooltip = await screen.findByRole("tooltip")
++    const qrImage = tooltip.querySelector("img")
++    expect(qrImage).not.toBeNull()
++    expect(qrImage?.getAttribute("src")).toMatch(/^data:image\/svg/)
++
++    expect(screen.getByRole("textbox", { name: "Manage URL" })).toBeInTheDocument()
++    expect(screen.getByRole("textbox", { name: "Raw URL" })).toBeInTheDocument()
++  })
++
+   it("refuse illegal settings", async () => {
+     render(<PasteBin config={__WRANGLER_CONFIG__} />)
+     // due to bugs https://github.com/adobe/react-spectrum/discussions/8037, we need to use duplicated name here
+diff --git a/package.json b/package.json
+index 2ed408d9bf1e875d641890a367614e61e203ecb3..b9fe70159f76c9d9b6f011df1207494f69f3f59b 100644
+--- a/package.json
++++ b/package.json
+@@ -61,6 +61,7 @@
+     "bcrypt-ts": "^8.0.1",
+     "github-slugger": "^2.0.0",
+     "highlight.js": "^11.11.1",
++    "lean-qr": "^2.7.4",
+     "marked": "^18.0.6",
+     "mime": "^4.1.0",
+     "react": "^19.2.7",
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 2b6ed4f11dc731d126c65717fe90f009ca6213ac..9b44d910d2fa0061f40b8228032f0cf84cb0d7e3 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -35,6 +35,9 @@ importers:
+       highlight.js:
+         specifier: ^11.11.1
+         version: 11.11.1
++      lean-qr:
++        specifier: ^2.7.4
++        version: 2.7.4
+       marked:
+         specifier: ^18.0.6
+         version: 18.0.6
+@@ -1634,6 +1637,10 @@ packages:
+     resolution: {integrity: sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==}
+     engines: {node: '>=6'}
+ 
++  lean-qr@2.7.4:
++    resolution: {integrity: sha512-tlMPFfqhAAZN7+j/djRSvl/2+AYT2+7RRuyq8bvcbV8gMiENiscquQ9WTfCSyeEdxsVaEB+tU7e9nFZC63BFnQ==}
++    hasBin: true
++
+   levn@0.4.1:
+     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
+     engines: {node: '>= 0.8.0'}
+@@ -3718,6 +3725,8 @@ snapshots:
+ 
+   kleur@4.1.5: {}
+ 
++  lean-qr@2.7.4: {}
++
+   levn@0.4.1:
+     dependencies:
+       prelude-ls: 1.2.1
+
+base-commit: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+prerequisite-patch-id: 6e6f1a1b3b822a7f6055757439f06a3a2956b89a
+prerequisite-patch-id: bb8280cc63d877f55dabba700c59f2d9ce0d6307
+prerequisite-patch-id: 292fa63936f41c768c09dedce9c0b951924707f3
+prerequisite-patch-id: a18edec9995be81e122eb2ca0fc03fe3bfd7712d
+prerequisite-patch-id: 7fb6594968364a928abd12177313831c752d65e2
+prerequisite-patch-id: d9b8fd398a206be4b4b283398a4697914c5c82e1
+prerequisite-patch-id: f2ebf4e613c40007615eec143b83069eeb24c791
+prerequisite-patch-id: 6ad43923c9ad3ed939663717809fa4661e96f6ab
+prerequisite-patch-id: 1c8a98c04997a1641ac1cc9df45e69f95dcaef15
+prerequisite-patch-id: c233d552de04f8104c3dfde89f89423feab89385
+prerequisite-patch-id: 6ac78d342fc593d80301fff4344bb005463223a0
+prerequisite-patch-id: 7c636f5c8826bcf7c64729128f8a057c6a97c59f
+prerequisite-patch-id: 30bb2ff317dc3ebebe8be3b176e7e24c0844a032
+prerequisite-patch-id: 25696ff912a94f7b2dad737e1cfe422a167c1a5d
+prerequisite-patch-id: 70595ee35b43fe7306ef36c5ffea4f1249b8c912
+prerequisite-patch-id: 4ba60b0e344bc823c5181af8c8a1379d50a8645b
+-- 
+2.50.1 (Apple Git-155)
+

@@ -6,6 +6,7 @@ import type { EncryptionScheme } from "./encryption.js"
 import { encodeKey, encrypt, genKey } from "./encryption.js"
 import type { UploadOptions } from "../../shared/uploadPaste.js"
 import { UploadError, uploadMPU, uploadNormal } from "../../shared/uploadPaste.js"
+import { buildZipArchive, shouldZipFiles } from "./zipArchive.js"
 
 async function genAndEncrypt(scheme: EncryptionScheme, content: string | Uint8Array) {
   const key = await genKey(scheme)
@@ -24,6 +25,47 @@ export interface UploadProgress {
   totalBytes: number
 }
 
+function selectedFiles(editorState: PasteEditState): File[] {
+  if (editorState.files.length > 0) return editorState.files
+  return editorState.file ? [editorState.file] : []
+}
+
+export async function prepareUploadContent(
+  editorState: PasteEditState,
+  doEncrypt: boolean,
+  onEncryptionKeyChange: (k: string | undefined) => void,
+): Promise<File> {
+  let file: File
+  if (editorState.editKind === "file") {
+    const files = selectedFiles(editorState)
+    if (files.length === 0) {
+      throw new ErrorWithTitle("Error on Preparing Upload", "No file selected")
+    }
+    if (shouldZipFiles(files.length, editorState.fromDirectory)) {
+      file = await buildZipArchive(files, { fromDirectory: editorState.fromDirectory })
+    } else {
+      const only = files[0]
+      if (!only) {
+        throw new ErrorWithTitle("Error on Preparing Upload", "No file selected")
+      }
+      file = only
+    }
+  } else {
+    if (editorState.editContent.length === 0) {
+      throw new ErrorWithTitle("Error on Preparing Upload", "Empty paste")
+    }
+    file = new File([editorState.editContent], editorState.editFilename || "")
+  }
+
+  if (doEncrypt) {
+    const { key, ciphertext } = await genAndEncrypt(encryptionScheme, await file.bytes())
+    onEncryptionKeyChange(key)
+    return new File([ciphertext as BlobPart], file.name)
+  }
+  onEncryptionKeyChange(undefined)
+  return file
+}
+
 export async function uploadPaste(
   pasteSetting: PasteSetting,
   editorState: PasteEditState,
@@ -32,37 +74,8 @@ export async function uploadPaste(
   onProgress?: (progress: UploadProgress | undefined) => void,
   signal?: AbortSignal,
 ): Promise<PasteResponse> {
-  async function constructContent(): Promise<File> {
-    if (editorState.editKind === "file") {
-      if (editorState.file === null) {
-        throw new ErrorWithTitle("Error on Preparing Upload", "No file selected")
-      }
-      if (pasteSetting.doEncrypt) {
-        const { key, ciphertext } = await genAndEncrypt(encryptionScheme, await editorState.file.bytes())
-        const file = new File([ciphertext as BlobPart], editorState.file.name)
-        onEncryptionKeyChange(key)
-        return file
-      } else {
-        onEncryptionKeyChange(undefined)
-        return editorState.file
-      }
-    } else {
-      if (editorState.editContent.length === 0) {
-        throw new ErrorWithTitle("Error on Preparing Upload", "Empty paste")
-      }
-      if (pasteSetting.doEncrypt) {
-        const { key, ciphertext } = await genAndEncrypt(encryptionScheme, editorState.editContent)
-        onEncryptionKeyChange(key)
-        return new File([ciphertext as BlobPart], editorState.editFilename || "")
-      } else {
-        onEncryptionKeyChange(undefined)
-        return new File([editorState.editContent], editorState.editFilename || "")
-      }
-    }
-  }
-
   const options: UploadOptions = {
-    content: await constructContent(),
+    content: await prepareUploadContent(editorState, pasteSetting.doEncrypt, onEncryptionKeyChange),
     isUpdate: pasteSetting.uploadKind === "manage",
     isPrivate: pasteSetting.uploadKind === "long",
     password: pasteSetting.password.length ? pasteSetting.password : undefined,

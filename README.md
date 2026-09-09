@@ -9,6 +9,7 @@ This is a pastebin running on Cloudflare workers. Try it on [shz.al](https://shz
 1. Share your paste with as short as 4 characters, or even customized URL.
 1. **Syntax highlighting** powered by highlight.js.
 1. Client-side encryption.
+1. Upload multiple files or a folder as one ZIP (built in the browser).
 1. Share **markdown** file with rendered HTML.
 1. URL shortener.
 1. Smart and tweakable handling for `Content-Type` and `Content-Disposition`.

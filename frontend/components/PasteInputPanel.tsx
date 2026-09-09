@@ -3,6 +3,7 @@ import { Card, CardBody, Tab, Tabs } from "./ui/index.js"
 import type { DragEvent } from "react"
 import { useRef, useState } from "react"
 import { formatSize, verifyFileSize } from "../utils/utils.js"
+import { shouldZipFiles } from "../utils/zipArchive.js"
 import { XIcon } from "./icons.js"
 import { cardOverrides, tst } from "../utils/overrides.js"
 import { CodeEditor } from "./CodeEditor.js"
@@ -15,6 +16,8 @@ export interface PasteEditState {
   editFilename?: string
   editHighlightLang?: string
   file: File | null
+  files: File[]
+  fromDirectory: boolean
 }
 
 interface PasteEditorProps extends CardProps {
@@ -34,33 +37,55 @@ export function PasteInputPanel({
   ...rest
 }: PasteEditorProps) {
   const fileInput = useRef<HTMLInputElement>(null)
+  const directoryInput = useRef<HTMLInputElement>(null)
   const [isDragged, setDragged] = useState<boolean>(false)
   const [isEditDragged, setEditDragged] = useState<boolean>(false)
 
-  function setFile(file: File | null) {
-    if (file) {
+  const selected = state.files.length > 0 ? state.files : state.file ? [state.file] : []
+  const zipping = shouldZipFiles(selected.length, state.fromDirectory)
+  const selectedBytes = selected.reduce((sum, file) => sum + file.size, 0)
+
+  function resetFileInputs() {
+    if (fileInput.current) fileInput.current.value = ""
+    if (directoryInput.current) directoryInput.current.value = ""
+  }
+
+  function setFiles(next: File[], fromDirectory: boolean) {
+    if (next.length === 0) {
+      resetFileInputs()
+      onStateChange({ ...state, editKind: "file", file: null, files: [], fromDirectory: false })
+      return
+    }
+    let total = 0
+    for (const file of next) {
       const [ok, msg] = verifyFileSize(file.size, config)
       if (!ok) {
         showModal("File too large", msg)
-        // also reset the underlying input so picking the same file again re-triggers onChange
-        if (fileInput.current) fileInput.current.value = ""
+        resetFileInputs()
         return
       }
+      total += file.size
     }
-    onStateChange({ ...state, editKind: "file", file })
+    const [archiveOk, archiveMsg] = verifyFileSize(total + 128 * next.length + 1024, config)
+    if (!archiveOk) {
+      showModal("File too large", archiveMsg)
+      resetFileInputs()
+      return
+    }
+    onStateChange({
+      ...state,
+      editKind: "file",
+      file: next[0],
+      files: next,
+      fromDirectory,
+    })
   }
 
   function onDrop(e: DragEvent) {
     e.preventDefault()
-    const items = e.dataTransfer?.items
-    if (items) {
-      for (const item of Array.from(items)) {
-        if (item.kind === "file") {
-          const file = item.getAsFile()!
-          setFile(file)
-          break
-        }
-      }
+    const dropped = e.dataTransfer?.files
+    if (dropped?.length) {
+      setFiles(Array.from(dropped), false)
     }
     setDragged(false)
     setEditDragged(false)
@@ -73,10 +98,26 @@ export function PasteInputPanel({
           type="file"
           ref={fileInput}
           className="hidden"
+          multiple
+          aria-label="Select files"
           onChange={(e) => {
             const files = e.target.files
             if (files?.length) {
-              setFile(files[0])
+              setFiles(Array.from(files), false)
+            }
+          }}
+        />
+        <input
+          type="file"
+          ref={directoryInput}
+          className="hidden"
+          aria-label="Select folder"
+          // @ts-expect-error webkitdirectory is a non-standard directory picker attribute
+          webkitdirectory=""
+          onChange={(e) => {
+            const files = e.target.files
+            if (files?.length) {
+              setFiles(Array.from(files), true)
             }
           }}
         />
@@ -155,23 +196,45 @@ export function PasteInputPanel({
               onClick={() => fileInput.current?.click()}
             >
               <div className="text-2xl my-2 font-bold px-4 text-center break-all">
-                {state.file !== null ? state.file.name : "Select File"}
+                {selected.length === 0 ? "Select File" : zipping ? `${selected.length} files` : selected[0]?.name}
               </div>
               <p className={`text-1xl text-foreground-500 ${tst} relative`}>
                 <span>
-                  {state.file !== null
-                    ? `${formatSize(state.file.size)} · Click or drag to replace`
-                    : "Click or drag & drop file here"}
+                  {selected.length === 0
+                    ? "Click or drag & drop file here"
+                    : `${formatSize(selectedBytes)}${zipping ? " · ZIP" : ""} · Click or drag to replace`}
                 </span>
               </p>
-              {state.file && (
+              <div className={`mt-3 flex gap-3 text-sm text-primary ${tst}`}>
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    fileInput.current?.click()
+                  }}
+                >
+                  Select files
+                </button>
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    directoryInput.current?.click()
+                  }}
+                >
+                  Select folder
+                </button>
+              </div>
+              {selected.length > 0 && (
                 <XIcon
                   aria-label="Remove file"
                   role="button"
                   className={`h-6 inline absolute top-2 right-2 text-red-400 ${tst}`}
                   onClick={(e) => {
                     e.stopPropagation()
-                    setFile(null)
+                    setFiles([], false)
                   }}
                 />
               )}

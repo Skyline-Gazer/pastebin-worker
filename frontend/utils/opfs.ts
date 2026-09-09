@@ -2,19 +2,21 @@ export async function stageDownloadBytes(bytes: Uint8Array, filename: string): P
   const blob = new Blob([bytes as BlobPart])
   let root: FileSystemDirectoryHandle | undefined
   let handle: FileSystemFileHandle | undefined
+  let stagingName: string | undefined
   try {
     root = await navigator.storage.getDirectory()
-    handle = await root.getFileHandle(filename, { create: true })
+    stagingName = `pb-dl-${crypto.randomUUID()}`
+    handle = await root.getFileHandle(stagingName, { create: true })
     const writable = await handle.createWritable()
     await writable.write(blob)
     await writable.close()
     const file = await handle.getFile()
-    return URL.createObjectURL(file)
+    return URL.createObjectURL(new File([file], filename))
   } catch {
     return URL.createObjectURL(blob)
   } finally {
-    if (root && handle) {
-      await wipeAndRemoveStagedFile(root, handle, filename)
+    if (root && handle && stagingName) {
+      await wipeAndRemoveStagedFile(root, handle, stagingName)
     }
   }
 }

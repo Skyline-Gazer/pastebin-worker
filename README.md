@@ -12,6 +12,7 @@ This is a pastebin running on Cloudflare workers. Try it on [shz.al](https://shz
 1. Share **markdown** file with rendered HTML.
 1. URL shortener.
 1. Smart and tweakable handling for `Content-Type` and `Content-Disposition`.
+1. QR code tooltip on the uploaded Display URL.
 
 ## Usage
 

@@ -1,5 +1,7 @@
 import type React from "react"
 import { useState } from "react"
+import { generate } from "lean-qr"
+import { toSvgDataURL } from "lean-qr/extras/svg"
 
 import type { CardProps } from "./ui/index.js"
 import {
@@ -19,7 +21,7 @@ import { tst } from "../utils/overrides.js"
 import type { UploadProgress } from "../utils/uploader.js"
 import { formatSize } from "../utils/utils.js"
 import { CopyWidget } from "./CopyWidget.js"
-import { ChevronDownIcon, InfoIcon } from "./icons.js"
+import { ChevronDownIcon, InfoIcon, QrCodeIcon } from "./icons.js"
 
 interface UploadedPanelProps extends CardProps {
   isLoading: boolean
@@ -53,6 +55,25 @@ const DISPLAY_URL_FLAGS: { syntax: string; desc: string }[] = [
   { syntax: "?lang=js", desc: "Override syntax highlighting language" },
   { syntax: "/foo.txt", desc: "Append a filename — shown in the header and used as the download name" },
 ]
+
+function QrTooltip({ url }: { url: string }) {
+  const src = toSvgDataURL(generate(url), {
+    pad: 2,
+    on: "#000000",
+    off: "#ffffff",
+  })
+  return (
+    <Tooltip content={<img src={src} alt="" width={128} height={128} className="block bg-white rounded" />}>
+      <button
+        type="button"
+        aria-label="QR code"
+        className="inline-flex items-center ml-1 text-default-400 hover:text-default-600 focus:outline-none focus-visible:ring-1 focus-visible:ring-default-400 rounded"
+      >
+        <QrCodeIcon className="size-3" />
+      </button>
+    </Tooltip>
+  )
+}
 
 function InfoTooltip({ children }: { children: React.ReactNode }) {
   return (
@@ -156,21 +177,24 @@ export function UploadedPanel({
                 {...inputProps}
                 label={"Display URL"}
                 labelExtra={
-                  <UrlTooltip
-                    desc={
-                      <>
-                        Browser-friendly view with syntax highlighting.
-                        {encryptionKey && (
-                          <>
-                            {" "}
-                            The decryption key sits after the <code className="font-mono">#</code> in the URL and is
-                            never sent to the server — it stays in the browser for client-side decryption.
-                          </>
-                        )}
-                      </>
-                    }
-                    flags={DISPLAY_URL_FLAGS}
-                  />
+                  <>
+                    <UrlTooltip
+                      desc={
+                        <>
+                          Browser-friendly view with syntax highlighting.
+                          {encryptionKey && (
+                            <>
+                              {" "}
+                              The decryption key sits after the <code className="font-mono">#</code> in the URL and is
+                              never sent to the server — it stays in the browser for client-side decryption.
+                            </>
+                          )}
+                        </>
+                      }
+                      flags={DISPLAY_URL_FLAGS}
+                    />
+                    <QrTooltip url={makeDecryptionUrl(pasteResponse.url, encryptionKey)} />
+                  </>
                 }
                 color={encryptionKey ? "success" : "default"}
                 className="mb-2"

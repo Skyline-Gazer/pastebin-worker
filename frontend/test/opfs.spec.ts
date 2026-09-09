@@ -75,6 +75,34 @@ describe("OPFS download staging", () => {
     expect(writes.some((data) => data instanceof Uint8Array && data.byteLength === 0)).toBe(true)
   })
 
+  it("wipes OPFS if getFile fails after plaintext was written", async () => {
+    const removed: string[] = []
+    vi.stubGlobal("navigator", {
+      storage: {
+        getDirectory: () =>
+          Promise.resolve({
+            getFileHandle: () =>
+              Promise.resolve({
+                createWritable: () =>
+                  Promise.resolve({
+                    write: () => Promise.resolve(),
+                    close: () => Promise.resolve(),
+                  }),
+                getFile: () => Promise.reject(new Error("getFile failed")),
+              }),
+            removeEntry: (name: string) => {
+              removed.push(name)
+              return Promise.resolve()
+            },
+          }),
+      },
+    })
+
+    const url = await stageDownloadBytes(new Uint8Array([1, 2, 3]), "plain.txt")
+    expect(url.startsWith("blob:")).toBe(true)
+    expect(removed).toContain("plain.txt")
+  })
+
   it("falls back to a Blob object URL when OPFS is unavailable", async () => {
     vi.stubGlobal("navigator", {
       storage: {

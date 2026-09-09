@@ -46,6 +46,7 @@ Manual conflict resolution was required in:
 #81 semantics were not changed. Source PR #109 HEAD remains `9317899...`.
 
 1. `bc623333873216f7847ef423f33f300bb3795659` → `0001-feat-frontend-persist-local-Manage-URL-history.patch`
+2. `03ed80a1fc7892e1930d3f0a0fec5631f94fd635` → `0002-fix-frontend-fail-closed-if-localStorage-access-thro.patch`
 
 Generation command:
 
@@ -98,6 +99,9 @@ Robustness:
 - Unavailable, quota-limited, malformed, or unexpected localStorage
   values fail closed (empty history / skip persist). Core upload, read,
   update, and delete continue to work.
+- Accessing `window.localStorage` in a restricted browser context is
+  caught by `canUseLocalStorage` (Promotion PR #110 Greptile P1;
+  exported `0002`). Source PR #109 was not rewritten.
 
 Residual (documented, not claimed fixed):
 

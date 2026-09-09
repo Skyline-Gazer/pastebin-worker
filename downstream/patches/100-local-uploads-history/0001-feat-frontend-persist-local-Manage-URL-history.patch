@@ -1,7 +1,7 @@
 From bc623333873216f7847ef423f33f300bb3795659 Mon Sep 17 00:00:00 2001
 From: Ian <219239532+markd3ng@users.noreply.github.com>
 Date: Wed, 9 Sep 2026 15:04:17 +0800
-Subject: [PATCH] feat(frontend): persist local Manage URL history
+Subject: [PATCH 1/2] feat(frontend): persist local Manage URL history
 
 Context:
 Issue #81 (C Local uploads sidebar ADOPT_WITH_REDESIGN) requires

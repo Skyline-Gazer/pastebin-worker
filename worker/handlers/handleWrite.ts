@@ -17,7 +17,7 @@ import {
 } from "../../shared/constants.js"
 import { storedMimeTypeForUpload } from "../mime.js"
 import { parsePath, parseSize, parseExpiration, parseExpirationSpec } from "../../shared/parsers.js"
-import { verifyName, verifyPassword } from "../../shared/verify.js"
+import { parseMaxReads, verifyName, verifyPassword } from "../../shared/verify.js"
 import type { PasteResponse } from "../../shared/interfaces.js"
 import { MaxFileSizeExceededError, MultipartParseError, parseMultipartRequest } from "@mjackson/multipart-parser"
 import {
@@ -120,6 +120,7 @@ export async function handlePostOrPut(
   const isPrivate = parts.has("p")
   const passwdFromForm = parts.get("s")?.contentAsString()
   const expireFromForm: string | undefined = parts.get("e")?.contentAsString()
+  const maxReadsFromForm: string | undefined = parts.get("r")?.contentAsString()
   const encryptionScheme: string | undefined = parts.get("encryption-scheme")?.contentAsString()
   const highlightLanguage = parts.get("lang")?.contentAsString()
   const expire = expireFromForm ? expireFromForm : env.DEFAULT_EXPIRATION
@@ -148,6 +149,12 @@ export async function handlePostOrPut(
       throw new WorkerError(500, "completed multipart upload has invalid expiration metadata")
     return expirationUnix
   }
+
+  const maxReads = parseMaxReads(maxReadsFromForm)
+  if (maxReads === null) {
+    throw new WorkerError(400, `‘${maxReadsFromForm}’ is not a valid max-reads specification`)
+  }
+  const readStateVersion = maxReads === undefined ? undefined : genRandStr(16)
 
   // check if password is legal
   if (passwdFromForm) {
@@ -233,6 +240,8 @@ export async function handlePostOrPut(
       encryptionScheme,
       mimeType,
       isMPUComplete,
+      maxReads,
+      readStateVersion,
     })
     return makeResponse(
       {
@@ -285,6 +294,8 @@ export async function handlePostOrPut(
       filename: storedFilename,
       encryptionScheme,
       isMPUComplete,
+      maxReads,
+      readStateVersion,
     })
     try {
       const newMetadata = await createPaste(env, pasteName, content, {

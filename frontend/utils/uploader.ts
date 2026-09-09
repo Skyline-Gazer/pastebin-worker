@@ -81,6 +81,7 @@ export async function uploadPaste(
     isPrivate: pasteSetting.uploadKind === "long",
     password: pasteSetting.password.length ? pasteSetting.password : undefined,
     expire: pasteSetting.expiration,
+    maxReads: pasteSetting.maxReads.trim() ? pasteSetting.maxReads.trim() : undefined,
     name: pasteSetting.uploadKind === "custom" ? pasteSetting.name : undefined,
     highlightLanguage: editorState.editKind === "edit" ? editorState.editHighlightLang : undefined,
     encryptionScheme: pasteSetting.doEncrypt ? encryptionScheme : undefined,

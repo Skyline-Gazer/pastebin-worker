@@ -35,6 +35,7 @@ is the only way to authenticate as the owner.
 - `-Fn=<name>` — custom name (≥3 chars, returned prefixed with `~`).
 - `-Fe=<expire>` — expiration: integer/float with unit `s`/`m`/`h`/`d`
   (default seconds). E.g. `-Fe=30m`, `-Fe=14d`.
+- `-Fr=<n>` — max content reads (1–1000). Omit for unlimited.
 - `-Fs=<password>` — set a specific management password.
 - `-Flang=<lang>` — mark for syntax highlighting on the display page.
 - `-Fp=1` — private mode: 24-char unguessable random name.
@@ -60,6 +61,7 @@ curl -X DELETE                   <manageUrl>
 ```
 
 `PUT` accepts the same fields as upload; `e` recalculates expiration from now.
+Omitting `r` clears max-reads (unlimited).
 
 ## Other URL forms
 

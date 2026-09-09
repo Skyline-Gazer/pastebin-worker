@@ -79,3 +79,12 @@ R2_MAX_ALLOWED = "256M"
 
 # The following mimetypes will be converted to text/plain
 DISALLOWED_MIME_FOR_PASTE = ["text/html", "audio/x-mpegurl"]
+
+# Serializes max-reads consume-before-response (unused for unlimited pastes)
+[[durable_objects.bindings]]
+name = "PASTE_READ_COUNTER"
+class_name = "PasteReadCounter"
+
+[[migrations]]
+tag = "v1-paste-read-counter"
+new_sqlite_classes = ["PasteReadCounter"]

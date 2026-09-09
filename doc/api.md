@@ -156,6 +156,8 @@ Upload your paste. It accept parameters in form-data:
 
 - `n`: optional. The customized **name** of your paste. If not specified, the worker will generate a random string (4 characters by default) as the name. You need to prefix the name with `~` when fetching the paste of customized name. The name is at least 3 characters long, consisting of alphabet, digits and characters in `+_-[]*$=@,;/`. Direct custom-name uploads are stored in R2 so the name can be claimed atomically; concurrent requests for the same available name produce one success and `409` conflicts for the other requests.
 
+- `r`: optional. Maximum number of **content reads** (positive integer, at most 1000). Each raw, `/a/` article, or `/u/` redirect GET consumes one read before the body is returned. HEAD, `/m/` metadata, and `/d/` display HTML do not consume. After the last allowed read the paste is deleted; later content GETs return `404`. Concurrent content GETs are serialized by a per-paste Durable Object. Omit for unlimited reads. Read-limited responses use `Cache-Control: no-store`. A losing concurrent request may load bytes into the isolate before the counter rejects it; those bytes are not returned.
+
 - `p`: optional. The flag of **private mode**. If specified to any value, the name of the paste is as long as 24 characters. No effect if `n` is used.
 
 - `encryption-scheme`: optional. The encryption scheme used in the uploaded paste. It will be returned as `X-PB-Encryption-Scheme` header on fetching paste. Note that this is not the encryption scheme that the backend will perform.
@@ -197,7 +199,7 @@ If error occurs, the worker returns status code different from `200`:
 
 ## **PUT** `/<name>:<passwd>`
 
-Update your paste of the name `<name>` and password `<passwd>`. It accepts all the same form-data fields as `POST` (`c`, `e`, `s`, `lang`, `encryption-scheme`) **except** `n` (the name cannot be changed; supplying it returns `400`) and `p` (silently ignored). When `e` is supplied, the expiration is recalculated from the update time.
+Update your paste of the name `<name>` and password `<passwd>`. It accepts all the same form-data fields as `POST` (`c`, `e`, `s`, `r`, `lang`, `encryption-scheme`) **except** `n` (the name cannot be changed; supplying it returns `400`) and `p` (silently ignored). When `e` is supplied, the expiration is recalculated from the update time. When `r` is omitted, max-reads is cleared (unlimited).
 
 The returning of `PUT` method is the same as `POST` method.
 

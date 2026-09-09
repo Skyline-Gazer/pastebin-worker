@@ -18,6 +18,8 @@ export default {
   },
 } satisfies ExportedHandler<Env>
 
+export { PasteReadCounter } from "./readCounter.js"
+
 async function handleRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   try {
     if (request.method === "OPTIONS") {

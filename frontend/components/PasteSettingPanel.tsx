@@ -1,7 +1,7 @@
 import type { CardProps } from "./ui/index.js"
 import { Card, CardBody, CardHeader, Divider, Input, Switch, Tooltip } from "./ui/index.js"
 import { verifyExpiration, verifyManageUrl } from "../utils/utils.js"
-import { verifyName, verifyPassword } from "../../shared/verify.js"
+import { verifyMaxReads, verifyName, verifyPassword } from "../../shared/verify.js"
 import type { NameAvailability } from "../utils/useNameAvailability.js"
 import React from "react"
 import { CheckIcon, InfoIcon, QuestionMarkCircleIcon, SpinnerIcon, XIcon } from "./icons.js"
@@ -16,6 +16,7 @@ export interface PasteSetting {
   password: string
   name: string
   manageUrl: string
+  maxReads: string
 
   doEncrypt: boolean
 }
@@ -131,6 +132,19 @@ export function PanelSettingsPanel({
             isInvalid={!verifyExpiration(setting.expiration, config)[0]}
             errorMessage={verifyExpiration(setting.expiration, config)[1]}
             description={verifyExpiration(setting.expiration, config)[1]}
+          />
+          <Input
+            type="text"
+            label="Max reads"
+            classNames={{
+              base: "basis-32",
+              ...inputOverrides,
+            }}
+            value={setting.maxReads}
+            onValueChange={(r) => onSettingChange({ ...setting, maxReads: r })}
+            isInvalid={!verifyMaxReads(setting.maxReads)[0]}
+            errorMessage={verifyMaxReads(setting.maxReads)[1]}
+            description={verifyMaxReads(setting.maxReads)[1]}
           />
           <Input
             type="password"

@@ -22,6 +22,8 @@ export interface PasteMetadata {
   highlightLanguage?: string
   encryptionScheme?: string
   mimeType?: string
+  maxReads?: number
+  readStateVersion?: string
 }
 
 interface PasteMetadataInStorage {
@@ -39,6 +41,8 @@ interface PasteMetadataInStorage {
   highlightLanguage?: string
   encryptionScheme?: string
   mimeType?: string
+  maxReads?: number
+  readStateVersion?: string
 }
 
 export function metaResponseFromMetadata(metadata: PasteMetadata): MetaResponse {
@@ -71,6 +75,8 @@ export function migratePasteMetadata(original: PasteMetadataInStorage): PasteMet
     highlightLanguage: original.highlightLanguage,
     encryptionScheme: original.encryptionScheme,
     mimeType: original.mimeType,
+    maxReads: original.maxReads,
+    readStateVersion: original.readStateVersion,
   }
 }
 
@@ -175,6 +181,8 @@ interface WriteOptions {
   encryptionScheme?: string
   mimeType?: string
   isMPUComplete: boolean
+  maxReads?: number
+  readStateVersion?: string
 }
 
 export async function updatePaste(
@@ -221,6 +229,8 @@ export async function updatePaste(
     accessCounter: originalMetadata.accessCounter,
     sizeBytes: options.contentLength,
     encryptionScheme: options.encryptionScheme,
+    maxReads: options.maxReads,
+    readStateVersion: options.readStateVersion,
   }
 
   await env.PB.put(
@@ -271,6 +281,8 @@ export async function createPaste(
     accessCounter: 0,
     sizeBytes: options.contentLength,
     encryptionScheme: options.encryptionScheme,
+    maxReads: options.maxReads,
+    readStateVersion: options.readStateVersion,
   }
 
   await env.PB.put(

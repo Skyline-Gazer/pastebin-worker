@@ -1,6 +1,6 @@
 import { expect, test, it, describe, beforeEach, afterEach } from "vitest"
 import { areBlobsEqual, BASE_URL, genRandomBlob, upload, uploadExpectStatus, workerFetch } from "./testUtils.js"
-import { encodeBasicAuth, decodeBasicAuth } from "../pages/auth.js"
+import { encodeBasicAuth, decodeBasicAuth, hashBasicAuthPassword } from "../pages/auth.js"
 import { createExecutionContext, env } from "cloudflare:test"
 import { hashSync } from "bcrypt-ts"
 
@@ -100,5 +100,24 @@ describe("basic auth", () => {
     )
     expect(deleteResp.status).toStrictEqual(200)
     expect((await workerFetch(ctx, uploadResp1.url)).status).toStrictEqual(404)
+  })
+
+  it("accepts Argon2id BASIC_AUTH hashes", async () => {
+    const password = "passwd1"
+    const hash = hashBasicAuthPassword(password)
+    expect(hash.startsWith("$argon2id$")).toBe(true)
+    env.BASIC_AUTH = { user1: hash }
+
+    const ok = await workerFetch(
+      ctx,
+      new Request(BASE_URL, { headers: { Authorization: encodeBasicAuth("user1", password) } }),
+    )
+    expect(ok.status).toBe(200)
+
+    const wrong = await workerFetch(
+      ctx,
+      new Request(BASE_URL, { headers: { Authorization: encodeBasicAuth("user1", "wrong-password") } }),
+    )
+    expect(wrong.status).toBe(401)
   })
 })

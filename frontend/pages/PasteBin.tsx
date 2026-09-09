@@ -7,6 +7,7 @@ import { useErrorModal } from "../components/ErrorModal.js"
 import type { PasteSetting } from "../components/PasteSettingPanel.js"
 import { PanelSettingsPanel } from "../components/PasteSettingPanel.js"
 import { UploadedPanel } from "../components/UploadedPanel.js"
+import { RecentUploadsPanel } from "../components/RecentUploadsPanel.js"
 import type { PasteEditState } from "../components/PasteInputPanel.js"
 import { PasteInputPanel } from "../components/PasteInputPanel.js"
 
@@ -20,6 +21,7 @@ import { useNameAvailability } from "../utils/useNameAvailability.js"
 import type { UploadProgress } from "../utils/uploader.js"
 import { uploadPaste } from "../utils/uploader.js"
 import { tst } from "../utils/overrides.js"
+import { loadLocalUploads, recordLocalUpload, removeLocalUpload, type LocalUpload } from "../utils/localUploads.js"
 
 import "../style.css"
 
@@ -42,6 +44,7 @@ export function PasteBin({ config }: { config: Env }) {
 
   const [pasteResponse, setPasteResponse] = useState<PasteResponse | undefined>(undefined)
   const [uploadedEncryptionKey, setUploadedEncryptionKey] = useState<string | undefined>(undefined)
+  const [recentUploads, setRecentUploads] = useState<LocalUpload[]>([])
 
   const [isUploadPending, startUpload] = useTransition()
   const [isDeletePending, startDelete] = useTransition()
@@ -58,6 +61,10 @@ export function PasteBin({ config }: { config: Env }) {
     config.DEPLOY_URL,
     pasteSetting.uploadKind === "custom",
   )
+
+  useEffect(() => {
+    setRecentUploads(loadLocalUploads())
+  }, [])
 
   // handle admin URL
   useEffect(() => {
@@ -139,6 +146,7 @@ export function PasteBin({ config }: { config: Env }) {
         )
         setPasteResponse(uploaded)
         setPasteSetting({ ...pasteSetting, uploadKind: "manage", manageUrl: uploaded.manageUrl })
+        setRecentUploads(recordLocalUpload({ url: uploaded.url, manageUrl: uploaded.manageUrl }))
       } catch (e) {
         if ((e as Error).name !== "AbortError") {
           handleError("Error on Uploading Paste", e as Error)
@@ -160,6 +168,7 @@ export function PasteBin({ config }: { config: Env }) {
         if (resp.ok) {
           showModal("Deleted Successfully", "It may takes 60 seconds for the deletion to propagate to the world")
           setPasteResponse(undefined)
+          setRecentUploads(removeLocalUpload(pasteSetting.manageUrl))
           setPasteSetting({ ...pasteSetting, uploadKind: "short", manageUrl: "" })
         } else {
           await handleFailedResp("Error on Delete Paste", resp)
@@ -309,6 +318,13 @@ export function PasteBin({ config }: { config: Env }) {
             />
           )}
         </div>
+        <RecentUploadsPanel
+          className="mt-4 mx-2 lg:mx-0"
+          uploads={recentUploads}
+          onSelect={(manageUrl) => {
+            setPasteSetting({ ...pasteSetting, uploadKind: "manage", manageUrl })
+          }}
+        />
       </div>
       {footer}
       <ErrorModal />

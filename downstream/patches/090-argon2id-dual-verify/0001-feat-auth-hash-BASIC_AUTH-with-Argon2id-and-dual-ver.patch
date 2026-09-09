@@ -1,0 +1,482 @@
+From e9cac024659f6102d2297b0ff881a0b438a6748a Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 14:28:33 +0800
+Subject: [PATCH] feat(auth): hash BASIC_AUTH with Argon2id and dual-verify
+ bcrypt
+
+Context:
+Issue #85 (C Argon2id ADOPT_WITH_REDESIGN) requires Worker HTTP
+basic-auth hashes to use Argon2id while existing bcrypt BASIC_AUTH
+hashes keep verifying. BASIC_AUTH lives in upstream-owned Worker
+code, so this is an isolated patch from the pinned upstream SHA.
+
+Expected behavior:
+Newly generated BASIC_AUTH hashes are Argon2id (OWASP m=19456,
+t=2, p=1). Existing $2a$/$2b$/$2y$ bcrypt hashes still verify.
+Unknown prefixes fail closed. Paste management passwords in
+shared/verify.ts are unchanged.
+
+Acceptance criteria:
+- New hashes start with $argon2id$.
+- Existing bcrypt BASIC_AUTH tests still pass.
+- Argon2id BASIC_AUTH hashes accept the correct password and reject
+  a wrong password.
+- Worker-safe implementation: @noble/hashes, not hash-wasm
+  (workerd disallows Wasm code generation).
+- Do not take a fork lockfile wholesale.
+
+Constraints:
+- Generic upstream patch; no Feishu concepts.
+- No account system, password-reset, IdP, or credential vault.
+- bcrypt-ts remains for bcrypt verify during migration.
+
+Validation:
+- TDD: RED hashBasicAuthPassword is not a function; GREEN after
+  Argon2id hasher + dual-verify.
+- Node v22.23.2 / pnpm 10.28.0
+- Tests: 21 files / 157 tests PASS
+- lint / typecheck / Prettier PASS
+- frontend production build PASS
+- wrangler deploy --dry-run PASS
+
+Docs:
+- README.md Auth section
+- scripts/argon2id.js
+
+Upstream base:
+0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+
+Patch ID:
+090-argon2id-dual-verify (export after source review)
+
+Dependencies:
+none
+
+Refs:
+- Issue #85
+- Parent #61
+- PLAN/SPEC: https://github.com/Skyline-Gazer/pastebin-worker/issues/85#issuecomment-5596926546
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+(cherry picked from commit 7185565205eb31a33fca9277b660f0b503f11579)
+---
+ README.md                     |  2 +-
+ package.json                  |  1 +
+ pnpm-lock.yaml                | 47 ++++++++++++--------
+ scripts/argon2id.js           | 50 ++++++++++++++++++++++
+ worker/pages/auth.ts          | 80 ++++++++++++++++++++++++++++++++++-
+ worker/test/basicAuth.spec.ts | 21 ++++++++-
+ 6 files changed, 180 insertions(+), 21 deletions(-)
+ create mode 100755 scripts/argon2id.js
+
+diff --git a/README.md b/README.md
+index b89cd45665ec552df05db4db442031183c17ea14..75e527dc9f30d7db4e56e14a3ed3fe9160b2fe8a 100644
+--- a/README.md
++++ b/README.md
+@@ -89,7 +89,7 @@ user1 = "$2b$08$i/yH1TSIGWUNQVsxPrcVUeR0hsGioFNf3.OeHdYzxwjzLH/hzoY.i"
+ user2 = "$2b$08$KeVnmXoMuRjNHKQjDHppEeXAf5lTLv9HMJCTlKW5uvRcEG5LOdBpO"
+ ```
+ 
+-Passwords here are hashed by bcrypt2 algorithm. You can generate the hashed password by running `./scripts/bcrypt.js`.
++New hashes are Argon2id. Generate them with `./scripts/argon2id.js`. Existing bcrypt hashes (`$2a$` / `$2b$` / `$2y$`) still verify during migration; the example values above are bcrypt hashes that continue to work.
+ 
+ Now every access to POST request, and every access to static pages, requires an HTTP basic auth with the user-password pair listed above. For example:
+ 
+diff --git a/package.json b/package.json
+index b9fe70159f76c9d9b6f011df1207494f69f3f59b..afa9b3a9385f6aa0ebfa2c8c7dd2b220b3e23120 100644
+--- a/package.json
++++ b/package.json
+@@ -54,6 +54,7 @@
+   },
+   "dependencies": {
+     "@mjackson/multipart-parser": "^0.10.1",
++    "@noble/hashes": "^2.4.0",
+     "@tailwindcss/vite": "^4.3.2",
+     "@types/bcrypt": "^6.0.0",
+     "@types/react": "^19.2.17",
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 9b44d910d2fa0061f40b8228032f0cf84cb0d7e3..41bd3e751c22a7ea22281d20895a3a6643212cc7 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -14,6 +14,9 @@ importers:
+       '@mjackson/multipart-parser':
+         specifier: ^0.10.1
+         version: 0.10.1
++      '@noble/hashes':
++        specifier: ^2.4.0
++        version: 2.4.0
+       '@tailwindcss/vite':
+         specifier: ^4.3.2
+         version: 4.3.2(vite@8.1.4(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0))
+@@ -92,7 +95,7 @@ importers:
+         version: 10.7.0(jiti@2.7.0)
+       jsdom:
+         specifier: ^29.1.1
+-        version: 29.1.1
++        version: 29.1.1(@noble/hashes@2.4.0)
+       msw:
+         specifier: ^2.15.0
+         version: 2.15.0(@types/node@25.9.3)(typescript@6.0.3)
+@@ -113,7 +116,7 @@ importers:
+         version: 8.1.4(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0)
+       vitest:
+         specifier: 4.1.10
+-        version: 4.1.10(@types/node@25.9.3)(@vitest/coverage-istanbul@4.1.10)(jsdom@29.1.1)(msw@2.15.0(@types/node@25.9.3)(typescript@6.0.3))(vite@8.1.4(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0))
++        version: 4.1.10(@types/node@25.9.3)(@vitest/coverage-istanbul@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@25.9.3)(typescript@6.0.3))(vite@8.1.4(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0))
+       wrangler:
+         specifier: ^4.111.0
+         version: 4.111.0
+@@ -795,6 +798,10 @@ packages:
+       '@emnapi/core': ^1.7.1
+       '@emnapi/runtime': ^1.7.1
+ 
++  '@noble/hashes@2.4.0':
++    resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
++    engines: {node: '>= 20.19.0'}
++
+   '@open-draft/deferred-promise@2.2.0':
+     resolution: {integrity: sha512-CecwLWx3rhxVQF6V4bAgPS5t+So2sTbPgAzafKkVizyi7tlwpcFpdFqq+wqF2OwNBmqFuu6tOyouTuxgpMfzmA==}
+ 
+@@ -2488,7 +2495,7 @@ snapshots:
+       cjs-module-lexer: 1.2.3
+       esbuild: 0.28.1
+       miniflare: 4.20260710.0
+-      vitest: 4.1.10(@types/node@25.9.3)(@vitest/coverage-istanbul@4.1.10)(jsdom@29.1.1)(msw@2.15.0(@types/node@25.9.3)(typescript@6.0.3))(vite@8.1.4(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0))
++      vitest: 4.1.10(@types/node@25.9.3)(@vitest/coverage-istanbul@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@25.9.3)(typescript@6.0.3))(vite@8.1.4(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0))
+       wrangler: 4.111.0
+       zod: 3.25.76
+     transitivePeerDependencies:
+@@ -2703,7 +2710,9 @@ snapshots:
+       '@eslint/core': 1.2.1
+       levn: 0.4.1
+ 
+-  '@exodus/bytes@1.15.0': {}
++  '@exodus/bytes@1.15.0(@noble/hashes@2.4.0)':
++    optionalDependencies:
++      '@noble/hashes': 2.4.0
+ 
+   '@humanfs/core@0.19.2':
+     dependencies:
+@@ -2892,6 +2901,8 @@ snapshots:
+       '@tybys/wasm-util': 0.10.3
+     optional: true
+ 
++  '@noble/hashes@2.4.0': {}
++
+   '@open-draft/deferred-promise@2.2.0': {}
+ 
+   '@open-draft/deferred-promise@3.0.0': {}
+@@ -3226,7 +3237,7 @@ snapshots:
+       magicast: 0.5.3
+       obug: 2.1.3
+       tinyrainbow: 3.1.0
+-      vitest: 4.1.10(@types/node@25.9.3)(@vitest/coverage-istanbul@4.1.10)(jsdom@29.1.1)(msw@2.15.0(@types/node@25.9.3)(typescript@6.0.3))(vite@8.1.4(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0))
++      vitest: 4.1.10(@types/node@25.9.3)(@vitest/coverage-istanbul@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@25.9.3)(typescript@6.0.3))(vite@8.1.4(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0))
+     transitivePeerDependencies:
+       - supports-color
+ 
+@@ -3380,10 +3391,10 @@ snapshots:
+       whatwg-mimetype: 4.0.0
+       whatwg-url: 14.2.0
+ 
+-  data-urls@7.0.0:
++  data-urls@7.0.0(@noble/hashes@2.4.0):
+     dependencies:
+       whatwg-mimetype: 5.0.0
+-      whatwg-url: 16.0.1
++      whatwg-url: 16.0.1(@noble/hashes@2.4.0)
+     transitivePeerDependencies:
+       - '@noble/hashes'
+ 
+@@ -3591,9 +3602,9 @@ snapshots:
+     dependencies:
+       whatwg-encoding: 3.1.1
+ 
+-  html-encoding-sniffer@6.0.0:
++  html-encoding-sniffer@6.0.0(@noble/hashes@2.4.0):
+     dependencies:
+-      '@exodus/bytes': 1.15.0
++      '@exodus/bytes': 1.15.0(@noble/hashes@2.4.0)
+     transitivePeerDependencies:
+       - '@noble/hashes'
+ 
+@@ -3683,17 +3694,17 @@ snapshots:
+       - supports-color
+       - utf-8-validate
+ 
+-  jsdom@29.1.1:
++  jsdom@29.1.1(@noble/hashes@2.4.0):
+     dependencies:
+       '@asamuzakjp/css-color': 5.1.11
+       '@asamuzakjp/dom-selector': 7.1.1
+       '@bramus/specificity': 2.4.2
+       '@csstools/css-syntax-patches-for-csstree': 1.1.3(css-tree@3.2.1)
+-      '@exodus/bytes': 1.15.0
++      '@exodus/bytes': 1.15.0(@noble/hashes@2.4.0)
+       css-tree: 3.2.1
+-      data-urls: 7.0.0
++      data-urls: 7.0.0(@noble/hashes@2.4.0)
+       decimal.js: 10.6.0
+-      html-encoding-sniffer: 6.0.0
++      html-encoding-sniffer: 6.0.0(@noble/hashes@2.4.0)
+       is-potential-custom-element-name: 1.0.1
+       lru-cache: 11.3.6
+       parse5: 8.0.1
+@@ -3704,7 +3715,7 @@ snapshots:
+       w3c-xmlserializer: 5.0.0
+       webidl-conversions: 8.0.1
+       whatwg-mimetype: 5.0.0
+-      whatwg-url: 16.0.1
++      whatwg-url: 16.0.1(@noble/hashes@2.4.0)
+       xml-name-validator: 5.0.0
+     transitivePeerDependencies:
+       - '@noble/hashes'
+@@ -4181,7 +4192,7 @@ snapshots:
+       fsevents: 2.3.3
+       jiti: 2.7.0
+ 
+-  vitest@4.1.10(@types/node@25.9.3)(@vitest/coverage-istanbul@4.1.10)(jsdom@29.1.1)(msw@2.15.0(@types/node@25.9.3)(typescript@6.0.3))(vite@8.1.4(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0)):
++  vitest@4.1.10(@types/node@25.9.3)(@vitest/coverage-istanbul@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@25.9.3)(typescript@6.0.3))(vite@8.1.4(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0)):
+     dependencies:
+       '@vitest/expect': 4.1.10
+       '@vitest/mocker': 4.1.10(msw@2.15.0(@types/node@25.9.3)(typescript@6.0.3))(vite@8.1.4(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0))
+@@ -4206,7 +4217,7 @@ snapshots:
+     optionalDependencies:
+       '@types/node': 25.9.3
+       '@vitest/coverage-istanbul': 4.1.10(vitest@4.1.10)
+-      jsdom: 29.1.1
++      jsdom: 29.1.1(@noble/hashes@2.4.0)
+     transitivePeerDependencies:
+       - msw
+ 
+@@ -4231,9 +4242,9 @@ snapshots:
+       tr46: 5.1.1
+       webidl-conversions: 7.0.0
+ 
+-  whatwg-url@16.0.1:
++  whatwg-url@16.0.1(@noble/hashes@2.4.0):
+     dependencies:
+-      '@exodus/bytes': 1.15.0
++      '@exodus/bytes': 1.15.0(@noble/hashes@2.4.0)
+       tr46: 6.0.0
+       webidl-conversions: 8.0.1
+     transitivePeerDependencies:
+diff --git a/scripts/argon2id.js b/scripts/argon2id.js
+new file mode 100755
+index 0000000000000000000000000000000000000000..8cc290e2e13a2a801eaa86f84de416a94601fa72
+--- /dev/null
++++ b/scripts/argon2id.js
+@@ -0,0 +1,50 @@
++#!/usr/bin/env node
++
++import { argon2id } from "@noble/hashes/argon2.js"
++import readline from "readline"
++
++const ARGON2ID_T = 2
++const ARGON2ID_M = 19456
++const ARGON2ID_P = 1
++const ARGON2ID_DK_LEN = 32
++const ARGON2ID_MAXMEM = 64 * 1024 * 1024
++
++function b64nopad(bytes) {
++  let bin = ""
++  for (const b of bytes) bin += String.fromCharCode(b)
++  return btoa(bin).replace(/=+$/, "")
++}
++
++function hashBasicAuthPassword(password) {
++  const salt = crypto.getRandomValues(new Uint8Array(16))
++  const hash = argon2id(password, salt, {
++    t: ARGON2ID_T,
++    m: ARGON2ID_M,
++    p: ARGON2ID_P,
++    dkLen: ARGON2ID_DK_LEN,
++    maxmem: ARGON2ID_MAXMEM,
++  })
++  return `$argon2id$v=19$m=${ARGON2ID_M},t=${ARGON2ID_T},p=${ARGON2ID_P}$${b64nopad(salt)}$${b64nopad(hash)}`
++}
++
++function main() {
++  const rl = readline.createInterface({
++    input: process.stdin,
++    output: null,
++    terminal: true,
++  })
++
++  process.stderr.write("Enter password: ")
++  rl.question("", (password) => {
++    rl.close()
++    try {
++      const hash = hashBasicAuthPassword(password)
++      process.stdout.write("\n" + hash + "\n")
++    } catch (err) {
++      console.error(`Error: ${err.message}`)
++      process.exit(1)
++    }
++  })
++}
++
++main()
+diff --git a/worker/pages/auth.ts b/worker/pages/auth.ts
+index 0cac8905d9a77f90348b0e428b6dfcea38fc9002..24f8fe2730c9932e756abd5e3a76ec8cc50d9e2a 100644
+--- a/worker/pages/auth.ts
++++ b/worker/pages/auth.ts
+@@ -1,5 +1,6 @@
+ import { atob_utf8, btoa_utf8, WorkerError } from "../common.js"
+ import { compareSync } from "bcrypt-ts"
++import { argon2id } from "@noble/hashes/argon2.js"
+ 
+ // Encoding function
+ export function encodeBasicAuth(username: string, password: string): string {
+@@ -21,6 +22,82 @@ export function decodeBasicAuth(encodedString: string): {
+   return { username, password }
+ }
+ 
++// OWASP Argon2id recommendations (m in KiB). p=1 keeps Worker CPU bounded.
++const ARGON2ID_T = 2
++const ARGON2ID_M = 19456
++const ARGON2ID_P = 1
++const ARGON2ID_DK_LEN = 32
++const ARGON2ID_MAXMEM = 64 * 1024 * 1024
++
++function b64nopad(bytes: Uint8Array): string {
++  let bin = ""
++  for (const b of bytes) bin += String.fromCharCode(b)
++  return btoa(bin).replace(/=+$/, "")
++}
++
++function b64nopadDecode(s: string): Uint8Array {
++  const pad = "=".repeat((4 - (s.length % 4)) % 4)
++  const bin = atob(s + pad)
++  return Uint8Array.from(bin, (c) => c.charCodeAt(0))
++}
++
++function encodeArgon2idPhc(salt: Uint8Array, hash: Uint8Array): string {
++  return `$argon2id$v=19$m=${ARGON2ID_M},t=${ARGON2ID_T},p=${ARGON2ID_P}$${b64nopad(salt)}$${b64nopad(hash)}`
++}
++
++function decodeArgon2idPhc(
++  stored: string,
++): { m: number; t: number; p: number; salt: Uint8Array; hash: Uint8Array } | null {
++  const match = /^\$argon2id\$v=19\$m=(\d+),t=(\d+),p=(\d+)\$([A-Za-z0-9+/]+)\$([A-Za-z0-9+/]+)$/.exec(stored)
++  if (!match) return null
++  const m = Number(match[1])
++  const t = Number(match[2])
++  const p = Number(match[3])
++  if (!Number.isSafeInteger(m) || !Number.isSafeInteger(t) || !Number.isSafeInteger(p)) return null
++  if (m < 8 || m > ARGON2ID_MAXMEM / 1024 || t < 1 || t > 8 || p !== 1) return null
++  try {
++    return { m, t, p, salt: b64nopadDecode(match[4]), hash: b64nopadDecode(match[5]) }
++  } catch {
++    return null
++  }
++}
++
++export function hashBasicAuthPassword(password: string): string {
++  const salt = crypto.getRandomValues(new Uint8Array(16))
++  const hash = argon2id(password, salt, {
++    t: ARGON2ID_T,
++    m: ARGON2ID_M,
++    p: ARGON2ID_P,
++    dkLen: ARGON2ID_DK_LEN,
++    maxmem: ARGON2ID_MAXMEM,
++  })
++  return encodeArgon2idPhc(salt, hash)
++}
++
++export function verifyBasicAuthPassword(password: string, stored: string): boolean {
++  if (stored.startsWith("$argon2id$")) {
++    const parsed = decodeArgon2idPhc(stored)
++    if (!parsed) return false
++    try {
++      const hash = argon2id(password, parsed.salt, {
++        t: parsed.t,
++        m: parsed.m,
++        p: parsed.p,
++        dkLen: parsed.hash.length,
++        maxmem: ARGON2ID_MAXMEM,
++      })
++      if (hash.length !== parsed.hash.length) return false
++      return crypto.subtle.timingSafeEqual(hash, parsed.hash)
++    } catch {
++      return false
++    }
++  }
++  if (stored.startsWith("$2a$") || stored.startsWith("$2b$") || stored.startsWith("$2y$")) {
++    return compareSync(password, stored)
++  }
++  return false
++}
++
+ // return null if auth passes or is not required,
+ // return auth page if auth is required
+ // throw WorkerError if auth failed
+@@ -37,7 +114,8 @@ export function verifyAuth(request: Request, env: Env): Response | null {
+ 
+   if (request.headers.has("Authorization")) {
+     const { username, password } = decodeBasicAuth(request.headers.get("Authorization")!)
+-    if (!passwdMap.has(username) || !compareSync(password, passwdMap.get(username)!)) {
++    const stored = passwdMap.get(username)
++    if (!stored || !verifyBasicAuthPassword(password, stored)) {
+       throw new WorkerError(401, "incorrect passwd for basic auth")
+     } else {
+       return null
+diff --git a/worker/test/basicAuth.spec.ts b/worker/test/basicAuth.spec.ts
+index a1a3971d4e8ae06f15bac50579b6866cb4af94dd..0aa6e056b69d356e3d4c2e006993150249947e95 100644
+--- a/worker/test/basicAuth.spec.ts
++++ b/worker/test/basicAuth.spec.ts
+@@ -1,6 +1,6 @@
+ import { expect, test, it, describe, beforeEach, afterEach } from "vitest"
+ import { areBlobsEqual, BASE_URL, genRandomBlob, upload, uploadExpectStatus, workerFetch } from "./testUtils.js"
+-import { encodeBasicAuth, decodeBasicAuth } from "../pages/auth.js"
++import { encodeBasicAuth, decodeBasicAuth, hashBasicAuthPassword } from "../pages/auth.js"
+ import { createExecutionContext, env } from "cloudflare:test"
+ import { hashSync } from "bcrypt-ts"
+ 
+@@ -101,4 +101,23 @@ describe("basic auth", () => {
+     expect(deleteResp.status).toStrictEqual(200)
+     expect((await workerFetch(ctx, uploadResp1.url)).status).toStrictEqual(404)
+   })
++
++  it("accepts Argon2id BASIC_AUTH hashes", async () => {
++    const password = "passwd1"
++    const hash = hashBasicAuthPassword(password)
++    expect(hash.startsWith("$argon2id$")).toBe(true)
++    env.BASIC_AUTH = { user1: hash }
++
++    const ok = await workerFetch(
++      ctx,
++      new Request(BASE_URL, { headers: { Authorization: encodeBasicAuth("user1", password) } }),
++    )
++    expect(ok.status).toBe(200)
++
++    const wrong = await workerFetch(
++      ctx,
++      new Request(BASE_URL, { headers: { Authorization: encodeBasicAuth("user1", "wrong-password") } }),
++    )
++    expect(wrong.status).toBe(401)
++  })
+ })
+
+base-commit: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+prerequisite-patch-id: 6e6f1a1b3b822a7f6055757439f06a3a2956b89a
+prerequisite-patch-id: bb8280cc63d877f55dabba700c59f2d9ce0d6307
+prerequisite-patch-id: 292fa63936f41c768c09dedce9c0b951924707f3
+prerequisite-patch-id: a18edec9995be81e122eb2ca0fc03fe3bfd7712d
+prerequisite-patch-id: 7fb6594968364a928abd12177313831c752d65e2
+prerequisite-patch-id: d9b8fd398a206be4b4b283398a4697914c5c82e1
+prerequisite-patch-id: f2ebf4e613c40007615eec143b83069eeb24c791
+prerequisite-patch-id: 6ad43923c9ad3ed939663717809fa4661e96f6ab
+prerequisite-patch-id: 1c8a98c04997a1641ac1cc9df45e69f95dcaef15
+prerequisite-patch-id: c233d552de04f8104c3dfde89f89423feab89385
+prerequisite-patch-id: 6ac78d342fc593d80301fff4344bb005463223a0
+prerequisite-patch-id: 7c636f5c8826bcf7c64729128f8a057c6a97c59f
+prerequisite-patch-id: 30bb2ff317dc3ebebe8be3b176e7e24c0844a032
+prerequisite-patch-id: 25696ff912a94f7b2dad737e1cfe422a167c1a5d
+prerequisite-patch-id: 70595ee35b43fe7306ef36c5ffea4f1249b8c912
+prerequisite-patch-id: 4ba60b0e344bc823c5181af8c8a1379d50a8645b
+prerequisite-patch-id: 7af0827b075af64e354f1131aae72cbfd9a6f509
+prerequisite-patch-id: c2ce21a9f0373e1f9303860f6145f9d8b5ea088e
+-- 
+2.50.1 (Apple Git-155)
+

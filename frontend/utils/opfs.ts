@@ -1,17 +1,21 @@
 export async function stageDownloadBytes(bytes: Uint8Array, filename: string): Promise<string> {
   const blob = new Blob([bytes as BlobPart])
+  let root: FileSystemDirectoryHandle | undefined
+  let handle: FileSystemFileHandle | undefined
   try {
-    const root = await navigator.storage.getDirectory()
-    const handle = await root.getFileHandle(filename, { create: true })
+    root = await navigator.storage.getDirectory()
+    handle = await root.getFileHandle(filename, { create: true })
     const writable = await handle.createWritable()
     await writable.write(blob)
     await writable.close()
     const file = await handle.getFile()
-    const objectUrl = URL.createObjectURL(file)
-    await wipeAndRemoveStagedFile(root, handle, filename)
-    return objectUrl
+    return URL.createObjectURL(file)
   } catch {
     return URL.createObjectURL(blob)
+  } finally {
+    if (root && handle) {
+      await wipeAndRemoveStagedFile(root, handle, filename)
+    }
   }
 }
 
@@ -35,7 +39,14 @@ async function wipeAndRemoveStagedFile(
       await root.removeEntry(filename)
       return
     } catch {
-      if (attempt === 1) return
+      if (attempt === 1) {
+        queueMicrotask(() => {
+          void navigator.storage
+            .getDirectory()
+            .then((laterRoot) => laterRoot.removeEntry(filename))
+            .catch(() => undefined)
+        })
+      }
     }
   }
 }

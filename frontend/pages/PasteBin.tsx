@@ -15,7 +15,7 @@ import { parsePath, parseFilenameFromContentDisposition } from "../../shared/par
 import { PASSWD_SEP, MAX_URL_REDIRECT_LEN, MAX_AUTO_FETCH_BYTES } from "../../shared/constants.js"
 
 import { verifyExpiration, verifyManageUrl, getMaxExpirationReadable } from "../utils/utils.js"
-import { verifyName, verifyPassword, isLegalUrl } from "../../shared/verify.js"
+import { verifyMaxReads, verifyName, verifyPassword, isLegalUrl } from "../../shared/verify.js"
 import { useNameAvailability } from "../utils/useNameAvailability.js"
 import type { UploadProgress } from "../utils/uploader.js"
 import { uploadPaste } from "../utils/uploader.js"
@@ -38,6 +38,7 @@ export function PasteBin({ config }: { config: Env }) {
     password: "",
     uploadKind: "short",
     doEncrypt: false,
+    maxReads: "",
   })
 
   const [pasteResponse, setPasteResponse] = useState<PasteResponse | undefined>(undefined)
@@ -178,6 +179,10 @@ export function PasteBin({ config }: { config: Env }) {
     }
 
     if (!verifyPassword(pasteSetting.password)[0]) {
+      return false
+    }
+
+    if (!verifyMaxReads(pasteSetting.maxReads)[0]) {
       return false
     }
 

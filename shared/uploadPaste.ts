@@ -26,6 +26,7 @@ export interface UploadOptions {
   highlightLanguage?: string
   encryptionScheme?: EncryptionScheme
   expire?: string
+  maxReads?: string
   manageUrl?: string
 }
 
@@ -132,6 +133,7 @@ export async function uploadNormal(
     highlightLanguage,
     encryptionScheme,
     expire,
+    maxReads,
     manageUrl,
   }: UploadOptions,
   progressCallback?: (doneBytes: number, allBytes: number) => void,
@@ -147,6 +149,7 @@ export async function uploadNormal(
   }
 
   if (expire !== undefined) fd.set("e", expire)
+  if (maxReads !== undefined && maxReads !== "") fd.set("r", maxReads)
   if (password !== undefined) fd.set("s", password)
   if (!isUpdate && name !== undefined) fd.set("n", name)
   if (encryptionScheme !== undefined) fd.set("encryption-scheme", encryptionScheme)
@@ -181,6 +184,7 @@ export async function uploadMPU(
     highlightLanguage,
     encryptionScheme,
     expire,
+    maxReads,
     manageUrl,
   }: UploadOptions,
   progressCallback?: (doneBytes: number, allBytes: number) => void,
@@ -291,6 +295,9 @@ export async function uploadMPU(
     completeFormData.set("c", new File([JSON.stringify(uploadedParts)], content.name))
     if (expire !== undefined) {
       completeFormData.set("e", expire)
+    }
+    if (maxReads !== undefined && maxReads !== "") {
+      completeFormData.set("r", maxReads)
     }
     if (password !== undefined) {
       completeFormData.set("s", password)

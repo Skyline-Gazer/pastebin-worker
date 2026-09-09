@@ -88,6 +88,11 @@ describe("Pastebin", () => {
     expect(expire).toBeValid()
     await userEvent.type(expire, "xxx")
     expect(expire).toBeInvalid()
+
+    const maxReads = screen.getByRole("textbox", { name: "Max reads" })
+    expect(maxReads).toBeValid()
+    await userEvent.type(maxReads, "0")
+    expect(maxReads).toBeInvalid()
   })
 })
 

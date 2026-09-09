@@ -49,6 +49,10 @@ export async function renderDisplayPage(
     return null
   }
 
+  if (metadata.maxReads !== undefined) {
+    return null
+  }
+
   // Skip SSR for large files (>1MB) to avoid memory/CPU overhead
   if (metadata.sizeBytes > MAX_SSR_FILE_SIZE) {
     return null

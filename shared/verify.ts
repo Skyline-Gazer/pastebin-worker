@@ -1,4 +1,4 @@
-import { MAX_PASSWD_LEN, MIN_PASSWD_LEN, NAME_REGEX } from "./constants.js"
+import { MAX_PASSWD_LEN, MAX_READS_CAP, MIN_PASSWD_LEN, NAME_REGEX } from "./constants.js"
 import { parseExpiration, parseExpirationReadable } from "./parsers.js"
 
 export type VerifyResult = [ok: true, message: string] | [ok: false, error: string]
@@ -38,4 +38,25 @@ export function verifyExpiration(expiration: string, maxExpirationSeconds: numbe
     return [false, `Exceed max expiration (${parseExpirationReadable(`${maxExpirationSeconds}s`)!})`]
   }
   return [true, `Expires in ${parseExpirationReadable(expiration)!}`]
+}
+
+export function parseMaxReads(raw: string | undefined): number | undefined | null {
+  if (raw === undefined) return undefined
+  const trimmed = raw.trim()
+  if (trimmed === "") return undefined
+  if (!/^[1-9]\d*$/.test(trimmed)) return null
+  const n = Number(trimmed)
+  if (!Number.isInteger(n) || n < 1 || n > MAX_READS_CAP) return null
+  return n
+}
+
+export function verifyMaxReads(raw: string): VerifyResult {
+  const parsed = parseMaxReads(raw)
+  if (parsed === null) {
+    return [false, `Max reads must be an integer from 1 to ${MAX_READS_CAP}`]
+  }
+  if (parsed === undefined) {
+    return [true, "Unlimited reads"]
+  }
+  return [true, `${parsed} read${parsed === 1 ? "" : "s"}`]
 }

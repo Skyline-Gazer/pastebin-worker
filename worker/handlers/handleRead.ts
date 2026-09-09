@@ -5,7 +5,8 @@ import { verifyAuth } from "../pages/auth.js"
 import mime from "mime"
 import { makeMarkdown } from "../pages/markdown.js"
 import type { PasteMetadata, PasteWithMetadata } from "../storage/storage.js"
-import { getPaste, getPasteMetadata, metaResponseFromMetadata } from "../storage/storage.js"
+import { deletePaste, getPaste, getPasteMetadata, metaResponseFromMetadata } from "../storage/storage.js"
+import { consumePasteRead } from "../readCounter.js"
 import { parsePath } from "../../shared/parsers.js"
 import { MAX_URL_REDIRECT_LEN } from "../../shared/constants.js"
 import manifest from "../../dist/frontend/.vite/ssr-manifest.json"
@@ -35,9 +36,16 @@ function staticPageCacheHeader(env: Env): Headers {
   return age ? { "Cache-Control": `public, max-age=${age}` } : {}
 }
 
-function pasteCacheHeader(env: Env): Headers {
+function pasteCacheHeader(env: Env, noStore = false): Headers {
+  if (noStore) return { "Cache-Control": "no-store" }
   const age = env.CACHE_PASTE_AGE
   return age ? { "Cache-Control": `public, max-age=${age}` } : {}
+}
+
+function isContentConsume(role: string | undefined, isHead: boolean): boolean {
+  if (isHead) return false
+  if (role === "m" || role === "d") return false
+  return true
 }
 
 function lastModifiedHeader(metadata: PasteMetadata): Headers {
@@ -203,6 +211,22 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
     throw new WorkerError(404, `paste of name '${name}' not found`)
   }
 
+  const maxReads = item.metadata.maxReads
+  const noStore = maxReads !== undefined
+  if (maxReads !== undefined && isContentConsume(role, isHead)) {
+    const version = item.metadata.readStateVersion
+    if (!version) {
+      throw new WorkerError(500, `paste of name '${name}' is missing read state`)
+    }
+    const consumed = await consumePasteRead(env, name, version, maxReads)
+    if (consumed === "exhausted") {
+      throw new WorkerError(404, `paste of name '${name}' not found`)
+    }
+    if (consumed === "last") {
+      ctx.waitUntil(deletePaste(env, name, item.metadata))
+    }
+  }
+
   const disallowedMimes = env.DISALLOWED_MIME_FOR_PASTE as readonly string[]
   const sanitize = (m: string) => (disallowedMimes.includes(m) ? "text/plain;charset=UTF-8" : m)
 
@@ -219,10 +243,10 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
 
   const decryptedContentType = item.metadata.encryptionScheme ? sanitize(realMime) : null
 
-  // check `if-modified-since`
+  // check `if-modified-since` (skipped for read-limited pastes)
   const pasteLastModifiedUnix = item.metadata.lastModifiedAtUnix
   const headerModifiedSince = request.headers.get("If-Modified-Since")
-  if (headerModifiedSince) {
+  if (!noStore && headerModifiedSince) {
     const headerModifiedSinceUnix = Date.parse(headerModifiedSince) / 1000
     if (pasteLastModifiedUnix <= headerModifiedSinceUnix) {
       return new Response(null, {
@@ -256,7 +280,7 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
     return new Response(shouldGetPasteContent ? makeMarkdown(await decodeMaybeStream(item.paste)) : null, {
       headers: {
         "Content-Type": `text/html;charset=UTF-8`,
-        ...pasteCacheHeader(env),
+        ...pasteCacheHeader(env, noStore),
         ...lastModifiedHeader(item.metadata),
       },
     })
@@ -268,7 +292,7 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
     return new Response(isHead ? null : JSON.stringify(returnedMetadata, null, 2), {
       headers: {
         "Content-Type": `application/json;charset=UTF-8`,
-        ...pasteCacheHeader(env),
+        ...pasteCacheHeader(env, noStore),
         ...lastModifiedHeader(item.metadata),
       },
     })
@@ -283,7 +307,7 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
         return new Response(isHead ? null : page, {
           headers: {
             "Content-Type": `text/html;charset=UTF-8`,
-            ...pasteCacheHeader(env),
+            ...pasteCacheHeader(env, noStore),
             ...lastModifiedHeader(item.metadata),
           },
         })
@@ -303,7 +327,7 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
     return new Response(isHead ? null : page, {
       headers: {
         "Content-Type": `text/html;charset=UTF-8`,
-        ...pasteCacheHeader(env),
+        ...pasteCacheHeader(env, noStore),
         ...lastModifiedHeader(item.metadata),
       },
     })
@@ -312,7 +336,7 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
   // handle default
   const headers: Headers = {
     "Content-Type": `${inferred_mime}`,
-    ...pasteCacheHeader(env),
+    ...pasteCacheHeader(env, noStore),
     ...lastModifiedHeader(item.metadata),
   }
   const exposeHeaders = ["Content-Disposition"]

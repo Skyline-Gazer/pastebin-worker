@@ -9,7 +9,7 @@ import {
 } from "../storage/storage.js"
 import { DEFAULT_PASSWD_LEN, PASTE_NAME_LEN, PRIVATE_PASTE_NAME_LEN, PASSWD_SEP } from "../../shared/constants.js"
 import { parsePath, parseSize, parseExpiration } from "../../shared/parsers.js"
-import { verifyName, verifyPassword } from "../../shared/verify.js"
+import { parseMaxReads, verifyName, verifyPassword } from "../../shared/verify.js"
 import type { PasteResponse } from "../../shared/interfaces.js"
 import { MaxFileSizeExceededError, MultipartParseError, parseMultipartRequest } from "@mjackson/multipart-parser"
 import {
@@ -112,6 +112,7 @@ export async function handlePostOrPut(
   const isPrivate = parts.has("p")
   const passwdFromForm = parts.get("s")?.contentAsString()
   const expireFromForm: string | undefined = parts.get("e")?.contentAsString()
+  const maxReadsFromForm: string | undefined = parts.get("r")?.contentAsString()
   const encryptionScheme: string | undefined = parts.get("encryption-scheme")?.contentAsString()
   const highlightLanguage = parts.get("lang")?.contentAsString()
   const expire = expireFromForm ? expireFromForm : env.DEFAULT_EXPIRATION
@@ -127,6 +128,12 @@ export async function handlePostOrPut(
   if (expirationSeconds > maxExpiration) {
     expirationSeconds = maxExpiration
   }
+
+  const maxReads = parseMaxReads(maxReadsFromForm)
+  if (maxReads === null) {
+    throw new WorkerError(400, `‘${maxReadsFromForm}’ is not a valid max-reads specification`)
+  }
+  const readStateVersion = maxReads === undefined ? undefined : genRandStr(16)
 
   // check if password is legal
   if (passwdFromForm) {
@@ -198,6 +205,8 @@ export async function handlePostOrPut(
       highlightLanguage,
       encryptionScheme,
       isMPUComplete,
+      maxReads,
+      readStateVersion,
     })
     return makeResponse(
       {
@@ -237,6 +246,8 @@ export async function handlePostOrPut(
       contentLength: r2Object?.size || contentLength,
       encryptionScheme,
       isMPUComplete,
+      maxReads,
+      readStateVersion,
     })
 
     return makeResponse(

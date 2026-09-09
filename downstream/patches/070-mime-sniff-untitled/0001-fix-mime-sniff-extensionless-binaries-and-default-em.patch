@@ -1,0 +1,542 @@
+From 47a07d4f1ea5c6961e9807682c54fec4df287b01 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 09:06:11 +0800
+Subject: [PATCH 1/2] fix(mime): sniff extensionless binaries and default empty
+ filenames to Untitled
+
+Store a sniffed mimeType for extensionless PNG/JPEG/GIF/WEBP/PDF/ZIP uploads and serve it after ?mime=/ext/filename, while keeping DISALLOWED_MIME sanitization. Empty upload names become Untitled so official clients no longer send a blank Content-Disposition filename.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ doc/api.md                         |  9 ++++----
+ frontend/components/CodeEditor.tsx |  3 ++-
+ frontend/pages/PasteBin.tsx        | 10 +++++++--
+ frontend/test/index.spec.tsx       |  3 +++
+ frontend/utils/uploader.ts         |  5 +++--
+ shared/constants.ts                |  6 +++++
+ shared/interfaces.ts               |  1 +
+ shared/mimeSniff.ts                | 33 ++++++++++++++++++++++++++++
+ shared/test/mimeSniff.spec.ts      | 22 +++++++++++++++++++
+ worker/handlers/handleRead.ts      |  1 +
+ worker/handlers/handleWrite.ts     | 27 ++++++++++++++++++++---
+ worker/mime.ts                     | 26 ++++++++++++++++++++++
+ worker/storage/storage.ts          |  7 ++++++
+ worker/test/basic.spec.ts          |  2 +-
+ worker/test/controlHeaders.spec.ts | 35 ++++++++++++++++++++++++++++--
+ worker/test/head.spec.ts           |  2 +-
+ worker/test/roles.spec.ts          |  2 +-
+ 17 files changed, 177 insertions(+), 17 deletions(-)
+ create mode 100644 shared/mimeSniff.ts
+ create mode 100644 shared/test/mimeSniff.spec.ts
+ create mode 100644 worker/mime.ts
+
+diff --git a/doc/api.md b/doc/api.md
+index 919c7352caf8b56477b6ab0ff5320342f8035d62..8afa26b9ad9ad430deb8dfed83fd9212e779ecca 100644
+--- a/doc/api.md
++++ b/doc/api.md
+@@ -8,9 +8,9 @@ Return the index page.
+ 
+ Fetch the paste with name `<name>`. By default, it will return the raw content of the paste.
+ 
+-The `Content-Type` header is set to the mime type inferred from the filename of the paste, or `text/plain;charset=UTF-8` if no filename is present. If `<ext>` is given, the worker will infer mime-type from `<ext>` and change `Content-Type`. If the paste is uploaded with a filename, the worker will infer mime-type from the filename. This method accepts the following query string parameters:
++The `Content-Type` header is set from, in order: the `?mime=` query, the URL `<ext>`, the stored filename, a sniffed `mimeType` stored at upload time for extensionless binaries, or `text/plain;charset=UTF-8`. If the paste is uploaded with a filename, the worker infers mime-type from that filename before falling back to the stored sniff. This method accepts the following query string parameters:
+ 
+-The `Content-Disposition` header is set to `inline` by default. But can be overriden by `?a` query string. If the paste is uploaded with filename, or `<filename>` is set in given request URL, `Content-Disposition` is appended with `filename*` indicating the filename. If the paste is encrypted, the filename is appended with `.encrypted` suffix.
++The `Content-Disposition` header is set to `inline` by default. But can be overriden by `?a` query string. If the paste is uploaded with filename, or `<filename>` is set in given request URL, `Content-Disposition` is appended with `filename*` indicating the filename. An empty upload filename is stored as `Untitled`. If the paste is encrypted, the filename is appended with `.encrypted` suffix.
+ 
+ If the paste is encrypted, an `X-PB-Encryption-Scheme` header will be set to the encryption scheme. An `X-PB-Decrypted-Content-Type` header is also set to the mime type that the decrypted content would have (inferred from the same sources as `Content-Type` but ignoring the encryption-induced `application/octet-stream` fallback), so clients can decide how to render the plaintext without an extra round trip.
+ 
+@@ -84,10 +84,11 @@ Explanation of the fields:
+ - `expireAt`: String or `null`. An ISO string representing when the paste will expire, or `null` for a permanent paste.
+ - `createdAt`: String. An ISO String representing when the paste was created.
+ - `sizeBytes`: Integer. The size of the content of the paste in bytes.
+-- `filename`: Optional string. The file name of the paste.
++- `filename`: Optional string. The file name of the paste. Empty upload names are stored as `Untitled`.
+ - `location`: String, either "KV" or "R2". Representing whether the paste content is stored in Cloudflare KV storage or R2 object storage.
+ - `highlightLanguage`: Optional string. The syntax highlighting language uploaded with the `lang` form field.
+ - `encryptionScheme`: Optional string. Currently only "AES-GCM" is possible. The encryption scheme used to encrypt the paste.
++- `mimeType`: Optional string. A sniffed MIME type stored when the upload had no filename-derived type (for example an extensionless PNG). URL `?mime=` / `<ext>` / filename still take precedence on GET, and `DISALLOWED_MIME_FOR_PASTE` still remaps blocked types to `text/plain;charset=UTF-8`.
+ 
+ ## GET `/a/<name>`
+ 
+@@ -182,7 +183,7 @@ Explanation of the fields:
+ - `manageUrl`: String. The URL to update and delete the paste, which is `url` suffixed by `:` and the password.
+ - `expirationSeconds`: Number or `null`. The expiration seconds, or `null` for a permanent paste.
+ 
+-The remaining fields mirror the [`GET /m/<name>`](#get-mname) metadata response: `lastModifiedAt`, `createdAt`, `expireAt`, `sizeBytes`, `location`, and the optional `filename`, `highlightLanguage`, `encryptionScheme`.
++The remaining fields mirror the [`GET /m/<name>`](#get-mname) metadata response: `lastModifiedAt`, `createdAt`, `expireAt`, `sizeBytes`, `location`, and the optional `filename`, `highlightLanguage`, `encryptionScheme`, `mimeType`.
+ 
+ If error occurs, the worker returns status code different from `200`:
+ 
+diff --git a/frontend/components/CodeEditor.tsx b/frontend/components/CodeEditor.tsx
+index 92ad245e672f80307051c5f1358886037ced2b08..1204f9065312198a95f8558d6e1778fa2923703b 100644
+--- a/frontend/components/CodeEditor.tsx
++++ b/frontend/components/CodeEditor.tsx
+@@ -5,6 +5,7 @@ import { Autocomplete, AutocompleteItem, Input, Select, SelectItem } from "./ui/
+ import { autoCompleteOverrides, inputOverrides, selectOverrides, tst } from "../utils/overrides.js"
+ import { highlightHTML, useAvailableLanguages, useHljsForLang } from "../utils/highlight.js"
+ import { XIcon } from "./icons.js"
++import { DEFAULT_EDIT_FILENAME } from "../../shared/constants.js"
+ 
+ import "../styles/highlight-theme-light.css"
+ import "../styles/highlight-theme-dark.css"
+@@ -147,7 +148,7 @@ export function CodeEditor({
+           classNames={inputOverrides}
+           type={"text"}
+           label={"File name"}
+-          placeholder={"No filename"}
++          placeholder={DEFAULT_EDIT_FILENAME}
+           size={"sm"}
+           value={filename || ""}
+           onValueChange={setFilename}
+diff --git a/frontend/pages/PasteBin.tsx b/frontend/pages/PasteBin.tsx
+index 86883ff9cb0489e386df5079518187352b2a7d37..7c20744b66e448464efdf83af88057f11d0e1b93 100644
+--- a/frontend/pages/PasteBin.tsx
++++ b/frontend/pages/PasteBin.tsx
+@@ -12,7 +12,12 @@ import { PasteInputPanel } from "../components/PasteInputPanel.js"
+ 
+ import type { PasteResponse } from "../../shared/interfaces.js"
+ import { parsePath, parseFilenameFromContentDisposition } from "../../shared/parsers.js"
+-import { PASSWD_SEP, MAX_URL_REDIRECT_LEN, MAX_AUTO_FETCH_BYTES } from "../../shared/constants.js"
++import {
++  PASSWD_SEP,
++  MAX_URL_REDIRECT_LEN,
++  MAX_AUTO_FETCH_BYTES,
++  DEFAULT_EDIT_FILENAME,
++} from "../../shared/constants.js"
+ 
+ import { verifyExpiration, verifyManageUrl, getMaxExpirationReadable } from "../utils/utils.js"
+ import { verifyName, verifyPassword, isLegalUrl } from "../../shared/verify.js"
+@@ -27,6 +32,7 @@ export function PasteBin({ config }: { config: Env }) {
+   const [editorState, setEditorState] = useState<PasteEditState>({
+     editKind: "edit",
+     editContent: "",
++    editFilename: DEFAULT_EDIT_FILENAME,
+     file: null,
+     editHighlightLang: "plaintext",
+   })
+@@ -112,7 +118,7 @@ export function PasteBin({ config }: { config: Env }) {
+             editContent: await resp.text(),
+             file: null,
+             editHighlightLang: contentLang || undefined,
+-            editFilename: pasteFilename,
++            editFilename: pasteFilename || DEFAULT_EDIT_FILENAME,
+           })
+         } catch (e) {
+           handleError(`Error on Fetching ${pasteUrl}`, e as Error)
+diff --git a/frontend/test/index.spec.tsx b/frontend/test/index.spec.tsx
+index 7548c67251e3c4f1bf6b2d8cbe596411c31595f6..ac9f0b752beb458c33ad045545259f592eb4f90d 100644
+--- a/frontend/test/index.spec.tsx
++++ b/frontend/test/index.spec.tsx
+@@ -64,6 +64,9 @@ describe("Pastebin", () => {
+     const editor = screen.getByRole("textbox", { name: "Paste editor" })
+     expect(editor).toBeInTheDocument()
+ 
++    const filename = screen.getByRole("textbox", { name: "File name" })
++    expect(filename).toHaveValue("Untitled")
++
+     const submitter = screen.getByRole("button", { name: "Upload" })
+     expect(submitter).toBeInTheDocument()
+     expect(submitter).not.toBeEnabled()
+diff --git a/frontend/utils/uploader.ts b/frontend/utils/uploader.ts
+index e3246970f76d9cc6f8aab86e777bca68ded4f1e7..71c28e8b66a66c071063a31065cda74dd6822e91 100644
+--- a/frontend/utils/uploader.ts
++++ b/frontend/utils/uploader.ts
+@@ -6,6 +6,7 @@ import type { EncryptionScheme } from "./encryption.js"
+ import { encodeKey, encrypt, genKey } from "./encryption.js"
+ import type { UploadOptions } from "../../shared/uploadPaste.js"
+ import { UploadError, uploadMPU, uploadNormal } from "../../shared/uploadPaste.js"
++import { DEFAULT_EDIT_FILENAME } from "../../shared/constants.js"
+ 
+ async function genAndEncrypt(scheme: EncryptionScheme, content: string | Uint8Array) {
+   const key = await genKey(scheme)
+@@ -53,10 +54,10 @@ export async function uploadPaste(
+       if (pasteSetting.doEncrypt) {
+         const { key, ciphertext } = await genAndEncrypt(encryptionScheme, editorState.editContent)
+         onEncryptionKeyChange(key)
+-        return new File([ciphertext as BlobPart], editorState.editFilename || "")
++        return new File([ciphertext as BlobPart], editorState.editFilename || DEFAULT_EDIT_FILENAME)
+       } else {
+         onEncryptionKeyChange(undefined)
+-        return new File([editorState.editContent], editorState.editFilename || "")
++        return new File([editorState.editContent], editorState.editFilename || DEFAULT_EDIT_FILENAME)
+       }
+     }
+   }
+diff --git a/shared/constants.ts b/shared/constants.ts
+index b608a67b380f26606dcba3b5a49e5a1901c80d0b..7753895f5d5f810329c57c8e4cdf01eb22a04f1f 100644
+--- a/shared/constants.ts
++++ b/shared/constants.ts
+@@ -11,3 +11,9 @@ export const MAX_AUTO_FETCH_BYTES = 256 * 1024
+ export const MPU_PASSWORD_HEADER = "X-PB-Password"
+ export const MPU_KEY_HEADER = "X-PB-MPU-Key"
+ export const MPU_UPLOAD_ID_HEADER = "X-PB-MPU-Upload-Id"
++export const DEFAULT_EDIT_FILENAME = "Untitled"
++
++export function normalizePasteFilename(filename: string | undefined): string {
++  const trimmed = filename?.trim()
++  return trimmed ? trimmed : DEFAULT_EDIT_FILENAME
++}
+diff --git a/shared/interfaces.ts b/shared/interfaces.ts
+index b73d68322116f10144dc1ded286961cf2cb2c100..5fa22d9012baf0b29b7d52e3394cbff43803a623 100644
+--- a/shared/interfaces.ts
++++ b/shared/interfaces.ts
+@@ -11,6 +11,7 @@ export interface MetaResponse {
+   filename?: string
+   highlightLanguage?: string
+   encryptionScheme?: string
++  mimeType?: string
+ }
+ 
+ export interface PasteResponse extends MetaResponse {
+diff --git a/shared/mimeSniff.ts b/shared/mimeSniff.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..aafe3e4f5aeda21a204e039c59fc3215aef8e21e
+--- /dev/null
++++ b/shared/mimeSniff.ts
+@@ -0,0 +1,33 @@
++const PNG_SIG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
++const JPEG_SIG = [0xff, 0xd8, 0xff]
++const GIF87_SIG = [0x47, 0x49, 0x46, 0x38, 0x37, 0x61]
++const GIF89_SIG = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]
++const ZIP_LOCAL = [0x50, 0x4b, 0x03, 0x04]
++const ZIP_EMPTY = [0x50, 0x4b, 0x05, 0x06]
++const ZIP_SPANNED = [0x50, 0x4b, 0x07, 0x08]
++
++function hasPrefix(bytes: Uint8Array, prefix: number[]): boolean {
++  if (bytes.length < prefix.length) return false
++  return prefix.every((b, i) => bytes[i] === b)
++}
++
++function hasAsciiAt(bytes: Uint8Array, offset: number, text: string): boolean {
++  if (bytes.length < offset + text.length) return false
++  for (let i = 0; i < text.length; i++) {
++    if (bytes[offset + i] !== text.charCodeAt(i)) return false
++  }
++  return true
++}
++
++export function sniffMimeType(bytes: ArrayBuffer | Uint8Array): string | undefined {
++  const header = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
++  if (hasPrefix(header, PNG_SIG)) return "image/png"
++  if (hasPrefix(header, JPEG_SIG)) return "image/jpeg"
++  if (hasPrefix(header, GIF87_SIG) || hasPrefix(header, GIF89_SIG)) return "image/gif"
++  if (hasAsciiAt(header, 0, "RIFF") && hasAsciiAt(header, 8, "WEBP")) return "image/webp"
++  if (hasAsciiAt(header, 0, "%PDF")) return "application/pdf"
++  if (hasPrefix(header, ZIP_LOCAL) || hasPrefix(header, ZIP_EMPTY) || hasPrefix(header, ZIP_SPANNED)) {
++    return "application/zip"
++  }
++  return undefined
++}
+diff --git a/shared/test/mimeSniff.spec.ts b/shared/test/mimeSniff.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..f201fd7a5720415fe6f5b746ded920be9807b001
+--- /dev/null
++++ b/shared/test/mimeSniff.spec.ts
+@@ -0,0 +1,22 @@
++import { expect, test } from "vitest"
++import { DEFAULT_EDIT_FILENAME, normalizePasteFilename } from "../constants.js"
++import { sniffMimeType } from "../mimeSniff.js"
++
++test("normalizePasteFilename defaults empty names to Untitled", () => {
++  expect(DEFAULT_EDIT_FILENAME).toStrictEqual("Untitled")
++  expect(normalizePasteFilename(undefined)).toStrictEqual("Untitled")
++  expect(normalizePasteFilename("")).toStrictEqual("Untitled")
++  expect(normalizePasteFilename("   ")).toStrictEqual("Untitled")
++  expect(normalizePasteFilename("notes.txt")).toStrictEqual("notes.txt")
++})
++
++test("sniffMimeType recognizes common binaries and ignores HTML/text", () => {
++  expect(sniffMimeType(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toStrictEqual("image/png")
++  expect(sniffMimeType(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))).toStrictEqual("image/jpeg")
++  expect(sniffMimeType(new TextEncoder().encode("GIF89a"))).toStrictEqual("image/gif")
++  expect(sniffMimeType(new TextEncoder().encode("RIFF....WEBP"))).toStrictEqual("image/webp")
++  expect(sniffMimeType(new TextEncoder().encode("%PDF-1.4"))).toStrictEqual("application/pdf")
++  expect(sniffMimeType(new Uint8Array([0x50, 0x4b, 0x03, 0x04]))).toStrictEqual("application/zip")
++  expect(sniffMimeType(new TextEncoder().encode("<!DOCTYPE html>"))).toBeUndefined()
++  expect(sniffMimeType(new TextEncoder().encode("hello"))).toBeUndefined()
++})
+diff --git a/worker/handlers/handleRead.ts b/worker/handlers/handleRead.ts
+index 87133cb248bc35b7997128be6cd08b78e9ff1d44..c58b64343a1d760bc622fe2d1ddf64eb4691d7b9 100644
+--- a/worker/handlers/handleRead.ts
++++ b/worker/handlers/handleRead.ts
+@@ -210,6 +210,7 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
+     url.searchParams.get("mime") ||
+     (ext && mime.getType(ext)) ||
+     (item.metadata.filename && mime.getType(item.metadata.filename)) ||
++    item.metadata.mimeType ||
+     "text/plain;charset=UTF-8"
+ 
+   let inferred_mime = item.metadata.encryptionScheme
+diff --git a/worker/handlers/handleWrite.ts b/worker/handlers/handleWrite.ts
+index 2e0fb11244f0e4dcc4a1511a5ac9fb31aab9aa30..bd74d96257bb99670f4102b2a6cb0d8fc74389c5 100644
+--- a/worker/handlers/handleWrite.ts
++++ b/worker/handlers/handleWrite.ts
+@@ -8,7 +8,14 @@ import {
+   pasteNameAvailable,
+   updatePaste,
+ } from "../storage/storage.js"
+-import { DEFAULT_PASSWD_LEN, PASTE_NAME_LEN, PRIVATE_PASTE_NAME_LEN, PASSWD_SEP } from "../../shared/constants.js"
++import {
++  DEFAULT_PASSWD_LEN,
++  PASTE_NAME_LEN,
++  PRIVATE_PASTE_NAME_LEN,
++  PASSWD_SEP,
++  normalizePasteFilename,
++} from "../../shared/constants.js"
++import { storedMimeTypeForUpload } from "../mime.js"
+ import { parsePath, parseSize, parseExpiration, parseExpirationSpec } from "../../shared/parsers.js"
+ import { verifyName, verifyPassword } from "../../shared/verify.js"
+ import type { PasteResponse } from "../../shared/interfaces.js"
+@@ -209,15 +216,22 @@ export async function handlePostOrPut(
+     }
+ 
+     const newPasswd = passwdFromForm || originalMetadata.passwd
++    const storedFilename = normalizePasteFilename(filename)
++    const mimeType = await storedMimeTypeForUpload(env, pasteName, content, {
++      filename: storedFilename,
++      encryptionScheme,
++      isMPUComplete,
++    })
+     const newMetadata = await updatePaste(env, pasteName, content, originalMetadata, {
+       expirationSeconds,
+       retentionFromMPU,
+       now,
+       passwd: newPasswd,
+       contentLength: r2Object?.size || contentLength,
+-      filename,
++      filename: storedFilename,
+       highlightLanguage,
+       encryptionScheme,
++      mimeType,
+       isMPUComplete,
+     })
+     return makeResponse(
+@@ -266,16 +280,23 @@ export async function handlePostOrPut(
+     }
+ 
+     const password = passwdFromForm || genRandStr(DEFAULT_PASSWD_LEN)
++    const storedFilename = normalizePasteFilename(filename)
++    const mimeType = await storedMimeTypeForUpload(env, pasteName, content, {
++      filename: storedFilename,
++      encryptionScheme,
++      isMPUComplete,
++    })
+     try {
+       const newMetadata = await createPaste(env, pasteName, content, {
+         expirationSeconds,
+         retentionFromMPU,
+         now,
+         passwd: password,
+-        filename,
++        filename: storedFilename,
+         highlightLanguage,
+         contentLength: r2Object?.size || contentLength,
+         encryptionScheme,
++        mimeType,
+         isMPUComplete: isMPUComplete || namedR2Object !== undefined,
+       })
+ 
+diff --git a/worker/mime.ts b/worker/mime.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..13ac48d31edbfc69029b0dd85c1ec6eeddda87c5
+--- /dev/null
++++ b/worker/mime.ts
+@@ -0,0 +1,26 @@
++import mime from "mime"
++import { sniffMimeType } from "../shared/mimeSniff.js"
++
++const SNIFF_BYTES = 16
++
++export async function storedMimeTypeForUpload(
++  env: Env,
++  pasteName: string,
++  content: ArrayBuffer | ReadableStream,
++  options: { filename?: string; encryptionScheme?: string; isMPUComplete: boolean },
++): Promise<string | undefined> {
++  if (options.encryptionScheme) return undefined
++  if (options.filename && mime.getType(options.filename)) return undefined
++
++  let header: Uint8Array | undefined
++  if (options.isMPUComplete) {
++    const object = await env.R2.get(pasteName, { range: { offset: 0, length: SNIFF_BYTES } })
++    if (object === null) return undefined
++    header = new Uint8Array(await object.arrayBuffer())
++  } else if (content instanceof ArrayBuffer) {
++    header = new Uint8Array(content.slice(0, SNIFF_BYTES))
++  } else if (ArrayBuffer.isView(content)) {
++    header = new Uint8Array(content.buffer, content.byteOffset, Math.min(SNIFF_BYTES, content.byteLength))
++  }
++  return header ? sniffMimeType(header) : undefined
++}
+diff --git a/worker/storage/storage.ts b/worker/storage/storage.ts
+index 6097a41f7098b8796e8a93ae95ef596ba7ce37b4..544de6d8a81398d7bdb43b82dffb09ac8c34388f 100644
+--- a/worker/storage/storage.ts
++++ b/worker/storage/storage.ts
+@@ -21,6 +21,7 @@ export interface PasteMetadata {
+   filename?: string
+   highlightLanguage?: string
+   encryptionScheme?: string
++  mimeType?: string
+ }
+ 
+ interface PasteMetadataInStorage {
+@@ -37,6 +38,7 @@ interface PasteMetadataInStorage {
+   filename?: string
+   highlightLanguage?: string
+   encryptionScheme?: string
++  mimeType?: string
+ }
+ 
+ export function metaResponseFromMetadata(metadata: PasteMetadata): MetaResponse {
+@@ -49,6 +51,7 @@ export function metaResponseFromMetadata(metadata: PasteMetadata): MetaResponse
+     filename: metadata.filename,
+     highlightLanguage: metadata.highlightLanguage,
+     encryptionScheme: metadata.encryptionScheme,
++    mimeType: metadata.mimeType,
+   }
+ }
+ 
+@@ -67,6 +70,7 @@ export function migratePasteMetadata(original: PasteMetadataInStorage): PasteMet
+     filename: original.filename,
+     highlightLanguage: original.highlightLanguage,
+     encryptionScheme: original.encryptionScheme,
++    mimeType: original.mimeType,
+   }
+ }
+ 
+@@ -164,6 +168,7 @@ interface WriteOptions {
+   filename?: string
+   highlightLanguage?: string
+   encryptionScheme?: string
++  mimeType?: string
+   isMPUComplete: boolean
+ }
+ 
+@@ -203,6 +208,7 @@ export async function updatePaste(
+     filename: options.filename,
+     highlightLanguage: options.highlightLanguage,
+     passwd: options.passwd,
++    mimeType: options.mimeType,
+ 
+     lastModifiedAtUnix: dateToUnix(options.now),
+     createdAtUnix: originalMetadata.createdAtUnix,
+@@ -252,6 +258,7 @@ export async function createPaste(
+     filename: options.filename,
+     highlightLanguage: options.highlightLanguage,
+     passwd: options.passwd,
++    mimeType: options.mimeType,
+ 
+     lastModifiedAtUnix: dateToUnix(options.now),
+     createdAtUnix: dateToUnix(options.now),
+diff --git a/worker/test/basic.spec.ts b/worker/test/basic.spec.ts
+index 6c29a9b53206ad18a99c2a6159d8ac51f12de3b1..c77fa96c27bd8f044ddce7cd75bd8b4edb3b567a 100644
+--- a/worker/test/basic.spec.ts
++++ b/worker/test/basic.spec.ts
+@@ -136,7 +136,7 @@ test("GET special static pages", async () => {
+   expect(decResp.headers.get("Content-Type")).toStrictEqual("text/html;charset=UTF-8")
+ 
+   const testPairs = [
+-    [name, name],
++    [name, name + " / Untitled"],
+     [name + ".jpg", name + ".jpg"],
+     [name + ".jpg?lang=cpp", name + ".jpg"],
+     [name + "/a.jpg", name + " / a.jpg"],
+diff --git a/worker/test/controlHeaders.spec.ts b/worker/test/controlHeaders.spec.ts
+index 1a2b813e18847ed8bff6e1f16510befc6ed6b32b..875b8f7ea951168ebd680d8bbed0c70fc447e0b7 100644
+--- a/worker/test/controlHeaders.spec.ts
++++ b/worker/test/controlHeaders.spec.ts
+@@ -29,6 +29,33 @@ test("mime type", async () => {
+   await testMime(`${url_pic}?mime=text/html`, "text/plain;charset=UTF-8")
+ })
+ 
++test("extensionless binary sniff and Untitled filename", async () => {
++  const ctx = createExecutionContext()
++  const png = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])])
++  const jpeg = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])])
++  const html = new Blob([new TextEncoder().encode("<!DOCTYPE html><html></html>")])
++
++  const pngResp = await upload(ctx, { c: png })
++  expect(pngResp.filename).toStrictEqual("Untitled")
++  expect(pngResp.mimeType).toStrictEqual("image/png")
++  const pngGet = await workerFetch(ctx, pngResp.url)
++  expect(pngGet.headers.get("Content-Type")).toStrictEqual("image/png")
++  expect(pngGet.headers.get("Content-Disposition")).toStrictEqual("inline; filename*=UTF-8''Untitled")
++
++  const jpegGet = await workerFetch(ctx, (await upload(ctx, { c: jpeg })).url)
++  expect(jpegGet.headers.get("Content-Type")).toStrictEqual("image/jpeg")
++
++  const namedPng = await upload(ctx, { c: { content: png, filename: "notes.txt" } })
++  expect(namedPng.mimeType).toBeUndefined()
++  expect((await workerFetch(ctx, namedPng.url)).headers.get("Content-Type")).toStrictEqual("text/plain")
++
++  const htmlGet = await workerFetch(ctx, (await upload(ctx, { c: html })).url)
++  expect(htmlGet.headers.get("Content-Type")).toStrictEqual("text/plain;charset=UTF-8")
++
++  const emptyName = await upload(ctx, { c: { content: new Blob(["hello"]), filename: "" } })
++  expect(emptyName.filename).toStrictEqual("Untitled")
++})
++
+ test("cache control", async () => {
+   beforeEach(vi.useFakeTimers)
+   afterEach(vi.useRealTimers)
+@@ -78,8 +105,12 @@ test("content disposition without specifying filename", async () => {
+   expect(
+     (await workerFetch(ctx, url)).headers.get("Access-Control-Expose-Headers")?.includes("Content-Disposition"),
+   ).toStrictEqual(true)
+-  expect((await workerFetch(ctx, url)).headers.get("Content-Disposition")).toStrictEqual("inline")
+-  expect((await workerFetch(ctx, `${url}?a`)).headers.get("Content-Disposition")).toStrictEqual("attachment")
++  expect((await workerFetch(ctx, url)).headers.get("Content-Disposition")).toStrictEqual(
++    "inline; filename*=UTF-8''Untitled",
++  )
++  expect((await workerFetch(ctx, `${url}?a`)).headers.get("Content-Disposition")).toStrictEqual(
++    "attachment; filename*=UTF-8''Untitled",
++  )
+ 
+   expect((await workerFetch(ctx, `${url}/${filename}`)).headers.get("Content-Disposition")).toStrictEqual(
+     `inline; filename*=UTF-8''${filename}`,
+diff --git a/worker/test/head.spec.ts b/worker/test/head.spec.ts
+index eb21c2f145985a16de95addb5f027809f1ab76c8..42d5c4189ce01eb7d80d11e68d84978801632091 100644
+--- a/worker/test/head.spec.ts
++++ b/worker/test/head.spec.ts
+@@ -20,7 +20,7 @@ test("HEAD", async () => {
+   expect(headResp.headers.get("Content-Type")).toStrictEqual("text/plain;charset=UTF-8")
+   expect(headResp.headers.get("Content-Length")).toStrictEqual(blob1.size.toString())
+   expect(headResp.headers.has("Last-Modified")).toStrictEqual(true)
+-  expect(headResp.headers.get("Content-Disposition")).toStrictEqual("inline")
++  expect(headResp.headers.get("Content-Disposition")).toStrictEqual("inline; filename*=UTF-8''Untitled")
+ 
+   // test head with filename and big blog
+   const blob2 = genRandomBlob(1024 * 1024)
+diff --git a/worker/test/roles.spec.ts b/worker/test/roles.spec.ts
+index 7798ea74715ff6791e57dab981d05247d319476a..b20dcd391edaff67b7cafce0c03aa9d86a391c5d 100644
+--- a/worker/test/roles.spec.ts
++++ b/worker/test/roles.spec.ts
+@@ -79,7 +79,7 @@ test("meta with role m", async () => {
+   const meta: MetaResponse = await metaResponse.json()
+ 
+   expect(meta.location).toStrictEqual("KV")
+-  expect(meta.filename).toBeUndefined()
++  expect(meta.filename).toStrictEqual("Untitled")
+   expect(new Date(meta.lastModifiedAt).getTime()).toStrictEqual(t1.getTime())
+   expect(new Date(meta.createdAt).getTime()).toStrictEqual(t1.getTime())
+ 
+
+base-commit: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+prerequisite-patch-id: 6e6f1a1b3b822a7f6055757439f06a3a2956b89a
+prerequisite-patch-id: bb8280cc63d877f55dabba700c59f2d9ce0d6307
+prerequisite-patch-id: 292fa63936f41c768c09dedce9c0b951924707f3
+prerequisite-patch-id: a18edec9995be81e122eb2ca0fc03fe3bfd7712d
+prerequisite-patch-id: 7fb6594968364a928abd12177313831c752d65e2
+prerequisite-patch-id: d9b8fd398a206be4b4b283398a4697914c5c82e1
+prerequisite-patch-id: f2ebf4e613c40007615eec143b83069eeb24c791
+prerequisite-patch-id: 6ad43923c9ad3ed939663717809fa4661e96f6ab
+prerequisite-patch-id: 1c8a98c04997a1641ac1cc9df45e69f95dcaef15
+prerequisite-patch-id: c233d552de04f8104c3dfde89f89423feab89385
+prerequisite-patch-id: 6ac78d342fc593d80301fff4344bb005463223a0
+prerequisite-patch-id: 7c636f5c8826bcf7c64729128f8a057c6a97c59f
+prerequisite-patch-id: 30bb2ff317dc3ebebe8be3b176e7e24c0844a032
+prerequisite-patch-id: 25696ff912a94f7b2dad737e1cfe422a167c1a5d
+-- 
+2.50.1 (Apple Git-155)
+

@@ -35,9 +35,10 @@ describe("OPFS download staging", () => {
 
     const url = await stageDownloadBytes(new Uint8Array([1, 2, 3]), "plain.txt")
     expect(url.startsWith("blob:")).toBe(true)
-    expect(names).toEqual(["plain.txt"])
-    expect(removed).toEqual(["plain.txt"])
-    expect(names.join("")).not.toContain("#")
+    expect(names).toHaveLength(1)
+    expect(names[0]?.startsWith("pb-dl-")).toBe(true)
+    expect(names[0]).not.toContain("#")
+    expect(removed).toEqual(names)
   })
 
   it("wipes then retries OPFS removal if the first removeEntry fails", async () => {
@@ -71,7 +72,9 @@ describe("OPFS download staging", () => {
 
     const url = await stageDownloadBytes(new Uint8Array([1, 2, 3]), "plain.txt")
     expect(url.startsWith("blob:")).toBe(true)
-    expect(removed).toEqual(["plain.txt", "plain.txt"])
+    expect(removed).toHaveLength(2)
+    expect(removed[0]?.startsWith("pb-dl-")).toBe(true)
+    expect(removed[0]).toBe(removed[1])
     expect(writes.some((data) => data instanceof Uint8Array && data.byteLength === 0)).toBe(true)
   })
 
@@ -100,7 +103,8 @@ describe("OPFS download staging", () => {
 
     const url = await stageDownloadBytes(new Uint8Array([1, 2, 3]), "plain.txt")
     expect(url.startsWith("blob:")).toBe(true)
-    expect(removed).toContain("plain.txt")
+    expect(removed).toHaveLength(1)
+    expect(removed[0]?.startsWith("pb-dl-")).toBe(true)
   })
 
   it("falls back to a Blob object URL when OPFS is unavailable", async () => {

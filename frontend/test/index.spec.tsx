@@ -183,6 +183,11 @@ describe("Pastebin", () => {
 })
 
 describe("Pastebin admin page", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    stubBrowerFunctions()
+  })
+
   it("renders admin page", async () => {
     vi.stubGlobal("location", new URL("https://example.com/abcd:xxxxxxxxx"))
     render(<PasteBin config={__WRANGLER_CONFIG__} />)
@@ -191,5 +196,42 @@ describe("Pastebin admin page", () => {
     await userEvent.click(editor) // meaningless click, just ensure useEffect is done
     expect(editor).toBeInTheDocument()
     expect((editor as HTMLTextAreaElement).value).toStrictEqual(mockedPasteContent)
+  })
+})
+
+describe("Pastebin multi-file ZIP", () => {
+  it("selects multiple files, uploads, and reset does not keep the selection", async () => {
+    render(<PasteBin config={__WRANGLER_CONFIG__} />)
+    await userEvent.click(screen.getByRole("button", { name: "File" }))
+    await userEvent.upload(screen.getByLabelText("Select files"), [
+      new File(["alpha"], "a.txt", { type: "text/plain" }),
+      new File(["beta"], "b.txt", { type: "text/plain" }),
+    ])
+    expect(screen.getByText(/2 files/)).toBeInTheDocument()
+    expect(screen.getByText(/· ZIP/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
+    await vi.waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Raw URL" })).toHaveValue(mockedPasteUpload.url)
+    })
+
+    await userEvent.click(screen.getByLabelText("Remove file"))
+    expect(screen.queryByText(/2 files/)).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^(Upload|Update)$/ })).toBeDisabled()
+  })
+
+  it("uploads a single ordinary file without showing a ZIP summary", async () => {
+    render(<PasteBin config={__WRANGLER_CONFIG__} />)
+    await userEvent.click(screen.getByRole("button", { name: "File" }))
+    await userEvent.upload(screen.getByLabelText("Select files"), [
+      new File(["hello"], "solo.txt", { type: "text/plain" }),
+    ])
+    expect(screen.getByText("solo.txt")).toBeInTheDocument()
+    expect(screen.queryByText(/· ZIP/)).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
+    await vi.waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Raw URL" })).toHaveValue(mockedPasteUpload.url)
+    })
   })
 })

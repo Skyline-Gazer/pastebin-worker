@@ -36,6 +36,8 @@ export function PasteBin({ config }: { config: Env }) {
     editContent: "",
     editFilename: DEFAULT_EDIT_FILENAME,
     file: null,
+    files: [],
+    fromDirectory: false,
     editHighlightLang: "plaintext",
   })
 
@@ -124,6 +126,8 @@ export function PasteBin({ config }: { config: Env }) {
             editKind: "edit",
             editContent: await resp.text(),
             file: null,
+            files: [],
+            fromDirectory: false,
             editHighlightLang: contentLang || undefined,
             editFilename: pasteFilename || DEFAULT_EDIT_FILENAME,
           })
@@ -188,7 +192,7 @@ export function PasteBin({ config }: { config: Env }) {
   function canUpload(): boolean {
     if (editorState.editKind === "edit" && editorState.editContent.length === 0) {
       return false
-    } else if (editorState.editKind === "file" && editorState.file === null) {
+    } else if (editorState.editKind === "file" && editorState.file === null && editorState.files.length === 0) {
       return false
     }
 
@@ -225,7 +229,8 @@ export function PasteBin({ config }: { config: Env }) {
       </div>
       <p className="my-2">A pastebin running on Cloudflare Workers.</p>
       <p className="my-2">
-        <b>Usage</b>: paste text or drop a file, then share the returned URL. You can also use{" "}
+        <b>Usage</b>: paste text, drop a file, or select multiple files / a folder (uploaded as one ZIP), then share the
+        returned URL. You can also use{" "}
         <Link className={tst} href={`${config.DEPLOY_URL}/doc/curl`}>
           curl
         </Link>

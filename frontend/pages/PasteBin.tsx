@@ -12,7 +12,12 @@ import { PasteInputPanel } from "../components/PasteInputPanel.js"
 
 import type { PasteResponse } from "../../shared/interfaces.js"
 import { parsePath, parseFilenameFromContentDisposition } from "../../shared/parsers.js"
-import { PASSWD_SEP, MAX_URL_REDIRECT_LEN, MAX_AUTO_FETCH_BYTES } from "../../shared/constants.js"
+import {
+  PASSWD_SEP,
+  MAX_URL_REDIRECT_LEN,
+  MAX_AUTO_FETCH_BYTES,
+  DEFAULT_EDIT_FILENAME,
+} from "../../shared/constants.js"
 
 import { verifyExpiration, verifyManageUrl, getMaxExpirationReadable } from "../utils/utils.js"
 import { verifyName, verifyPassword, isLegalUrl } from "../../shared/verify.js"
@@ -27,6 +32,7 @@ export function PasteBin({ config }: { config: Env }) {
   const [editorState, setEditorState] = useState<PasteEditState>({
     editKind: "edit",
     editContent: "",
+    editFilename: DEFAULT_EDIT_FILENAME,
     file: null,
     editHighlightLang: "plaintext",
   })
@@ -112,7 +118,7 @@ export function PasteBin({ config }: { config: Env }) {
             editContent: await resp.text(),
             file: null,
             editHighlightLang: contentLang || undefined,
-            editFilename: pasteFilename,
+            editFilename: pasteFilename || DEFAULT_EDIT_FILENAME,
           })
         } catch (e) {
           handleError(`Error on Fetching ${pasteUrl}`, e as Error)

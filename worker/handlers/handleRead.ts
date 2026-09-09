@@ -210,6 +210,7 @@ export async function handleGet(request: Request, env: Env, ctx: ExecutionContex
     url.searchParams.get("mime") ||
     (ext && mime.getType(ext)) ||
     (item.metadata.filename && mime.getType(item.metadata.filename)) ||
+    item.metadata.mimeType ||
     "text/plain;charset=UTF-8"
 
   let inferred_mime = item.metadata.encryptionScheme

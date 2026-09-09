@@ -6,6 +6,7 @@ import type { EncryptionScheme } from "./encryption.js"
 import { encodeKey, encrypt, genKey } from "./encryption.js"
 import type { UploadOptions } from "../../shared/uploadPaste.js"
 import { UploadError, uploadMPU, uploadNormal } from "../../shared/uploadPaste.js"
+import { DEFAULT_EDIT_FILENAME } from "../../shared/constants.js"
 
 async function genAndEncrypt(scheme: EncryptionScheme, content: string | Uint8Array) {
   const key = await genKey(scheme)
@@ -53,10 +54,10 @@ export async function uploadPaste(
       if (pasteSetting.doEncrypt) {
         const { key, ciphertext } = await genAndEncrypt(encryptionScheme, editorState.editContent)
         onEncryptionKeyChange(key)
-        return new File([ciphertext as BlobPart], editorState.editFilename || "")
+        return new File([ciphertext as BlobPart], editorState.editFilename || DEFAULT_EDIT_FILENAME)
       } else {
         onEncryptionKeyChange(undefined)
-        return new File([editorState.editContent], editorState.editFilename || "")
+        return new File([editorState.editContent], editorState.editFilename || DEFAULT_EDIT_FILENAME)
       }
     }
   }

@@ -8,7 +8,14 @@ import {
   pasteNameAvailable,
   updatePaste,
 } from "../storage/storage.js"
-import { DEFAULT_PASSWD_LEN, PASTE_NAME_LEN, PRIVATE_PASTE_NAME_LEN, PASSWD_SEP } from "../../shared/constants.js"
+import {
+  DEFAULT_PASSWD_LEN,
+  PASTE_NAME_LEN,
+  PRIVATE_PASTE_NAME_LEN,
+  PASSWD_SEP,
+  normalizePasteFilename,
+} from "../../shared/constants.js"
+import { storedMimeTypeForUpload } from "../mime.js"
 import { parsePath, parseSize, parseExpiration, parseExpirationSpec } from "../../shared/parsers.js"
 import { verifyName, verifyPassword } from "../../shared/verify.js"
 import type { PasteResponse } from "../../shared/interfaces.js"
@@ -209,15 +216,22 @@ export async function handlePostOrPut(
     }
 
     const newPasswd = passwdFromForm || originalMetadata.passwd
+    const storedFilename = normalizePasteFilename(filename)
+    const mimeType = await storedMimeTypeForUpload(env, pasteName, content, {
+      filename: storedFilename,
+      encryptionScheme,
+      isMPUComplete,
+    })
     const newMetadata = await updatePaste(env, pasteName, content, originalMetadata, {
       expirationSeconds,
       retentionFromMPU,
       now,
       passwd: newPasswd,
       contentLength: r2Object?.size || contentLength,
-      filename,
+      filename: storedFilename,
       highlightLanguage,
       encryptionScheme,
+      mimeType,
       isMPUComplete,
     })
     return makeResponse(
@@ -266,16 +280,23 @@ export async function handlePostOrPut(
     }
 
     const password = passwdFromForm || genRandStr(DEFAULT_PASSWD_LEN)
+    const storedFilename = normalizePasteFilename(filename)
+    const mimeType = await storedMimeTypeForUpload(env, pasteName, content, {
+      filename: storedFilename,
+      encryptionScheme,
+      isMPUComplete,
+    })
     try {
       const newMetadata = await createPaste(env, pasteName, content, {
         expirationSeconds,
         retentionFromMPU,
         now,
         passwd: password,
-        filename,
+        filename: storedFilename,
         highlightLanguage,
         contentLength: r2Object?.size || contentLength,
         encryptionScheme,
+        mimeType,
         isMPUComplete: isMPUComplete || namedR2Object !== undefined,
       })
 

@@ -20,7 +20,7 @@ test("HEAD", async () => {
   expect(headResp.headers.get("Content-Type")).toStrictEqual("text/plain;charset=UTF-8")
   expect(headResp.headers.get("Content-Length")).toStrictEqual(blob1.size.toString())
   expect(headResp.headers.has("Last-Modified")).toStrictEqual(true)
-  expect(headResp.headers.get("Content-Disposition")).toStrictEqual("inline")
+  expect(headResp.headers.get("Content-Disposition")).toStrictEqual("inline; filename*=UTF-8''Untitled")
 
   // test head with filename and big blog
   const blob2 = genRandomBlob(1024 * 1024)

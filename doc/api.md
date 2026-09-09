@@ -8,9 +8,9 @@ Return the index page.
 
 Fetch the paste with name `<name>`. By default, it will return the raw content of the paste.
 
-The `Content-Type` header is set to the mime type inferred from the filename of the paste, or `text/plain;charset=UTF-8` if no filename is present. If `<ext>` is given, the worker will infer mime-type from `<ext>` and change `Content-Type`. If the paste is uploaded with a filename, the worker will infer mime-type from the filename. This method accepts the following query string parameters:
+The `Content-Type` header is set from, in order: the `?mime=` query, the URL `<ext>`, the stored filename, a sniffed `mimeType` stored at upload time for extensionless binaries, or `text/plain;charset=UTF-8`. If the paste is uploaded with a filename, the worker infers mime-type from that filename before falling back to the stored sniff. This method accepts the following query string parameters:
 
-The `Content-Disposition` header is set to `inline` by default. But can be overriden by `?a` query string. If the paste is uploaded with filename, or `<filename>` is set in given request URL, `Content-Disposition` is appended with `filename*` indicating the filename. If the paste is encrypted, the filename is appended with `.encrypted` suffix.
+The `Content-Disposition` header is set to `inline` by default. But can be overriden by `?a` query string. If the paste is uploaded with filename, or `<filename>` is set in given request URL, `Content-Disposition` is appended with `filename*` indicating the filename. An empty upload filename is stored as `Untitled`. If the paste is encrypted, the filename is appended with `.encrypted` suffix.
 
 If the paste is encrypted, an `X-PB-Encryption-Scheme` header will be set to the encryption scheme. An `X-PB-Decrypted-Content-Type` header is also set to the mime type that the decrypted content would have (inferred from the same sources as `Content-Type` but ignoring the encryption-induced `application/octet-stream` fallback), so clients can decide how to render the plaintext without an extra round trip.
 
@@ -84,10 +84,11 @@ Explanation of the fields:
 - `expireAt`: String or `null`. An ISO string representing when the paste will expire, or `null` for a permanent paste.
 - `createdAt`: String. An ISO String representing when the paste was created.
 - `sizeBytes`: Integer. The size of the content of the paste in bytes.
-- `filename`: Optional string. The file name of the paste.
+- `filename`: Optional string. The file name of the paste. Empty upload names are stored as `Untitled`.
 - `location`: String, either "KV" or "R2". Representing whether the paste content is stored in Cloudflare KV storage or R2 object storage.
 - `highlightLanguage`: Optional string. The syntax highlighting language uploaded with the `lang` form field.
 - `encryptionScheme`: Optional string. Currently only "AES-GCM" is possible. The encryption scheme used to encrypt the paste.
+- `mimeType`: Optional string. A sniffed MIME type stored when the upload had no filename-derived type (for example an extensionless PNG). URL `?mime=` / `<ext>` / filename still take precedence on GET, and `DISALLOWED_MIME_FOR_PASTE` still remaps blocked types to `text/plain;charset=UTF-8`.
 
 ## GET `/a/<name>`
 
@@ -182,7 +183,7 @@ Explanation of the fields:
 - `manageUrl`: String. The URL to update and delete the paste, which is `url` suffixed by `:` and the password.
 - `expirationSeconds`: Number or `null`. The expiration seconds, or `null` for a permanent paste.
 
-The remaining fields mirror the [`GET /m/<name>`](#get-mname) metadata response: `lastModifiedAt`, `createdAt`, `expireAt`, `sizeBytes`, `location`, and the optional `filename`, `highlightLanguage`, `encryptionScheme`.
+The remaining fields mirror the [`GET /m/<name>`](#get-mname) metadata response: `lastModifiedAt`, `createdAt`, `expireAt`, `sizeBytes`, `location`, and the optional `filename`, `highlightLanguage`, `encryptionScheme`, `mimeType`.
 
 If error occurs, the worker returns status code different from `200`:
 

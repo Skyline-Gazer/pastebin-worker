@@ -20,6 +20,10 @@ Release timing MUST NOT depend on official upstream acceptance. Changes that off
 
 Never use `upstream-sync` as a place to "temporarily" fix downstream behavior or to adopt unmerged changes. Any change not present in official upstream is downstream-owned.
 
+Scheduled synchronization (`.github/workflows/upstream-sync.yml`, `downstream/scripts/sync-upstream.sh`) fetches official `SharzyL/pastebin-worker:goshujin` read-only and updates `Skyline-Gazer/pastebin-worker:upstream-sync` **fast-forward only**. Equal tips are a no-op. Local-ahead or diverged history fails closed: no merge, rebase, reset, rewind, or force push. Official upstream is never written.
+
+`downstream/release.json` is an independent curated release pin. Advancing `upstream-sync` is not a release, does not change the pin, does not update `downstream/main`, and does not deploy. Patch-series replay against the official SHA is compatibility evidence only. A replay failure must not rewind a legitimate fast-forward of `upstream-sync`; it reports `UPSTREAM_ADVANCED_PATCH_REBASE_REQUIRED` for a separately reviewed patch rebase.
+
 ## 3. Curated adoption of external changes
 
 ### 3.1 Why curation exists

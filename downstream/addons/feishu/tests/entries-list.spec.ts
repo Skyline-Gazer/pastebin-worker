@@ -72,6 +72,15 @@ describe("GET /api/entries", () => {
           version: 1,
         },
       ]),
+      getById: vi.fn().mockResolvedValue({
+        id: "entry-a",
+        paste_name: "abcd",
+        visibility: "active",
+        retention_mode: "permanent",
+        expires_at: null,
+        version: 1,
+      }),
+      pending: vi.fn().mockResolvedValue(null),
     }
     const client = {
       publicUrl: vi.fn((name: string) => `https://pb.223.im/${name}`),
@@ -99,6 +108,61 @@ describe("GET /api/entries", () => {
     expect(JSON.stringify(body)).not.toMatch(/sealed|credential|scope-a|principal-a|record-a|csrf|tenant|open_id/)
     expect(bindings.listReadyForScopes).toHaveBeenCalledWith(["scope-a"], 50)
     expect(client.read).toHaveBeenCalledWith("abcd")
+  })
+
+  it("omits a binding whose version or pending status changed during the Paste read", async () => {
+    const ready = {
+      id: "entry-a",
+      scope_id: "scope-a",
+      record_key: "record-a",
+      credential: "sealed.credential.secret",
+      paste_name: "abcd",
+      visibility: "active",
+      retention_mode: "permanent",
+      expires_at: null,
+      version: 1,
+    }
+    const stable = {
+      id: "entry-b",
+      scope_id: "scope-a",
+      record_key: "record-b",
+      credential: "sealed.other",
+      paste_name: "efgh",
+      visibility: "active",
+      retention_mode: "permanent",
+      expires_at: null,
+      version: 1,
+    }
+    const trust = { getSession: vi.fn().mockResolvedValue(session), scopes: vi.fn().mockResolvedValue(["scope-a"]) }
+    const bindings = {
+      listReadyForScopes: vi.fn().mockResolvedValue([ready, stable]),
+      getById: vi
+        .fn()
+        .mockImplementation((id: string) => Promise.resolve(id === "entry-a" ? { ...ready, version: 2 } : stable)),
+      pending: vi.fn().mockResolvedValue(null),
+    }
+    const client = {
+      publicUrl: vi.fn((name: string) => `https://pb.223.im/${name}`),
+      read: vi.fn().mockResolvedValue("- [ ] live task"),
+    }
+    const handler = createEntriesListHandler(env, trust as never, bindings as never, client)
+    const result = await handler.fetch(request())
+    expect(result?.status).toBe(200)
+    expect(await result?.json()).toEqual({
+      entries: [
+        {
+          id: "entry-b",
+          pasteName: "efgh",
+          publicUrl: "https://pb.223.im/efgh",
+          visibility: "active",
+          retentionMode: "permanent",
+          expiresAt: null,
+          version: 1,
+          content: "- [ ] live task",
+          managedTask: { state: "unchecked" },
+        },
+      ],
+    })
   })
 
   it("ignores caller-supplied scope query parameters", async () => {

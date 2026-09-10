@@ -56,12 +56,17 @@ export function createEntriesListHandler(
         const session = await requireBrowserSession(request, env, trust)
         const scopes = await trust.scopes(session.principalKey)
         const rows = await bindings.listReadyForScopes(scopes, LIST_LIMIT)
-        const entries = await mapPool(rows, READ_CONCURRENCY, async (binding) => {
-          if (!binding.paste_name) throw new Error("READY_BINDING_UNNAMED")
-          const publicUrl = client.publicUrl(binding.paste_name)
-          const content = await client.read(binding.paste_name)
-          return toPublicListEntry(binding, publicUrl, content)
-        })
+        const entries = (
+          await mapPool(rows, READ_CONCURRENCY, async (binding) => {
+            if (!binding.paste_name) throw new Error("READY_BINDING_UNNAMED")
+            const publicUrl = client.publicUrl(binding.paste_name)
+            const content = await client.read(binding.paste_name)
+            if (await bindings.pending(binding.id)) return null
+            const current = await bindings.getById(binding.id)
+            if (!current?.paste_name || current.version !== binding.version) return null
+            return toPublicListEntry(current, publicUrl, content)
+          })
+        ).filter((entry): entry is PublicListEntry => entry !== null)
         return Response.json({ entries })
       } catch (error) {
         if (error instanceof BrowserAuthError) return json(error.code, error.status)

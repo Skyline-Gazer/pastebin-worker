@@ -148,39 +148,6 @@ describe("Feishu fixture rendering", () => {
     fetchMock.mockRestore()
   })
 
-  it("checks Markdown after a successful batch archive", async () => {
-    const user = userEvent.setup()
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            requested: 1,
-            succeeded: 1,
-            failed: 0,
-            results: [
-              {
-                id: "active-fixture",
-                status: "ok",
-                state: { visibility: "archived", retentionMode: "permanent", expiresAt: null },
-              },
-            ],
-          }),
-        ),
-      )
-    render(<App initialEntries={fixtureEntries} />)
-    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
-    await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
-    await user.click(screen.getByRole("button", { name: "永久归档" }))
-    await waitFor(() => expect(screen.queryByText("Active fixture")).not.toBeInTheDocument())
-    await user.click(screen.getByRole("tab", { name: "归档" }))
-    const archived = screen.getByText("Active fixture").closest("article")
-    if (!archived) throw new Error("expected archived batch row")
-    expect(within(archived).getAllByRole("checkbox", { name: "Markdown task" })[0]).toBeChecked()
-    fetchMock.mockRestore()
-  })
-
   it("retains selection and claims no success when a batch result is unreadable", async () => {
     const user = userEvent.setup()
     const fetchMock = vi
@@ -460,52 +427,6 @@ describe("Feishu fixture rendering", () => {
     fetchMock.mockRestore()
   })
 
-  it("unchecks restored Markdown after a successful restore", async () => {
-    const user = userEvent.setup()
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            entry: {
-              id: "checked-archive",
-              pasteName: "Restored task",
-              publicUrl: "https://example.invalid/p/restored-task",
-              visibility: "active",
-              retentionMode: "permanent",
-              expiresAt: null,
-              version: 2,
-            },
-          }),
-        ),
-      )
-    render(
-      <App
-        initialEntries={[
-          {
-            id: "checked-archive",
-            pasteName: "Checked archive",
-            publicUrl: "https://example.invalid/p/checked-archive",
-            content: "- [x] restored Markdown task",
-            visibility: "archived",
-            retentionMode: "permanent",
-            expiresAt: null,
-            managedTask: { state: "checked" },
-          },
-        ]}
-      />,
-    )
-    await user.click(screen.getByRole("tab", { name: "归档" }))
-    expect(screen.getByRole("checkbox", { name: "Markdown task" })).toBeChecked()
-    await user.click(screen.getByRole("button", { name: "Restore" }))
-    await waitFor(() => expect(screen.queryByText("Checked archive")).not.toBeInTheDocument())
-    await user.click(screen.getByRole("tab", { name: "进行中" }))
-    expect(screen.getByText("Restored task")).toBeVisible()
-    expect(screen.getByRole("checkbox", { name: "Markdown task" })).not.toBeChecked()
-    fetchMock.mockRestore()
-  })
-
   it("retains a permanent Archive row and hides server details when restore fails", async () => {
     const user = userEvent.setup()
     const fetchMock = vi
@@ -611,10 +532,6 @@ describe("Feishu fixture rendering", () => {
     const archive = screen.getByText("Authoritative archive").closest("article")
     if (!archive) throw new Error("expected authoritative archive row")
     expect(within(archive).getByRole("status", { name: /限期归档，剩余/ })).toBeVisible()
-    const archivedTasks = within(archive).getAllByRole("checkbox", { name: "Markdown task" })
-    expect(archivedTasks[0]).toBeChecked()
-    expect(archivedTasks[1]).toBeChecked()
-    expect(archivedTasks[2]).toBeChecked()
     fetchMock.mockRestore()
   })
 

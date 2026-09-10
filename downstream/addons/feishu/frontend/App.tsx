@@ -184,27 +184,6 @@ function needsReconciliation(entry: FixtureEntry) {
   )
 }
 
-function applyManagedTaskContent(content: string, state: "checked" | "unchecked"): string {
-  const wantUnchecked = state === "unchecked"
-  const candidates: number[] = []
-  let offset = 0
-  let fence: "`" | "~" | null = null
-  for (const line of content.split(/(?<=\n)/)) {
-    const fenceMatch = /^ {0,3}([`~])\1\1/.exec(line)
-    if (fenceMatch) {
-      if (!fence) fence = fenceMatch[1] as "`" | "~"
-      else if (fence === fenceMatch[1]) fence = null
-    } else if (!fence) {
-      const task = wantUnchecked ? /^(?:[-+*]|\d+[.)])\s+\[[xX]\]/.exec(line) : /^(?:[-+*]|\d+[.)])\s+\[ \]/.exec(line)
-      if (task) candidates.push(offset + task[0].indexOf("["))
-    }
-    offset += line.length
-  }
-  if (candidates.length !== 1) return content
-  const candidate = candidates[0]
-  return `${content.slice(0, candidate)}${wantUnchecked ? "[ ]" : "[x]"}${content.slice(candidate + 3)}`
-}
-
 function applyPublicResult(
   entries: readonly FixtureEntry[],
   result: PublicEntry | null,
@@ -221,7 +200,6 @@ function applyPublicResult(
           retentionMode: result.retentionMode,
           expiresAt: result.expiresAt,
           managedTask: { state: result.visibility === "archived" ? "checked" : "unchecked" },
-          content: applyManagedTaskContent(entry.content, result.visibility === "archived" ? "checked" : "unchecked"),
         }
       : entry,
   )
@@ -347,6 +325,18 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
     if (batchAction && prunedSelectedIds.size === 0) setBatchAction(null)
   }, [batchAction, prunedSelectedIds.size])
 
+  async function refreshLiveEntries() {
+    if (fixtureMode) return
+    try {
+      const listResponse = await fetch("/api/entries", { credentials: "include" })
+      if (!listResponse.ok) return
+      const parsed = asListEntries(await listResponse.json())
+      if (parsed) setEntries(parsed)
+    } catch {
+      /* keep the mutation result already applied */
+    }
+  }
+
   function closeCompletion() {
     setAction(null)
     setCompletionEntryId(null)
@@ -402,7 +392,6 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
               retentionMode: item.state.retentionMode,
               expiresAt: item.state.expiresAt,
               managedTask: { state: "checked" },
-              content: applyManagedTaskContent(entry.content, "checked"),
             },
           ]
         }),
@@ -410,6 +399,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
       setSelectedIds(new Set(failedIds))
       setBatchResult(result)
       setRetryIntent(failedIds.length > 0 ? { action: intent.action, entryIds: failedIds } : null)
+      await refreshLiveEntries()
     } catch {
       setError(true)
     } finally {
@@ -457,6 +447,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
       setAction(null)
       setCompletionEntryId(null)
       setCompletionRequestId(null)
+      await refreshLiveEntries()
     } catch {
       setError(true)
     } finally {
@@ -472,6 +463,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
     try {
       const result = await restoreEntry(entry.id, requestId)
       setEntries((current) => applyPublicResult(current, result, entry.id))
+      await refreshLiveEntries()
     } catch {
       setError(true)
     } finally {
@@ -486,6 +478,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
     try {
       const result = await reconcileEntry(entry.id)
       setEntries((current) => applyPublicResult(current, result, entry.id))
+      await refreshLiveEntries()
     } catch {
       setError(true)
     } finally {

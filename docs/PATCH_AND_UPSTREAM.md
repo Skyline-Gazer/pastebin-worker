@@ -227,6 +227,8 @@ e=never -> non-expiring Paste
 e=max   -> deployment MAX_EXPIRATION
 ```
 
+These tokens exist only after Patch 010 is replayed onto the pinned upstream SHA. Unpatched `upstream-sync`, official `goshujin`, and a raw `downstream/main` Worker checkout cannot parse them. See [`BUILD_DEPLOY.md`](BUILD_DEPLOY.md#11-tip-worker-vs-assembled-release).
+
 The patch may need to update upstream expiration metadata, KV behavior, R2 metadata/cleanup, validation, and tests.
 
 The patch must not know about:

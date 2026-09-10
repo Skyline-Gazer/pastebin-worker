@@ -111,6 +111,65 @@ describe("GET /api/entries", () => {
     expect(client.read).toHaveBeenCalledWith("abcd")
   })
 
+  it("omits a binding that gains a pending mutation after the final binding read starts", async () => {
+    const ready = {
+      id: "entry-a",
+      scope_id: "scope-a",
+      record_key: "record-a",
+      credential: "sealed.credential.secret",
+      paste_name: "abcd",
+      visibility: "active",
+      retention_mode: "permanent",
+      expires_at: null,
+      version: 1,
+    }
+    const stable = {
+      id: "entry-b",
+      scope_id: "scope-a",
+      record_key: "record-b",
+      credential: "sealed.other",
+      paste_name: "efgh",
+      visibility: "active",
+      retention_mode: "permanent",
+      expires_at: null,
+      version: 1,
+    }
+    const trust = { getSession: vi.fn().mockResolvedValue(session), scopes: vi.fn().mockResolvedValue(["scope-a"]) }
+    let sawFinalRead = false
+    const bindings = {
+      listReadyForScopes: vi.fn().mockResolvedValue([ready, stable]),
+      getById: vi.fn().mockImplementation((id: string) => {
+        if (id === "entry-a") sawFinalRead = true
+        return Promise.resolve(id === "entry-a" ? ready : stable)
+      }),
+      pending: vi
+        .fn()
+        .mockImplementation((id: string) => Promise.resolve(id === "entry-a" && sawFinalRead ? { id: "op-a" } : null)),
+    }
+    const client = {
+      publicUrl: vi.fn((name: string) => `https://pb.223.im/${name}`),
+      read: vi.fn().mockResolvedValue("- [ ] live task"),
+    }
+    const handler = createEntriesListHandler(env, trust as never, bindings as never, client)
+    const result = await handler.fetch(request())
+    expect(result?.status).toBe(200)
+    expect(await result?.json()).toEqual({
+      entries: [
+        {
+          id: "entry-b",
+          pasteName: "efgh",
+          publicUrl: "https://pb.223.im/efgh",
+          visibility: "active",
+          retentionMode: "permanent",
+          expiresAt: null,
+          version: 1,
+          content: "- [ ] live task",
+          managedTask: { state: "unchecked" },
+        },
+      ],
+    })
+  })
+
   it("omits a binding whose version or pending status changed during the Paste read", async () => {
     const ready = {
       id: "entry-a",

@@ -67,9 +67,9 @@ export function createEntriesListHandler(
               if (error instanceof PasteError && error.code === "ENTRY_NOT_FOUND") return null
               throw error
             }
-            if (await bindings.pending(binding.id)) return null
             const current = await bindings.getById(binding.id)
             if (!current?.paste_name || current.version !== binding.version) return null
+            if (await bindings.pending(current.id)) return null
             return toPublicListEntry(current, publicUrl, content)
           })
         ).filter((entry): entry is PublicListEntry => entry !== null)

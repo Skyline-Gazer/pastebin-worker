@@ -5,7 +5,15 @@ import type { BindingStore } from "./store"
 import type { PublicListEntry } from "../shared/entries"
 
 const LIST_LIMIT = 50
+const READ_CONCURRENCY = 4
 const json = (code: string, status: number) => Response.json({ code }, { status })
+
+async function mapPool<T, R>(items: readonly T[], concurrency: number, mapper: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = []
+  for (let index = 0; index < items.length; index += concurrency)
+    out.push(...(await Promise.all(items.slice(index, index + concurrency).map(mapper))))
+  return out
+}
 
 function toPublicListEntry(
   binding: {
@@ -48,17 +56,12 @@ export function createEntriesListHandler(
         const session = await requireBrowserSession(request, env, trust)
         const scopes = await trust.scopes(session.principalKey)
         const rows = await bindings.listReadyForScopes(scopes, LIST_LIMIT)
-        const entries: PublicListEntry[] = []
-        for (const binding of rows) {
-          if (!binding.paste_name) continue
-          try {
-            const publicUrl = client.publicUrl(binding.paste_name)
-            const content = await client.read(binding.paste_name)
-            entries.push(toPublicListEntry(binding, publicUrl, content))
-          } catch {
-            continue
-          }
-        }
+        const entries = await mapPool(rows, READ_CONCURRENCY, async (binding) => {
+          if (!binding.paste_name) throw new Error("READY_BINDING_UNNAMED")
+          const publicUrl = client.publicUrl(binding.paste_name)
+          const content = await client.read(binding.paste_name)
+          return toPublicListEntry(binding, publicUrl, content)
+        })
         return Response.json({ entries })
       } catch (error) {
         if (error instanceof BrowserAuthError) return json(error.code, error.status)

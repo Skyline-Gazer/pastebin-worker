@@ -111,6 +111,33 @@ describe("GET /api/entries", () => {
     expect(bindings.listReadyForScopes).toHaveBeenCalledWith(["scope-a"], 50)
     expect(client.read).not.toHaveBeenCalled()
   })
+
+  it("fails closed when a Paste body cannot be read", async () => {
+    const trust = { getSession: vi.fn().mockResolvedValue(session), scopes: vi.fn().mockResolvedValue(["scope-a"]) }
+    const bindings = {
+      listReadyForScopes: vi.fn().mockResolvedValue([
+        {
+          id: "entry-a",
+          scope_id: "scope-a",
+          record_key: "record-a",
+          credential: "sealed.credential.secret",
+          paste_name: "abcd",
+          visibility: "active",
+          retention_mode: "permanent",
+          expires_at: null,
+          version: 1,
+        },
+      ]),
+    }
+    const client = {
+      publicUrl: vi.fn((name: string) => `https://pb.223.im/${name}`),
+      read: vi.fn().mockRejectedValue(new Error("UPSTREAM_UNCERTAIN")),
+    }
+    const handler = createEntriesListHandler(env, trust as never, bindings as never, client)
+    const result = await handler.fetch(request())
+    expect(result?.status).toBe(503)
+    expect(await result?.json()).toEqual({ code: "STORAGE_OR_CREDENTIAL_UNAVAILABLE" })
+  })
 })
 
 describe("BindingStore.listReadyForScopes", () => {
@@ -160,5 +187,24 @@ describe("BindingStore.listReadyForScopes", () => {
     const store = new BindingStore(db)
     const rows = await store.listReadyForScopes(["scope-a"], 50)
     expect(rows.map((row) => row.id)).toEqual(["ready-a"])
+  })
+
+  it("includes ready bindings from mapped scopes beyond the first 32", async () => {
+    const now = "2020-01-01T00:00:00.000Z"
+    const scopes = Array.from({ length: 33 }, (_, index) => `scope-${index + 1}`)
+    for (const [index, scopeId] of scopes.entries()) {
+      await db
+        .prepare(
+          `INSERT INTO feishu_bindings
+          (id, scope_id, record_key, credential, paste_name, visibility, retention_mode, expires_at, version, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, 'active', 'permanent', NULL, ?, ?, ?)`,
+        )
+        .bind(`ready-${index + 1}`, scopeId, `record-${index + 1}`, "sealed", `paste-${index + 1}`, 1, now, now)
+        .run()
+    }
+    const store = new BindingStore(db)
+    const rows = await store.listReadyForScopes(scopes, 50)
+    expect(rows).toHaveLength(33)
+    expect(rows.map((row) => row.id)).toContain("ready-33")
   })
 })

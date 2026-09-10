@@ -184,6 +184,27 @@ function needsReconciliation(entry: FixtureEntry) {
   )
 }
 
+function applyManagedTaskContent(content: string, state: "checked" | "unchecked"): string {
+  const wantUnchecked = state === "unchecked"
+  const candidates: number[] = []
+  let offset = 0
+  let fence: "`" | "~" | null = null
+  for (const line of content.split(/(?<=\n)/)) {
+    const fenceMatch = /^ {0,3}([`~])\1\1/.exec(line)
+    if (fenceMatch) {
+      if (!fence) fence = fenceMatch[1] as "`" | "~"
+      else if (fence === fenceMatch[1]) fence = null
+    } else if (!fence) {
+      const task = wantUnchecked ? /^(?:[-+*]|\d+[.)])\s+\[[xX]\]/.exec(line) : /^(?:[-+*]|\d+[.)])\s+\[ \]/.exec(line)
+      if (task) candidates.push(offset + task[0].indexOf("["))
+    }
+    offset += line.length
+  }
+  if (candidates.length !== 1) return content
+  const candidate = candidates[0]
+  return `${content.slice(0, candidate)}${wantUnchecked ? "[ ]" : "[x]"}${content.slice(candidate + 3)}`
+}
+
 function applyPublicResult(
   entries: readonly FixtureEntry[],
   result: PublicEntry | null,
@@ -200,6 +221,7 @@ function applyPublicResult(
           retentionMode: result.retentionMode,
           expiresAt: result.expiresAt,
           managedTask: { state: result.visibility === "archived" ? "checked" : "unchecked" },
+          content: applyManagedTaskContent(entry.content, result.visibility === "archived" ? "checked" : "unchecked"),
         }
       : entry,
   )
@@ -380,6 +402,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
               retentionMode: item.state.retentionMode,
               expiresAt: item.state.expiresAt,
               managedTask: { state: "checked" },
+              content: applyManagedTaskContent(entry.content, "checked"),
             },
           ]
         }),

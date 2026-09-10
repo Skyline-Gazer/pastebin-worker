@@ -15,6 +15,7 @@ downstream/addons/feishu/
 ```
 
 Frontend and webhook/backend are part of the same product unit even if built separately.
+Production serves both from Worker `pastebin-feishu-prod` (workers.dev, no custom Feishu hostname).
 
 ## 2. Frontend responsibilities
 

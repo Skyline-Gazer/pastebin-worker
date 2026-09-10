@@ -16,6 +16,8 @@ Browser authentication is Feishu/Lark OAuth authorization-code followed by a ser
 
 State-changing browser requests require the authenticated opaque Add-on session, exact allowed `Origin`, and a session-bound CSRF header. The Worker derives the principal server-side and authorizes by principal → allowed scopes → binding/entry; entry ID alone never establishes scope.
 
+`GET /api/entries` is the production boot list. It requires the opaque session cookie and ignores caller-supplied scope/tenant query parameters. CSRF/Origin are not authority for this GET. The Worker lists at most 50 ready bindings for server-mapped scopes, reads each Paste body via `PasteClient`, and returns `{ entries }` with public fields plus `content` and `managedTask`. It never returns credential, password, tenant, open_id, principal, OAuth, or fingerprint fields.
+
 ## 2. Entry shape returned to frontend
 
 Example public shape:

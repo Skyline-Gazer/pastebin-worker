@@ -47,6 +47,31 @@ export class BindingStore {
     return this.db.prepare("SELECT * FROM feishu_bindings WHERE id = ?").bind(id).first<Binding>()
   }
 
+  /** Ready means versioned, named, and without an outstanding mutation. */
+  async listReadyForScopes(scopeIds: readonly string[], limit: number): Promise<Binding[]> {
+    const scopes = [...new Set(scopeIds.filter(Boolean))].slice(0, 32)
+    if (scopes.length === 0) return []
+    const capped = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 50
+    const placeholders = scopes.map(() => "?").join(",")
+    const result = await this.db
+      .prepare(
+        `SELECT b.* FROM feishu_bindings b
+         WHERE b.scope_id IN (${placeholders})
+           AND b.version > 0
+           AND b.paste_name IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM feishu_operations o
+             WHERE o.entry_id = b.id
+               AND o.status IN ('reserved', 'dispatched', 'reconciliation_required')
+           )
+         ORDER BY b.updated_at DESC, b.id DESC
+         LIMIT ?`,
+      )
+      .bind(...scopes, capped)
+      .all<Binding>()
+    return result.results
+  }
+
   operation(scope: string, requestId: string): Promise<Operation | null> {
     return this.db
       .prepare("SELECT * FROM feishu_operations WHERE scope_id = ? AND request_id = ?")

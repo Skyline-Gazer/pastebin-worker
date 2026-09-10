@@ -1,6 +1,6 @@
 import { BrowserAuthError, requireBrowserSession, type BrowserAuthEnvironment } from "./browser-auth"
 import type { BrowserTrustStore } from "./browser-store"
-import type { PasteClient } from "./paste-client"
+import { PasteError, type PasteClient } from "./paste-client"
 import type { BindingStore } from "./store"
 import type { PublicListEntry } from "../shared/entries"
 
@@ -60,7 +60,13 @@ export function createEntriesListHandler(
           await mapPool(rows, READ_CONCURRENCY, async (binding) => {
             if (!binding.paste_name) throw new Error("READY_BINDING_UNNAMED")
             const publicUrl = client.publicUrl(binding.paste_name)
-            const content = await client.read(binding.paste_name)
+            let content: string
+            try {
+              content = await client.read(binding.paste_name)
+            } catch (error) {
+              if (error instanceof PasteError && error.code === "ENTRY_NOT_FOUND") return null
+              throw error
+            }
             if (await bindings.pending(binding.id)) return null
             const current = await bindings.getById(binding.id)
             if (!current?.paste_name || current.version !== binding.version) return null

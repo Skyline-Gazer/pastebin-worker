@@ -23,13 +23,14 @@ jobs:
       # Shared Cloudflare runtime declarations import the upstream Worker, whose
       # page modules require this generated SSR manifest during type checking.
       - run: pnpm build:frontend
-      - run: pnpm prettier -c downstream/addons/feishu docs/planning .github/workflows/feishu-phase3.yml
+      - run: pnpm prettier -c downstream/addons/feishu docs/planning .github/workflows/feishu-phase3.yml .github/workflows/upstream-sync.yml
       - run: pnpm exec eslint downstream/addons/feishu
       - run: pnpm exec tsc --noEmit -p downstream/addons/feishu/tsconfig.json
       - run: pnpm exec vitest run --config downstream/addons/feishu/vitest.config.js
       - run: pnpm exec vite build --config downstream/addons/feishu/vite.config.js
       - run: downstream/tests/release-candidate.test.sh
       - run: downstream/tests/issue86-tip-vs-assembled.test.sh
+      - run: downstream/tests/upstream-sync.test.sh
       # git am during assembly needs a local committer identity on Actions runners.
       - run: |
           git config user.name "github-actions[bot]"

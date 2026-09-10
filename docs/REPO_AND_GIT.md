@@ -24,7 +24,8 @@ Rules:
 - no dependency updates not merged upstream;
 - no downstream customization;
 - no exported patches applied as committed source;
-- used as the trusted source of upstream baseline SHAs.
+- used as the trusted source of upstream baseline SHAs;
+- updated only by fast-forward from official `goshujin` (see `docs/PATCH_AND_UPSTREAM.md` §2).
 
 Any change not present in official upstream is downstream-owned and MUST NOT be committed to `upstream-sync`.
 

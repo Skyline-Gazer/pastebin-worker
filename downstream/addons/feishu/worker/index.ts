@@ -7,6 +7,7 @@ import { createBrowserAuthHandler, type BrowserAuthEnvironment } from "./browser
 import { createCompletionHandler } from "./completion"
 import { createRestoreHandler } from "./restore"
 import { createReconciliationHandler } from "./reconcile"
+import { createEntriesListHandler } from "./entries"
 import { BatchLifecycleCoordinator, createBatchDispatch, createBatchHandler } from "./batch"
 import { derivePrincipalKey } from "./principal"
 import { consumeFeishuMessages, createFeishuWebhookHandler, type FeishuWebhookEnvironment } from "./webhook"
@@ -20,6 +21,10 @@ export interface Phase4Environment extends FeishuWebhookEnvironment, BrowserAuth
   PASTEBIN_AUTHORIZATION?: string
 }
 
+export interface FeishuProductionEnvironment extends Phase4Environment {
+  ASSETS?: Fetcher
+}
+
 /** Constructs the only public adapter; it never accepts caller-selected Phase 3 identities. */
 export async function createPhase4Worker(env: Phase4Environment) {
   const credentials = await Credentials.create(
@@ -28,11 +33,8 @@ export async function createPhase4Worker(env: Phase4Environment) {
     env.FEISHU_FINGERPRINT_KEY,
   )
   const bindings = new BindingStore(env.FEISHU_BINDINGS_DB)
-  const service = new EntryService(
-    bindings,
-    credentials,
-    new PasteClient(env.PASTEBIN_ORIGIN, fetch, env.PASTEBIN_AUTHORIZATION),
-  )
+  const client = new PasteClient(env.PASTEBIN_ORIGIN, fetch, env.PASTEBIN_AUTHORIZATION)
+  const service = new EntryService(bindings, credentials, client)
   const trustStore = new BrowserTrustStore(env.FEISHU_BINDINGS_DB)
   const handler = createFeishuWebhookHandler(env, trustStore, (appId, tenantKey, openId) =>
     derivePrincipalKey(env.FEISHU_PRINCIPAL_KEY, appId, tenantKey, openId),
@@ -43,6 +45,7 @@ export async function createPhase4Worker(env: Phase4Environment) {
   const reconciliation = createReconciliationHandler(env, trustStore, bindings, service)
   const batchLifecycle = new BatchLifecycleCoordinator(bindings, bindings, service)
   const batch = createBatchHandler(env, trustStore, createBatchDispatch(batchLifecycle))
+  const entries = createEntriesListHandler(env, trustStore, bindings, client)
   return {
     fetch: async (request: Request) =>
       (await browser.fetch(request)) ??
@@ -50,6 +53,7 @@ export async function createPhase4Worker(env: Phase4Environment) {
       (await restore.fetch(request)) ??
       (await reconciliation.fetch(request)) ??
       (await batch.fetch(request)) ??
+      (await entries.fetch(request)) ??
       handler.fetch(request),
     queue: (batch: Parameters<typeof consumeFeishuMessages>[0]) =>
       consumeFeishuMessages(batch, service, undefined, env.FEISHU_INGRESS_DLQ_CONFIGURED === "true"),
@@ -58,7 +62,12 @@ export async function createPhase4Worker(env: Phase4Environment) {
 
 /** Cloudflare module-worker entrypoint; construction remains fail-closed on every invocation. */
 export default {
-  fetch: async (request: Request, env: Phase4Environment) => (await createPhase4Worker(env)).fetch(request),
+  fetch: async (request: Request, env: FeishuProductionEnvironment) => {
+    const path = new URL(request.url).pathname
+    if (path.startsWith("/api/")) return (await createPhase4Worker(env)).fetch(request)
+    if ((request.method === "GET" || request.method === "HEAD") && env.ASSETS) return env.ASSETS.fetch(request)
+    return Response.json({ code: "NOT_FOUND" }, { status: 404 })
+  },
   queue: async (batch: Parameters<typeof consumeFeishuMessages>[0], env: Phase4Environment) =>
     (await createPhase4Worker(env)).queue(batch),
 }
@@ -70,12 +79,13 @@ export { PasteClient } from "./paste-client"
 export { BrowserTrustStore } from "./browser-store"
 export { authorizeBrowserMutation, createBrowserAuthHandler, requireBrowserSession } from "./browser-auth"
 export { createCompletionHandler } from "./completion"
+export { createEntriesListHandler } from "./entries"
 export { createRestoreHandler } from "./restore"
 export { createReconciliationHandler } from "./reconcile"
 export { createBatchHandler } from "./batch"
 export { BatchLifecycleCoordinator } from "./batch"
 export { derivePrincipalKey } from "./principal"
-export type { EntryContext, EntryResult, PublicEntry } from "../shared/entries"
+export type { EntryContext, EntryResult, PublicEntry, PublicListEntry } from "../shared/entries"
 export type { BatchAction, BatchItemResult, BatchPublicEntryState, BatchRequest, BatchResult } from "../shared/batch"
 export {
   consumeFeishuMessages,

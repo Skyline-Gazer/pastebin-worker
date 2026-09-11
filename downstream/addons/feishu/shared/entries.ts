@@ -8,6 +8,11 @@ export interface PublicEntry {
   version: number
 }
 
+export interface PublicListEntry extends PublicEntry {
+  content: string
+  managedTask: { state: "unchecked" | "checked" }
+}
+
 export type EntryResult =
   | { ok: true; entry: PublicEntry; content?: string }
   | { ok: false; code: string; retryable: boolean; correlationId: string }

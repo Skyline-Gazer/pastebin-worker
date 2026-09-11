@@ -60,6 +60,8 @@ FeishuPage
 
 Names are suggestions, semantics are required.
 
+Production boot loads entries from the Add-on session and `GET /api/entries`. Typed fixtures are test-only via explicit `initialEntries`; the production page must not render them by default.
+
 ## 4. Rendered Markdown
 
 Use a GFM-capable parser. Avoid raw `/d/<name>`-style syntax display as the default.

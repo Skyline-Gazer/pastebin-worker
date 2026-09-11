@@ -72,6 +72,10 @@ Protect critical layout semantics rather than exact pixels:
 - no required avatar/profile/sidebar UI;
 - Batch control is compact and separate;
 - light/dark behavior follows upstream-aligned tokens where implemented.
+- production `App` does not default to fixture entries;
+- unauthenticated boot offers Feishu login and never renders fixtures;
+- authenticated empty list is EMPTY;
+- list or session failure is ERROR, never fixtures.
 
 ## 4. Single completion tests
 
@@ -116,6 +120,10 @@ For `archive_permanent`, `archive_expiring`, and `delete`, test:
 - failed item does not roll back unrelated success;
 - sanitized failure codes;
 - retry/idempotency behavior where implemented.
+
+`GET /api/entries` must also cover: unauthenticated 401, server-mapped scopes only,
+ignored caller scope query parameters, bounded listing, Paste bodies from `PasteClient`
+rather than D1, and no credential/password/tenant/open_id/principal/OAuth/fingerprint leak.
 
 ## 8. Password/security tests
 

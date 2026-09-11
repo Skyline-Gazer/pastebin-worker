@@ -1,0 +1,31 @@
+# Production Worker contract for the Feishu Add-on.
+# Resource UUIDs are applied by the deploy overlay; this file pins names and bindings only.
+
+name = "pastebin-feishu-prod"
+main = "worker/index.ts"
+compatibility_date = "2026-07-01"
+workers_dev = true
+
+[assets]
+directory = "./dist/frontend"
+binding = "ASSETS"
+run_worker_first = true
+
+[vars]
+PASTEBIN_ORIGIN = "https://pb.223.im"
+FEISHU_INGRESS_DLQ_CONFIGURED = "false"
+
+[[d1_databases]]
+binding = "FEISHU_BINDINGS_DB"
+database_name = "pastebin-feishu-prod"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "./migrations"
+
+[[queues.producers]]
+binding = "FEISHU_INGRESS_QUEUE"
+queue = "pastebin-feishu-ingress-prod"
+
+[[queues.consumers]]
+queue = "pastebin-feishu-ingress-prod"
+max_retries = 5
+dead_letter_queue = "pastebin-feishu-ingress-dlq-prod"

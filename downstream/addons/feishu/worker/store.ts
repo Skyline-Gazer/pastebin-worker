@@ -47,6 +47,38 @@ export class BindingStore {
     return this.db.prepare("SELECT * FROM feishu_bindings WHERE id = ?").bind(id).first<Binding>()
   }
 
+  /** Ready means versioned, named, and without an outstanding mutation. */
+  async listReadyForScopes(scopeIds: readonly string[], limit: number): Promise<Binding[]> {
+    const scopes = [...new Set(scopeIds.filter(Boolean))]
+    if (scopes.length === 0) return []
+    const capped = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 50
+    const found = new Map<string, Binding & { updated_at: string }>()
+    for (let index = 0; index < scopes.length; index += 32) {
+      const chunk = scopes.slice(index, index + 32)
+      const placeholders = chunk.map(() => "?").join(",")
+      const result = await this.db
+        .prepare(
+          `SELECT b.* FROM feishu_bindings b
+           WHERE b.scope_id IN (${placeholders})
+             AND b.version > 0
+             AND b.paste_name IS NOT NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM feishu_operations o
+               WHERE o.entry_id = b.id
+                 AND o.status IN ('reserved', 'dispatched', 'reconciliation_required')
+             )
+           ORDER BY b.updated_at DESC, b.id DESC
+           LIMIT ?`,
+        )
+        .bind(...chunk, capped)
+        .all<Binding & { updated_at: string }>()
+      for (const row of result.results) found.set(row.id, row)
+    }
+    return [...found.values()]
+      .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.id.localeCompare(left.id))
+      .slice(0, capped)
+  }
+
   operation(scope: string, requestId: string): Promise<Operation | null> {
     return this.db
       .prepare("SELECT * FROM feishu_operations WHERE scope_id = ? AND request_id = ?")

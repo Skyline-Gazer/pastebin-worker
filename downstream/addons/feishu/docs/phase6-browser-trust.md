@@ -33,6 +33,7 @@ The Worker exposes these browser routes:
 - `GET /api/auth/callback` consumes one server-stored state value, exchanges the code server-side, resolves `open_id` and `tenant_key`, and issues an opaque eight-hour Add-on session cookie.
 - `GET /api/auth/session` returns the session-bound CSRF token and expiry for an authenticated session.
 - `POST /api/auth/logout` deletes the server session.
+- `GET /api/entries` lists at most 50 ready bindings for the session principal's server-mapped scopes and returns public entry state plus Paste content. Caller query parameters are ignored. The response never includes credential, password, tenant, open_id, principal, OAuth, or fingerprint fields.
 
 Provision these secrets/configuration outside source control: `FEISHU_APP_SECRET`,
 `FEISHU_OAUTH_REDIRECT_URI`, `FEISHU_ALLOWED_ORIGINS` (comma-separated exact origins), and

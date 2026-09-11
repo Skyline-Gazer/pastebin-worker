@@ -9,6 +9,7 @@ shared/     cross-runtime public types/schemas
 tests/      integration/cross-module tests
 docs/       Add-on-local implementation notes
 migrations/ Add-on state-store migrations when required
+wrangler.toml production Worker binding contract
 ```
 
 Key rules:
@@ -48,22 +49,23 @@ node_modules/.bin/vite build --config downstream/addons/feishu/frontend/vite.con
 ```
 
 The downstream-only `Feishu internal services` workflow runs these checks independently
-of upstream PR Tests. The build produces an internal ES module, not a deployed management endpoint.
+of upstream PR Tests. The build produces an internal ES module plus a production Worker contract in `wrangler.toml`.
+The frontend Vite build emits static assets for the same Worker `[assets]` binding.
 The frontend build is a typecheck prerequisite: the reused root Cloudflare declarations import
 upstream Worker page modules that depend on the generated SSR manifest. A pre-existing local
 `dist/` must not be mistaken for a clean-checkout prerequisite being satisfied in CI.
 
 ## Phase 5 fixture baseline
 
-The browser baseline uses typed, public-safe local fixtures only; it makes no browser request or
-live-state claim. Its Active/Archive tabs and sanitized GFM rendering are presentation-only. The
-visibly distinct managed task checkbox is deliberately inert in Phase 5: a click does not change
-Markdown or fixture state, open the Phase 6 chooser, select a retention action, or contact a Worker.
+Typed local fixtures remain available for frontend tests and explicit
+`initialEntries` development. Production `App` does not default to fixtures;
+`frontend/src/main.tsx` boots from the live session and `GET /api/entries`.
 
 ## Phase 4 webhook foundation
 
-The Worker now exposes only `POST /api/feishu/events` through the explicit Phase 4 adapter.
-It is an encrypted Feishu callback-to-Queue boundary, not a public Paste management API. See
+The Worker now exposes `POST /api/feishu/events` through the explicit Phase 4 adapter
+alongside later browser and list routes. The webhook remains an encrypted Feishu
+callback-to-Queue boundary, not a public Paste management API. See
 the [webhook configuration and DLQ recovery runbook](docs/phase4-webhook.md).
 
 ## Phase 6.0 browser trust boundary

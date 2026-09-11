@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { BatchResult } from "../shared/batch"
 import type { PublicEntry } from "../shared/entries"
-import { fixtureEntries, type FixtureEntry } from "./fixtures"
+import { type FixtureEntry } from "./fixtures"
 import { ArchiveStatus } from "./ArchiveStatus"
 import { BatchActionBar, type BatchAction } from "./BatchActionBar"
 import { BatchActionDialog } from "./BatchActionDialog"
@@ -205,7 +205,43 @@ function applyPublicResult(
   )
 }
 
-export function App({ initialEntries = fixtureEntries }: { initialEntries?: readonly FixtureEntry[] }) {
+type BootState = "unauthenticated" | "loading" | "ready" | "empty" | "error"
+
+function asListEntries(value: unknown): FixtureEntry[] | null {
+  if (!value || typeof value !== "object" || !Array.isArray((value as { entries?: unknown }).entries)) return null
+  const parsed: FixtureEntry[] = []
+  for (const item of (value as { entries: unknown[] }).entries) {
+    if (!item || typeof item !== "object") return null
+    const entry = item as Record<string, unknown>
+    const task = entry.managedTask
+    if (
+      typeof entry.id !== "string" ||
+      typeof entry.pasteName !== "string" ||
+      typeof entry.content !== "string" ||
+      (entry.visibility !== "active" && entry.visibility !== "archived") ||
+      (entry.retentionMode !== "permanent" && entry.retentionMode !== "timed") ||
+      (entry.expiresAt !== null && typeof entry.expiresAt !== "string") ||
+      !task ||
+      typeof task !== "object" ||
+      ((task as { state?: unknown }).state !== "checked" && (task as { state?: unknown }).state !== "unchecked")
+    )
+      return null
+    parsed.push({
+      id: entry.id,
+      pasteName: entry.pasteName,
+      publicUrl: typeof entry.publicUrl === "string" ? entry.publicUrl : "",
+      content: entry.content,
+      visibility: entry.visibility,
+      retentionMode: entry.retentionMode,
+      expiresAt: entry.expiresAt,
+      managedTask: { state: (task as { state: "checked" | "unchecked" }).state },
+    })
+  }
+  return parsed
+}
+
+export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry[] }) {
+  const fixtureMode = initialEntries !== undefined
   const [theme, setTheme] = useState<Theme>("light")
   const [tab, setTab] = useState<Tab>("active")
   const [batchMode, setBatchMode] = useState(false)
@@ -214,7 +250,8 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
   const [batchResult, setBatchResult] = useState<BatchResult | null>(null)
   const [retryIntent, setRetryIntent] = useState<BatchActionIntent | null>(null)
   const [batchPending, setBatchPending] = useState(false)
-  const [entries, setEntries] = useState<FixtureEntry[]>(() => [...initialEntries])
+  const [boot, setBoot] = useState<BootState>(fixtureMode ? "ready" : "loading")
+  const [entries, setEntries] = useState<FixtureEntry[]>(() => (fixtureMode ? [...initialEntries] : []))
   const [action, setAction] = useState<CompletionAction | null>(null)
   const [completionEntryId, setCompletionEntryId] = useState<string | null>(null)
   const [completionRequestId, setCompletionRequestId] = useState<string | null>(null)
@@ -235,6 +272,44 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
   }, [theme])
 
   useEffect(() => {
+    if (fixtureMode) return
+    let cancelled = false
+    async function loadLiveEntries() {
+      try {
+        const sessionResponse = await fetch("/api/auth/session", { credentials: "include" })
+        if (sessionResponse.status === 401) {
+          if (!cancelled) setBoot("unauthenticated")
+          return
+        }
+        if (!sessionResponse.ok) {
+          if (!cancelled) setBoot("error")
+          return
+        }
+        const listResponse = await fetch("/api/entries", { credentials: "include" })
+        if (!listResponse.ok) {
+          if (!cancelled) setBoot("error")
+          return
+        }
+        const parsed = asListEntries(await listResponse.json())
+        if (!parsed) {
+          if (!cancelled) setBoot("error")
+          return
+        }
+        if (!cancelled) {
+          setEntries(parsed)
+          setBoot(parsed.length === 0 ? "empty" : "ready")
+        }
+      } catch {
+        if (!cancelled) setBoot("error")
+      }
+    }
+    void loadLiveEntries()
+    return () => {
+      cancelled = true
+    }
+  }, [fixtureMode])
+
+  useEffect(() => {
     if (action && !pending) completionDialogRef.current?.focus()
   }, [action, pending])
 
@@ -249,6 +324,18 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
   useEffect(() => {
     if (batchAction && prunedSelectedIds.size === 0) setBatchAction(null)
   }, [batchAction, prunedSelectedIds.size])
+
+  async function refreshLiveEntries() {
+    if (fixtureMode) return
+    try {
+      const listResponse = await fetch("/api/entries", { credentials: "include" })
+      if (!listResponse.ok) return
+      const parsed = asListEntries(await listResponse.json())
+      if (parsed) setEntries(parsed)
+    } catch {
+      /* keep the mutation result already applied */
+    }
+  }
 
   function closeCompletion() {
     setAction(null)
@@ -312,6 +399,7 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
       setSelectedIds(new Set(failedIds))
       setBatchResult(result)
       setRetryIntent(failedIds.length > 0 ? { action: intent.action, entryIds: failedIds } : null)
+      await refreshLiveEntries()
     } catch {
       setError(true)
     } finally {
@@ -359,6 +447,7 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
       setAction(null)
       setCompletionEntryId(null)
       setCompletionRequestId(null)
+      await refreshLiveEntries()
     } catch {
       setError(true)
     } finally {
@@ -374,6 +463,7 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
     try {
       const result = await restoreEntry(entry.id, requestId)
       setEntries((current) => applyPublicResult(current, result, entry.id))
+      await refreshLiveEntries()
     } catch {
       setError(true)
     } finally {
@@ -388,6 +478,7 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
     try {
       const result = await reconcileEntry(entry.id)
       setEntries((current) => applyPublicResult(current, result, entry.id))
+      await refreshLiveEntries()
     } catch {
       setError(true)
     } finally {
@@ -408,112 +499,127 @@ export function App({ initialEntries = fixtureEntries }: { initialEntries?: read
           </button>
         </header>
         <div className="shell-body">
-          <div aria-label="Fixture views" role="tablist" className="view-tabs">
-            <button
-              aria-controls="fixture-panel"
-              aria-selected={tab === "active"}
-              onClick={() => setTab("active")}
-              role="tab"
-              type="button"
-            >
-              进行中
-            </button>
-            <button
-              aria-controls="fixture-panel"
-              aria-selected={tab === "archived"}
-              onClick={() => setTab("archived")}
-              role="tab"
-              type="button"
-            >
-              归档
-            </button>
-          </div>
-          {tab === "active" && <BatchModeToggle batchMode={batchMode} onToggle={toggleBatchMode} />}
-          {batchMode && (
-            <p className="visually-hidden" id="batch-mode-lock-explanation">
-              Batch Mode is active. Use Batch Selectors or exit Batch Mode to complete an entry.
+          {boot === "loading" && <p>Loading…</p>}
+          {boot === "unauthenticated" && (
+            <p>
+              <a href="/api/auth/login">Sign in with Feishu</a>
             </p>
           )}
-          {batchMode && tab === "active" && visibleEligibleIds && (
-            <div aria-label="Batch selection controls" className="batch-selection-controls">
-              <button type="button" onClick={selectAllVisibleEligible}>
-                全选
-              </button>
-              <button type="button" onClick={() => setSelectedIds(new Set())}>
-                清空
-              </button>
-            </div>
-          )}
-          {batchMode && tab === "active" && (
-            <BatchActionBar
-              count={prunedSelectedIds.size}
-              disabled={batchPending}
-              onAction={(nextAction) => beginBatchAction(nextAction, document.activeElement as HTMLButtonElement)}
-            />
-          )}
-          {batchResult && (
-            <p role="status">
-              已处理 {batchResult.succeeded} 项，{batchResult.failed} 项失败
-            </p>
-          )}
-          {retryIntent && !batchPending && (
-            <button type="button" onClick={() => void submitBatchIntent(retryIntent)}>
-              Retry failed items
-            </button>
-          )}
-          {error && <p role="alert">Unable to update entry. Please try again.</p>}
-          <section id="fixture-panel" aria-label={tab === "active" ? "进行中" : "归档"} role="tabpanel">
-            {visibleEntries.map((entry) => (
-              <article className="fixture-entry" key={entry.id}>
-                <h2>{entry.pasteName}</h2>
-                {tab === "active" ? (
-                  <div className="active-entry-controls">
-                    {batchMode && visibleEligibleIds?.has(entry.id) && (
-                      <BatchSelector
-                        checked={prunedSelectedIds.has(entry.id)}
-                        entryName={entry.pasteName}
-                        onToggle={() => toggleBatchSelection(entry.id)}
-                      />
-                    )}
-                    <ManagedTaskCheckbox
-                      checked={entry.managedTask.state === "checked"}
-                      disabled={pending || batchMode}
-                      disabledDescriptionId={batchMode ? "batch-mode-lock-explanation" : undefined}
-                      onComplete={(control) => {
-                        completionTriggerRef.current = control
-                        setCompletionEntryId(entry.id)
-                        setError(false)
-                        selectCompletionAction("archive_permanent")
-                      }}
-                    />
-                  </div>
+          {boot === "error" && <p role="alert">Unable to load entries.</p>}
+          {(boot === "ready" || boot === "empty") && (
+            <>
+              <div aria-label="Entry views" role="tablist" className="view-tabs">
+                <button
+                  aria-controls="entry-panel"
+                  aria-selected={tab === "active"}
+                  onClick={() => setTab("active")}
+                  role="tab"
+                  type="button"
+                >
+                  进行中
+                </button>
+                <button
+                  aria-controls="entry-panel"
+                  aria-selected={tab === "archived"}
+                  onClick={() => setTab("archived")}
+                  role="tab"
+                  type="button"
+                >
+                  归档
+                </button>
+              </div>
+              {tab === "active" && <BatchModeToggle batchMode={batchMode} onToggle={toggleBatchMode} />}
+              {batchMode && (
+                <p className="visually-hidden" id="batch-mode-lock-explanation">
+                  Batch Mode is active. Use Batch Selectors or exit Batch Mode to complete an entry.
+                </p>
+              )}
+              {batchMode && tab === "active" && visibleEligibleIds && (
+                <div aria-label="Batch selection controls" className="batch-selection-controls">
+                  <button type="button" onClick={selectAllVisibleEligible}>
+                    全选
+                  </button>
+                  <button type="button" onClick={() => setSelectedIds(new Set())}>
+                    清空
+                  </button>
+                </div>
+              )}
+              {batchMode && tab === "active" && (
+                <BatchActionBar
+                  count={prunedSelectedIds.size}
+                  disabled={batchPending}
+                  onAction={(nextAction) => beginBatchAction(nextAction, document.activeElement as HTMLButtonElement)}
+                />
+              )}
+              {batchResult && (
+                <p role="status">
+                  已处理 {batchResult.succeeded} 项，{batchResult.failed} 项失败
+                </p>
+              )}
+              {retryIntent && !batchPending && (
+                <button type="button" onClick={() => void submitBatchIntent(retryIntent)}>
+                  Retry failed items
+                </button>
+              )}
+              {error && <p role="alert">Unable to update entry. Please try again.</p>}
+              <section id="entry-panel" aria-label={tab === "active" ? "进行中" : "归档"} role="tabpanel">
+                {visibleEntries.length === 0 ? (
+                  <p>暂无条目</p>
                 ) : (
-                  <>
-                    <ArchiveStatus expiresAt={entry.expiresAt} retentionMode={entry.retentionMode} />
-                    {needsReconciliation(entry) && (
-                      <button
-                        type="button"
-                        disabled={reconciliationPendingId !== null}
-                        onClick={() => void submitReconciliation(entry)}
-                      >
-                        {reconciliationPendingId === entry.id ? "Reconciling…" : "Reconcile archive"}
-                      </button>
-                    )}
-                    {(entry.retentionMode === "permanent" || entry.retentionMode === "timed") && (
-                      <button
-                        type="button"
-                        disabled={restorePendingId !== null}
-                        onClick={() => void submitRestore(entry)}
-                      >
-                        {restorePendingId === entry.id ? "Restoring…" : "Restore"}
-                      </button>
-                    )}
-                  </>
+                  visibleEntries.map((entry) => (
+                    <article className="fixture-entry" key={entry.id}>
+                      <h2>{entry.pasteName}</h2>
+                      {tab === "active" ? (
+                        <div className="active-entry-controls">
+                          {batchMode && visibleEligibleIds?.has(entry.id) && (
+                            <BatchSelector
+                              checked={prunedSelectedIds.has(entry.id)}
+                              entryName={entry.pasteName}
+                              onToggle={() => toggleBatchSelection(entry.id)}
+                            />
+                          )}
+                          <ManagedTaskCheckbox
+                            checked={entry.managedTask.state === "checked"}
+                            disabled={pending || batchMode}
+                            disabledDescriptionId={batchMode ? "batch-mode-lock-explanation" : undefined}
+                            onComplete={(control) => {
+                              completionTriggerRef.current = control
+                              setCompletionEntryId(entry.id)
+                              setError(false)
+                              selectCompletionAction("archive_permanent")
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <ArchiveStatus expiresAt={entry.expiresAt} retentionMode={entry.retentionMode} />
+                          {needsReconciliation(entry) && (
+                            <button
+                              type="button"
+                              disabled={reconciliationPendingId !== null}
+                              onClick={() => void submitReconciliation(entry)}
+                            >
+                              {reconciliationPendingId === entry.id ? "Reconciling…" : "Reconcile archive"}
+                            </button>
+                          )}
+                          {(entry.retentionMode === "permanent" || entry.retentionMode === "timed") && (
+                            <button
+                              type="button"
+                              disabled={restorePendingId !== null}
+                              onClick={() => void submitRestore(entry)}
+                            >
+                              {restorePendingId === entry.id ? "Restoring…" : "Restore"}
+                            </button>
+                          )}
+                        </>
+                      )}
+                      <RenderedMarkdown content={entry.content} />
+                    </article>
+                  ))
                 )}
-                <RenderedMarkdown content={entry.content} />
-              </article>
-            ))}
-          </section>
+              </section>
+            </>
+          )}
         </div>
       </section>
       {action && (

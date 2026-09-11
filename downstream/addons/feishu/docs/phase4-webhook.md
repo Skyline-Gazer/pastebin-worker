@@ -1,10 +1,13 @@
 # Phase 4 webhook foundation
 
-`POST /api/feishu/events` is the sole public Add-on route. It accepts URL verification
-and encrypted, signed Feishu `im.message.receive_v1` human P2P text events. The adapter
-authenticates the exact raw request bytes, decrypts and authorizes the callback, derives
-stable hashed identities from the configured app/tenant/chat/message tuple, then awaits
-`FEISHU_INGRESS_QUEUE.send()` before it responds with HTTP 200.
+`POST /api/feishu/events` is the encrypted Feishu callback-to-Queue boundary.
+It accepts URL verification and encrypted, signed Feishu `im.message.receive_v1`
+human P2P text events. The adapter authenticates the exact raw request bytes,
+decrypts and authorizes the callback, derives stable hashed identities from the
+configured app/tenant/chat/message tuple, then awaits `FEISHU_INGRESS_QUEUE.send()`
+before it responds with HTTP 200. Later browser and list routes share the same
+Worker origin; static frontend assets are served from the same Worker via
+`[assets]` with `run_worker_first`. The webhook is not a public Paste management API.
 
 The Queue payload is transient and contains the normalized text plus stable identities and
 a generated correlation ID. It has no Paste credential, Feishu secret, raw callback or

@@ -4,6 +4,33 @@ export class PasteError extends Error {
   }
 }
 
+type PasteCreateStage = "formdata_ready" | "transport_enter" | "transport_response" | "response_parse" | "done"
+const SAFE_PASTE_CODE = /^(UPSTREAM_REJECTED|UPSTREAM_UNCERTAIN|ENTRY_NOT_FOUND|UPSTREAM_INVALID)$/
+const SAFE_EXCEPTION_CLASS = /^[A-Za-z][A-Za-z0-9_]*$/
+const SAFE_CORRELATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function exceptionClass(error: unknown): string | undefined {
+  const name = error instanceof Error ? error.constructor.name : undefined
+  return name && SAFE_EXCEPTION_CLASS.test(name) ? name : undefined
+}
+
+function reportPasteCreateStage(
+  stage: PasteCreateStage,
+  failure?: { code?: string; error?: unknown; correlationId?: string },
+): void {
+  if (!failure) {
+    console.log(`PASTE_CREATE_STAGE=${stage}`)
+    return
+  }
+  const parts = [`PASTE_CREATE_STAGE=${stage}`]
+  if (failure.code && SAFE_PASTE_CODE.test(failure.code)) parts.push(`code=${failure.code}`)
+  const errorClass = exceptionClass(failure.error)
+  if (errorClass) parts.push(`class=${errorClass}`)
+  if (failure.correlationId && SAFE_CORRELATION_ID.test(failure.correlationId))
+    parts.push(`correlationId=${failure.correlationId}`)
+  console.log(parts.join(" "))
+}
+
 export class PasteClient {
   readonly origin: string
 
@@ -24,9 +51,14 @@ export class PasteClient {
     return `${this.origin}/${name}`
   }
 
-  private async request(url: string, init: RequestInit): Promise<Response> {
+  private async request(
+    url: string,
+    init: RequestInit,
+    createDiagnostics?: { correlationId?: string },
+  ): Promise<Response> {
     let response: Response
     try {
+      if (createDiagnostics) reportPasteCreateStage("transport_enter")
       const transport = this.transport
       response = await transport(url, {
         ...init,
@@ -34,12 +66,37 @@ export class PasteClient {
         signal: AbortSignal.timeout(15000),
         headers: this.authorization ? { Authorization: this.authorization } : undefined,
       })
-    } catch {
+      if (createDiagnostics) reportPasteCreateStage("transport_response")
+    } catch (error) {
+      if (createDiagnostics)
+        reportPasteCreateStage("transport_enter", {
+          code: "UPSTREAM_UNCERTAIN",
+          error,
+          correlationId: createDiagnostics.correlationId,
+        })
       throw new PasteError("UPSTREAM_UNCERTAIN")
     }
-    if (response.status === 404) throw new PasteError("ENTRY_NOT_FOUND")
+    if (response.status === 404) {
+      const error = new PasteError("ENTRY_NOT_FOUND")
+      if (createDiagnostics)
+        reportPasteCreateStage("transport_response", {
+          code: error.code,
+          error,
+          correlationId: createDiagnostics.correlationId,
+        })
+      throw error
+    }
     if (!response.ok) {
-      throw new PasteError(response.status >= 400 && response.status < 500 ? "UPSTREAM_REJECTED" : "UPSTREAM_UNCERTAIN")
+      const error = new PasteError(
+        response.status >= 400 && response.status < 500 ? "UPSTREAM_REJECTED" : "UPSTREAM_UNCERTAIN",
+      )
+      if (createDiagnostics)
+        reportPasteCreateStage("transport_response", {
+          code: error.code,
+          error,
+          correlationId: createDiagnostics.correlationId,
+        })
+      throw error
     }
     return response
   }
@@ -50,13 +107,16 @@ export class PasteClient {
     content: string,
     password?: string,
     expiration = "never",
+    createDiagnostics?: { correlationId?: string },
   ): Promise<{ name: string; expiresAt: string | null }> {
     const body = new FormData()
     body.set("c", content)
     body.set("e", expiration)
     if (password) body.set("s", password)
     if (method === "POST") body.set("p", "1")
-    const response = await this.request(`${this.origin}${path}`, { method, body })
+    if (createDiagnostics) reportPasteCreateStage("formdata_ready")
+    const response = await this.request(`${this.origin}${path}`, { method, body }, createDiagnostics)
+    if (createDiagnostics) reportPasteCreateStage("response_parse")
     try {
       const data = await response.json<Record<string, unknown>>()
       if (typeof data.url !== "string") throw new Error()
@@ -67,14 +127,21 @@ export class PasteClient {
       const url = new URL(data.url)
       const name = url.pathname.slice(1)
       if (data.url !== this.publicUrl(name)) throw new Error()
+      if (createDiagnostics) reportPasteCreateStage("done")
       return { name, expiresAt: expiresAt as string | null }
-    } catch {
+    } catch (error) {
+      if (createDiagnostics)
+        reportPasteCreateStage("response_parse", {
+          code: "UPSTREAM_INVALID",
+          error,
+          correlationId: createDiagnostics.correlationId,
+        })
       throw new PasteError("UPSTREAM_INVALID")
     }
   }
 
-  create(content: string, password: string): Promise<string> {
-    return this.write("/", "POST", content, password).then((value) => value.name)
+  create(content: string, password: string, correlationId?: string): Promise<string> {
+    return this.write("/", "POST", content, password, "never", { correlationId }).then((value) => value.name)
   }
 
   async update(

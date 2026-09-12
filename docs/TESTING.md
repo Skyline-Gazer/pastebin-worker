@@ -192,6 +192,7 @@ Required release checks:
 - release provenance includes upstream SHA, downstream SHA/tag, ordered patch list, and patch hashes;
 - `deploy.yml` still deploys `goshujin` only, and `docs/BUILD_DEPLOY.md` records the tip vs assembled `e=never`/`e=max` ops note (`downstream/tests/issue86-tip-vs-assembled.test.sh`);
 - Feishu `wrangler.toml` enables `global_fetch_strictly_public` when `PASTEBIN_ORIGIN` is the public Pastebin Worker endpoint.
+- Feishu `wrangler.toml` binds `PASTEBIN_SERVICE` to `pastebin-prod` without changing `PASTEBIN_ORIGIN=https://pb.223.im`.
 
 ## 13. Integration tests
 

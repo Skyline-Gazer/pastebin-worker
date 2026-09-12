@@ -30,7 +30,15 @@ export interface FeishuProductionEnvironment extends Phase4Environment {
 export function createPasteClient(env: Phase4Environment): PasteClient {
   const service = env.PASTEBIN_SERVICE
   if (!service || typeof service.fetch !== "function") throw new Error("MISSING_PASTEBIN_SERVICE")
-  const pastebinTransport: typeof fetch = (input, init) => service.fetch(input, init)
+  const pastebinTransport: typeof fetch = async (input, init) => {
+    // workerd Request accepts only follow|manual; "error" throws TypeError before fetch.
+    const request = new Request(input, { ...init, redirect: "manual" })
+    console.log("PASTEBIN_SERVICE_STAGE=request_ready")
+    console.log("PASTEBIN_SERVICE_STAGE=fetch_enter")
+    const response = await service.fetch(request)
+    console.log("PASTEBIN_SERVICE_STAGE=fetch_response")
+    return response
+  }
   return new PasteClient(env.PASTEBIN_ORIGIN, pastebinTransport, env.PASTEBIN_AUTHORIZATION)
 }
 

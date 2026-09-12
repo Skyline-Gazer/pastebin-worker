@@ -66,6 +66,11 @@ describe("Feishu production entrypoint", () => {
     ).rejects.toThrow("INVALID_SECRET_CONFIG")
   })
 
+  it("constructs the Service Binding Request with manual redirect because workerd rejects error", () => {
+    expect(() => new Request("https://pb.223.im/", { redirect: "error" })).toThrowError(/Invalid redirect value/)
+    expect(new Request("https://pb.223.im/", { redirect: "manual" }).redirect).toBe("manual")
+  })
+
   it("creates Pastes through PASTEBIN_SERVICE and validates public URLs on pb.223.im", async () => {
     const ambientFetch = vi.fn<typeof fetch>()
     vi.stubGlobal("fetch", ambientFetch)
@@ -74,10 +79,74 @@ describe("Feishu production entrypoint", () => {
     expect(await client.create("body", "a".repeat(64))).toBe("abcd")
     expect(client.publicUrl("abcd")).toBe("https://pb.223.im/abcd")
     expect(env.PASTEBIN_SERVICE.fetch).toHaveBeenCalledTimes(1)
-    const [input] = (env.PASTEBIN_SERVICE.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit]
-    expect(String(input)).toBe("https://pb.223.im/")
+    const call = (env.PASTEBIN_SERVICE.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(call).toHaveLength(1)
+    const request = call[0] as Request
+    expect(request).toBeInstanceOf(Request)
+    expect(request.url).toBe("https://pb.223.im/")
+    expect(request.method).toBe("POST")
+    expect(request.redirect).toBe("manual")
+    expect(request.signal).toBeInstanceOf(AbortSignal)
+    expect(request.signal.aborted).toBe(false)
+    expect(request.headers.get("Authorization")).toBeNull()
+    const form = await request.clone().formData()
+    expect(form.get("c")).toBe("body")
+    expect(form.get("e")).toBe("never")
+    expect(form.get("s")).toBe("a".repeat(64))
+    expect(form.get("p")).toBe("1")
     expect(ambientFetch).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
+  })
+
+  it("forwards configured Authorization on the Service Binding Request", async () => {
+    const env = productionEnv({ PASTEBIN_AUTHORIZATION: "Bearer unit-token" })
+    const client = createPasteClient(env as never)
+    expect(await client.create("body", "a".repeat(64))).toBe("abcd")
+    const call = (env.PASTEBIN_SERVICE.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(call).toHaveLength(1)
+    const request = call[0] as Request
+    expect(request).toBeInstanceOf(Request)
+    expect(request.headers.get("Authorization")).toBe("Bearer unit-token")
+  })
+
+  it("emits secret-free PASTEBIN_SERVICE_STAGE markers around the Request fetch", async () => {
+    const logs: string[] = []
+    const log = vi.spyOn(console, "log").mockImplementation((message: unknown) => {
+      logs.push(String(message))
+    })
+    const password = "a".repeat(64)
+    const env = productionEnv({ PASTEBIN_AUTHORIZATION: "Bearer unit-token" })
+    const client = createPasteClient(env as never)
+    expect(await client.create("body", password)).toBe("abcd")
+    expect(logs.filter((line) => line.startsWith("PASTEBIN_SERVICE_STAGE="))).toEqual([
+      "PASTEBIN_SERVICE_STAGE=request_ready",
+      "PASTEBIN_SERVICE_STAGE=fetch_enter",
+      "PASTEBIN_SERVICE_STAGE=fetch_response",
+    ])
+    const joined = logs.join("\n")
+    expect(joined).not.toContain(password)
+    expect(joined).not.toContain("Bearer unit-token")
+    expect(joined).not.toContain("https://")
+    expect(joined).not.toContain("pb.223.im")
+    expect(joined).not.toContain("Authorization")
+    log.mockRestore()
+  })
+
+  it("sends update and delete through a single Request argument", async () => {
+    const env = productionEnv()
+    const client = createPasteClient(env as never)
+    expect(await client.update("abcd", "a".repeat(64), "updated")).toBeNull()
+    await client.remove("abcd", "a".repeat(64))
+    const calls = (env.PASTEBIN_SERVICE.fetch as ReturnType<typeof vi.fn>).mock.calls
+    expect(calls).toHaveLength(2)
+    for (const call of calls) {
+      expect(call).toHaveLength(1)
+      expect(call[0]).toBeInstanceOf(Request)
+    }
+    expect((calls[0][0] as Request).method).toBe("PUT")
+    expect((calls[0][0] as Request).url).toBe(`https://pb.223.im/abcd:${"a".repeat(64)}`)
+    expect((calls[1][0] as Request).method).toBe("DELETE")
+    expect((calls[1][0] as Request).url).toBe(`https://pb.223.im/abcd:${"a".repeat(64)}`)
   })
 
   it("fails closed when PASTEBIN_SERVICE is missing instead of using ambient fetch", async () => {

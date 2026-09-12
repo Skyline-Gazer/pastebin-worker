@@ -1,8 +1,10 @@
 # Phase 5 — Frontend baseline TODO
 
+Status: **PHASE 5 COMPLETE** (PRs #14/#15 and 5C closeout merged). This file is historical execution evidence, not an active checklist.
+
 ## Authorization and active increment
 
-Owner Delegated Continuous Execution under D-030 authorizes the in-scope Phase 5 progression represented by the approved PLAN, [SPEC](phase5-spec.md), and [PHASE decomposition](phase5-phases.md). This TODO is the durable active implementation checklist for **5C — Baseline hardening and Phase 5 closeout**. Phases 5A and 5B merged through PRs #14 and #15; this increment begins from refreshed `downstream/main` at `2de19278908c0a52a6ff35df4ad0ed2312ed21fc` on `fix/feishu-frontend-baseline`. It does not authorize a live API, mutation/lifecycle behavior, Phase 6–10 work, deployment, migration, PR #5, or `upstream-sync`/`goshujin` work.
+Owner Delegated Continuous Execution under D-030 authorized the in-scope Phase 5 progression represented by the approved PLAN, [SPEC](phase5-spec.md), and [PHASE decomposition](phase5-phases.md). The body below was the durable implementation checklist for **5C — Baseline hardening and Phase 5 closeout**. Phases 5A and 5B merged through PRs #14 and #15; that increment began from refreshed `downstream/main` at `2de19278908c0a52a6ff35df4ad0ed2312ed21fc` on `fix/feishu-frontend-baseline`. It did not authorize a live API, mutation/lifecycle behavior, Phase 6–10 work, deployment, migration, PR #5, or `upstream-sync`/`goshujin` work.
 
 ## 5A ordered work
 
@@ -68,15 +70,15 @@ Owner Delegated Continuous Execution under D-030 authorizes the in-scope Phase 5
 ### 4. 5B review gate
 
 - [x] Commit with required structured Conventional Commit body and Phase 5B/D-030/planning references (`f32a1f7`).
-- [ ] Obtain current-HEAD CI and completed AI Review Bot review; fix/disposition findings under the gate rules and re-review every changed HEAD.
-- [ ] Do not open or merge a PR in this increment; hand off the committed branch for authorized review.
+- [x] Obtain current-HEAD CI and completed AI Review Bot review; fix/disposition findings under the gate rules and re-review every changed HEAD. (Completed at 5B merge; leftover open checkbox was contemporaneous TODO residue.)
+- [x] Do not open or merge a PR in this increment; hand off the committed branch for authorized review. (Handoff completed; leftover open checkbox was contemporaneous TODO residue.)
 
 ## 5C closeout
 
 - [x] Reconfirm merged 5B and refresh `downstream/main`; branch anew for 5C.
 - [x] Close remaining secret-boundary, malformed-fixture, no-network, a11y, token/layout, full-suite, build, and scope-diff evidence without adding Phase 6 behavior.
 - [x] Complete Phase 5 documentation/TDD evidence.
-- [ ] Obtain current-HEAD CI and completed AI Review Bot review; fix/disposition findings under the gate rules and re-review every changed HEAD. Do not open or merge a PR in this increment; hand off the committed branch for authorized review.
+- [x] Obtain current-HEAD CI and completed AI Review Bot review; fix/disposition findings under the gate rules and re-review every changed HEAD. Do not open or merge a PR in this increment; hand off the committed branch for authorized review. (Completed at 5C merge; leftover open checkbox was contemporaneous TODO residue.)
 
 ### CI workflow note
 
@@ -168,6 +170,6 @@ Final scope review found only `downstream/addons/feishu/frontend/` and this plan
 
 The active TODO is implementation-sized for the scaffold increment and explicitly keeps rendering/tabs/managed behavior for the dependent 5B increment. It preserves fixture-only/no-network and secret boundaries, requires test-first evidence before code, and requires a fresh branch after each merge. It does not introduce a STOP condition; implementation may begin in the next turn under D-030 once the preflight checks pass.
 
-Status: CONTINUOUS-MODE TODO READY AFTER INTERNAL CONSISTENCY REVIEW
+Status: PHASE 5 COMPLETE (historical). The contemporaneous note at this writing was CONTINUOUS-MODE TODO READY AFTER INTERNAL CONSISTENCY REVIEW.
 
-Implementation has NOT started.
+Implementation later completed and merged; this closing note is not live `NOT STARTED` status.

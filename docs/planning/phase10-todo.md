@@ -207,14 +207,16 @@ downstream/tests/phase10-secret-observables.test.sh`, and the new fixture —
 
 ## Internal consistency review
 
-This TODO maps directly to the Phase 10 SPEC acceptance criteria and its four
-mergeable PHASE milestones, begins every executable behavior slice RED-first,
-and names Phase 10.1 as NEXT. It preserves Phase 5–9 as fixed contracts and
+This TODO mapped directly to the Phase 10 SPEC acceptance criteria and its four
+mergeable PHASE milestones, began every executable behavior slice RED-first,
+and named Phase 10.1 as the first increment at authoring time (that increment is now merged; it is not a live NEXT item). It preserves Phase 5–9 as fixed contracts and
 keeps Pastebin and Add-on build/deploy ownership separate. It permits no live
 production deployment or rollback, tag push/creation, credential provisioning,
 destructive migration, PR #5, `upstream-sync`, `goshujin`, upstream-owned
 workflow/source change without the explicit patch path, or new product scope.
 No STOP condition is present. Owner decision 2026-09-06 option 2 replaces the
 Phase 10.4 missing-prior-tag STOP for this first cycle only with an isolated
-fixture rehearsal; it does not authorize a production operation or remove the
-next-cycle real-tag requirement.
+fixture rehearsal; it does not authorize a production operation. The next real
+release cycle must still rehearse rollback against an actual immutable
+`downstream-v*` tag. That is a future release-cycle requirement, not unfinished
+current implementation work.

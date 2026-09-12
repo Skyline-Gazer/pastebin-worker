@@ -1,9 +1,10 @@
 # M3 — PASTEBIN_SERVICE Request-object adapter
 
-Status: OWNER AUTHORIZED (EXECUTE). Tracking: [#120](https://github.com/Skyline-Gazer/pastebin-worker/issues/120).
-Branch: `fix/m3-pastebin-service-request`. Target: `downstream/main`.
+Status: **SHIPPED / COMPLETE**. Merged as PR #127; production PASS on [#120](https://github.com/Skyline-Gazer/pastebin-worker/issues/120) (`M3_REQUEST_ADAPTER_SMOKE: PASS`). Issue #120 is CLOSED.
 
-Owner instruction dated 2026-09-12 is the authorizing PLAN, SPEC, PHASE, and TODO. This file persists that contract before implementation.
+The PLAN / SPEC / PHASE / TODO / TDD body below is the historical implementation contract. It is not an active work queue and does not keep #120 open.
+
+Owner instruction dated 2026-09-12 was the authorizing PLAN, SPEC, PHASE, and TODO. This file persists that contract.
 
 ## PLAN
 
@@ -114,7 +115,7 @@ Single implementation PR.
 - Scope: Feishu Add-on `createPasteClient` and tests/docs.
 - Branch: `fix/m3-pastebin-service-request` → `downstream/main`.
 - Tests: failing unit tests first; optional Miniflare Service Binding test.
-- Exit: CI green; review settlement; STOP for owner override if quorum unavailable. No deploy. Issue #120 stays OPEN.
+- Exit (historical): CI green; review settlement; STOP for owner override if quorum unavailable. No deploy from this source PR. Issue #120 stayed OPEN until the later production smoke PASS, then CLOSED.
 
 TODO:
 

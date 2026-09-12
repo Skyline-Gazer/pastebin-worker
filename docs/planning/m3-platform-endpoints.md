@@ -1,6 +1,8 @@
 # M3 — Feishu / Lark platform endpoint selection
 
-Status: OWNER AUTHORIZED (CONTINUE M3). Tracking: [#120](https://github.com/Skyline-Gazer/pastebin-worker/issues/120).
+Status: **SHIPPED / COMPLETE** (PR #122, `PLATFORM=feishu` in production). Tracking issue [#120](https://github.com/Skyline-Gazer/pastebin-worker/issues/120) is CLOSED.
+
+The design body below is historical evidence. It is not an active M3 work queue.
 
 ## Context
 

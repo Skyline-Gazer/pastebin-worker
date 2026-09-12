@@ -1,5 +1,9 @@
 # Recommended Implementation Order
 
+Status: **Phases 1–10 and M3 production wiring are completed.** This document retains the historical roadmap. It is not the active implementation queue.
+
+The next real `downstream-v*` release cycle still requires rollback rehearsal against an actual immutable prior tag (Phase 10 first-cycle fixture exception). That is future release work, not an open implementation phase.
+
 ## Pre-implementation artifacts (required before any phase starts)
 
 Every phase starts from approved planning artifacts; implementation MUST NOT begin before they are approved:
@@ -15,7 +19,7 @@ PLAN
 → implementation
 ```
 
-Normal mode above remains the default. The owner may explicitly authorize the bounded Owner Delegated Continuous Execution exception for existing Phases 5–10 only: PLAN → internal consistency review → SPEC → internal consistency review → PHASE/TODO → implementation → CI/review/merge → next roadmap Phase, without routine owner pauses inside the delegated roadmap. This does not make the project queue empty when one Phase merges: Phases 5–10 remain queued until each is complete. The exception never authorizes work beyond those phases, silent observable/API/security SPEC drift, or the stop conditions in `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.1.1.
+Normal mode above remains the default. The owner may explicitly authorize the bounded Owner Delegated Continuous Execution exception for existing Phases 5–10 only: PLAN → internal consistency review → SPEC → internal consistency review → PHASE/TODO → implementation → CI/review/merge → next roadmap Phase, without routine owner pauses inside the delegated roadmap. This does not make the project queue empty when one Phase merges: while Phases 5–10 were in progress they remained queued until each was complete. Those phases are now complete; this exception is historical. The exception never authorizes work beyond those phases, silent observable/API/security SPEC drift, or the stop conditions in `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.1.1.
 
 - PLAN/SPEC/PHASE/TODO chapter requirements and the mandatory interaction sequence: `docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.
 - TDD evidence requirements (including test-first exceptions): `docs/TESTING.md` §1.

@@ -1,11 +1,15 @@
 # Phase 7 — Countdown + restore TODO
 
-Status: CONTINUOUS-MODE TODO READY AFTER INTERNAL CONSISTENCY REVIEW / IMPLEMENTATION AUTHORIZED under D-030 after this §10.5 artifact-update PR merges.
+Status: **PHASE 7 COMPLETE**. This file is historical execution evidence, not an active checklist.
 
-Implementation has NOT started. Active implementation checklist for the
-[Phase 7 SPEC](phase7-spec.md) and [PHASE decomposition](phase7-phases.md).
-Complete each numbered phase on a fresh branch from its merged predecessor;
-do not start a dependent phase from an unmerged branch.
+Original contemporaneous status: CONTINUOUS-MODE TODO READY AFTER INTERNAL CONSISTENCY REVIEW / IMPLEMENTATION AUTHORIZED under D-030 after this §10.5 artifact-update PR merges.
+
+The next paragraph was true at TODO authoring time only and is not live status:
+
+> Implementation has NOT started. Active implementation checklist for the
+> [Phase 7 SPEC](phase7-spec.md) and [PHASE decomposition](phase7-phases.md).
+> Complete each numbered phase on a fresh branch from its merged predecessor;
+> do not start a dependent phase from an unmerged branch.
 
 ## 1. Phase 7.1 — countdown presentation
 
@@ -20,7 +24,7 @@ do not start a dependent phase from an unmerged branch.
 - [x] Keep elapsed/invalid rows archived and use only the approved
       authenticated reconciliation pathway; STOP before adding a route or changing
       the public contract outside SPEC §3.6.
-- [ ] Record GREEN/REFACTOR/REGRESSION evidence; run focused frontend/type/
+- [x] Record GREEN/REFACTOR/REGRESSION evidence; run focused frontend/type/ (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       format checks and current-HEAD review gate before merge.
 
 ## 2. Phase 7.2 — permanent restore
@@ -82,7 +86,7 @@ do not start a dependent phase from an unmerged branch.
 - [x] Implement only the SPEC §3.6 narrow reconciliation contract; do not
       introduce polling, local deletion authority, tombstones, Batch Mode, or a
       route/API/state/security change without §10.5 STOP and owner re-approval.
-- [ ] Record GREEN/REFACTOR/REGRESSION evidence; run focused and Phase 3–6
+- [x] Record GREEN/REFACTOR/REGRESSION evidence; run focused and Phase 3–6 (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       Worker/frontend regressions, documentation checks, current-HEAD CI, and AI
       Review Bot Phase Review Gate before merge.
 
@@ -184,13 +188,13 @@ downstream/addons/feishu/tests/reconcile.spec.ts` could not start because the
 
 ### Regression and review
 
-- [ ] Record exact focused test/type/lint/format/build commands and results
+- [x] Record exact focused test/type/lint/format/build commands and results (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       for each implementation phase.
-- [ ] Record relevant Phase 3–6 regression results and any environment
+- [x] Record relevant Phase 3–6 regression results and any environment (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       limitation without treating it as approval.
-- [ ] Confirm docs/API/trust-contract impact for each phase; update only when
+- [x] Confirm docs/API/trust-contract impact for each phase; update only when (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       the implemented behavior remains inside the approved SPEC.
-- [ ] Obtain current-HEAD CI and completed AI Review Bot Phase Review Gate for
+- [x] Obtain current-HEAD CI and completed AI Review Bot Phase Review Gate for (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       every implementation PR; any new commit requires a new latest-HEAD review.
 
 ## Internal consistency review

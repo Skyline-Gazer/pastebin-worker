@@ -1,10 +1,14 @@
 # Phase 8 — Batch Mode frontend TODO
 
-Status: CONTINUOUS-MODE TODO READY AFTER INTERNAL CONSISTENCY REVIEW / IMPLEMENTATION AUTHORIZED under D-030 after this §10.5 artifact-update PR merges.
+Status: **PHASE 8 COMPLETE**. This file is historical execution evidence, not an active checklist.
 
-Implementation has NOT started. Active implementation checklist for the
-[Phase 8 SPEC](phase8-spec.md) and [Phase 8 PHASE decomposition](phase8-phases.md).
-Do not begin a dependent item from an unmerged prior Phase branch.
+Original contemporaneous status: CONTINUOUS-MODE TODO READY AFTER INTERNAL CONSISTENCY REVIEW / IMPLEMENTATION AUTHORIZED under D-030 after this §10.5 artifact-update PR merges.
+
+The next paragraph was true at TODO authoring time only and is not live status:
+
+> Implementation has NOT started. Active implementation checklist for the
+> [Phase 8 SPEC](phase8-spec.md) and [Phase 8 PHASE decomposition](phase8-phases.md).
+> Do not begin a dependent item from an unmerged prior Phase branch.
 
 ## 1. Phase 8.1 — Batch Mode shell and separate selection controls
 
@@ -62,7 +66,7 @@ downstream/addons/feishu/frontend/vitest.config.ts` passed (2 files, 28
 - [x] Implement only bounded visible-set selection, clear/prune behavior, and
       the normal-control lock. Fail closed if visible eligibility is unknown;
       do not add pagination, Archive selectors, lifecycle execution, or an API.
-- [ ] Record GREEN/REFACTOR/REGRESSION evidence; run focused/frontend and
+- [x] Record GREEN/REFACTOR/REGRESSION evidence; run focused/frontend and (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       Phase 5–7 regression checks plus type/format/build; complete current-HEAD
       CI and AI Review Bot Phase Review Gate before merge.
 
@@ -149,13 +153,13 @@ unavailable sandbox/CI check as passing.
 
 ### Regression and review
 
-- [ ] Record exact focused frontend test, type, format, and build commands and
+- [x] Record exact focused frontend test, type, format, and build commands and (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       results for each implementation Phase.
-- [ ] Record relevant Phase 5–7 regression results and any environment
+- [x] Record relevant Phase 5–7 regression results and any environment (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       limitation without treating it as approval.
-- [ ] Confirm no Worker/API/migration/storage/polling/upstream/patch-series or
+- [x] Confirm no Worker/API/migration/storage/polling/upstream/patch-series or (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       Phase 6 trust-boundary drift; update docs only within the approved SPEC.
-- [ ] Obtain current-HEAD CI and a completed AI Review Bot Phase Review Gate
+- [x] Obtain current-HEAD CI and a completed AI Review Bot Phase Review Gate (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       for every implementation PR; any commit changing HEAD requires a new
       latest-HEAD review.
 
@@ -173,4 +177,4 @@ Phase 9 exclusively owns `/api/batch`, real multi-mutation, partial success,
 retry/idempotency, and result UX. No STOP condition is present. A need for any
 of those responsibilities—or for a changed observable behavior, API, state,
 security/trust boundary, acceptance criteria, or ownership boundary—requires
-STOP and §10.5 change control. Implementation has NOT started.
+STOP and §10.5 change control. Implementation later completed and merged; the contemporaneous closing sentence `Implementation has NOT started` is not live status.

@@ -1,8 +1,10 @@
 # Phase 6 — Single completion actions TODO
 
-Status: CONTINUOUS-MODE TODO READY AFTER INTERNAL CONSISTENCY REVIEW / IMPLEMENTATION AUTHORIZED under D-030 after this §10.5 artifact-update PR merges.
+Status: **PHASE 6 COMPLETE**. This file is historical execution evidence, not an active checklist.
 
-Implementation has NOT started. Active checklist for [Phase 6](phase6-spec.md).
+Original contemporaneous status: CONTINUOUS-MODE TODO READY AFTER INTERNAL CONSISTENCY REVIEW / IMPLEMENTATION AUTHORIZED under D-030 after this §10.5 artifact-update PR merges. The next line was true at TODO authoring time only:
+
+> Implementation has NOT started. Active checklist for [Phase 6](phase6-spec.md).
 
 ## 1. Phase 6.0 — browser trust boundary
 
@@ -19,14 +21,14 @@ Implementation has NOT started. Active checklist for [Phase 6](phase6-spec.md).
 - [x] RED tests for permanent/timed/delete, exact `expiresAt`, source precision, Phase 3 claims/replay/conflicts, duplicate idempotency, and reconciliation.
 - [x] Implement browser entry ID/action/idempotency/session/CSRF only; join principal allowed scopes to binding/entry and fail closed before mutation.
 - [x] Add lifecycle persistence only as tests require; retain binding compatibility, Phase 3/4 behavior, and upstream body authority.
-- [ ] Record TDD/regression evidence; current-HEAD gate and merge before 6.2.
+- [x] Record TDD/regression evidence; current-HEAD gate and merge before 6.2. (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
 
 ## 3. Phase 6.2 — completion UI
 
 - [x] Branch from merged 6.1; RED chooser/cancel/delete-confirm/pending/result/Archive exact-expiry/session-CSRF/a11y/no-secret tests.
 - [x] Implement compact chooser/delete confirmation; other Markdown tasks remain content and lifecycle is not optimistic.
 - [x] Render Archive from returned state only; do not add Phase 7 restore/timer or Phase 8 Batch Mode.
-- [ ] Record TDD/regression evidence and current-HEAD gate before merge.
+- [x] Record TDD/regression evidence and current-HEAD gate before merge. (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
 
 ## Evidence
 

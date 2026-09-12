@@ -1,6 +1,8 @@
 # Phase 3 execution TODO
 
-Status: EXECUTION AUTHORIZED. Owner approved the SPEC and explicitly authorized immediate execution of a consistent TODO without another approval checkpoint.
+Status: **PHASE 3 COMPLETE** (merged via PR #9 and follow-on Add-on work). This file is historical execution evidence, not an active checklist.
+
+Original contemporaneous status: EXECUTION AUTHORIZED. Owner approved the SPEC and explicitly authorized immediate execution of a consistent TODO without another approval checkpoint.
 
 ## Delivery milestone
 
@@ -19,9 +21,9 @@ Goal: internal Paste services and durable D1 bindings. Scope and acceptance: [SP
 - [x] Validate concurrent claims, duplicate/conflicting requests and known-success retries.
 - [x] Validate uncertain creation, interrupted dispatch, storage failures and reconciliation without blind writes.
 - [x] Add independent Add-on typecheck/test/build CI without changing upstream-owned configuration.
-- [ ] Update configuration/recovery docs; inspect complete scope/security diff.
-- [ ] Commit with full review context, push and open implementation PR.
-- [ ] Obtain authoritative GitHub CI and current-HEAD AI review; handle findings without self-override.
+- [x] Update configuration/recovery docs; inspect complete scope/security diff. (Completed in the merged Phase 3 delivery; leftover open checkbox was contemporaneous TODO residue.)
+- [x] Commit with full review context, push and open implementation PR. (PR #9.)
+- [x] Obtain authoritative GitHub CI and current-HEAD AI review; handle findings without self-override. (Completed at Phase 3 merge; leftover open checkbox was contemporaneous TODO residue.)
 
 ## Evidence
 
@@ -29,7 +31,7 @@ Initial inspection: only the existing untracked planning documents were present.
 
 RED: `fnm exec --using 22 node node_modules/vitest/vitest.mjs run --config downstream/addons/feishu/vitest.config.js` failed importing the not-yet-created `../worker/store` in `service.spec.ts`. This was a missing-module suite failure, not a behavioral assertion RED. Credential tests were already green at that point; no credential assertion RED is claimed. Earlier sandbox port and compatibility-date failures were infrastructure/configuration failures and are not RED evidence.
 
-GREEN / refinement: the same command passed 3 files / 16 tests. `fnm exec --using 22 node node_modules/typescript/bin/tsc --noEmit -p downstream/addons/feishu/tsconfig.json`, `fnm exec --using 22 node node_modules/eslint/bin/eslint.js downstream/addons/feishu`, and `fnm exec --using 22 node node_modules/vite/bin/vite.js build --config downstream/addons/feishu/vite.config.js` passed using existing Node 22.23.2. pnpm 10.34.5 is available through fnm; no dependency installation was performed. Final current-HEAD GitHub regression/review evidence remains pending.
+GREEN / refinement: the same command passed 3 files / 16 tests. `fnm exec --using 22 node node_modules/typescript/bin/tsc --noEmit -p downstream/addons/feishu/tsconfig.json`, `fnm exec --using 22 node node_modules/eslint/bin/eslint.js downstream/addons/feishu`, and `fnm exec --using 22 node node_modules/vite/bin/vite.js build --config downstream/addons/feishu/vite.config.js` passed using existing Node 22.23.2. pnpm 10.34.5 is available through fnm; no dependency installation was performed. Contemporaneous note: final current-HEAD GitHub regression/review evidence remained pending at this writing; that gate later completed at Phase 3 merge.
 
 Implementation refinement: reconciliation observes matching content but never unlocks an uncertain write solely from a read. Unknown create identity remains operator-required as approved. No exactly-once remote execution guarantee is invented.
 
@@ -43,4 +45,4 @@ Cause: Add-on tsconfig reuses `worker-configuration.d.ts`; its `Cloudflare.Globa
 
 PR Tests run `33855781979`: `test` and `coverage-goshujin` passed. `report-coverage` failed at 08:59:11 UTC with `Artifact not found for name: coverage-goshujin`, while the producer completed at 09:00:59 UTC. Inherited `pr.yml` has `report-coverage.needs: test`, not both producer jobs; its content is unchanged by this PR. Classification: baseline workflow dependency race (B). A failed-job rerun after both artifacts exist is sufficient for this specific race; do not modify upstream-owned workflow here.
 
-Historical record: the initial current-HEAD Kody review failed with an external `openai_compatible` execution error; its validator parse failure was neither approval nor an actionable finding. At that time, a fresh review was required after the corrected HEAD had suitable authoritative CI, and no old-HEAD result approved the corrected commit. Kody is now retired under D-031; this note has no current workflow authority. Phase 3 remains incomplete; PR #5 stays review-only and Phase 4 has not started.
+Historical record: the initial current-HEAD Kody review failed with an external `openai_compatible` execution error; its validator parse failure was neither approval nor an actionable finding. At that time, a fresh review was required after the corrected HEAD had suitable authoritative CI, and no old-HEAD result approved the corrected commit. Kody is now retired under D-031; this note has no current workflow authority. This paragraph is a contemporaneous 2026-09 record: Phase 3 later merged; Phase 4 started and completed. PR #5 remains review-only against `upstream-sync`.

@@ -1,12 +1,16 @@
 # Phase 9 — Batch backend TODO
 
-Status: CONTINUOUS-MODE TODO READY AFTER INTERNAL CONSISTENCY REVIEW / IMPLEMENTATION AUTHORIZED under D-030 after this §10.5 artifact-update PR merges.
+Status: **PHASE 9 COMPLETE**. This file is historical execution evidence, not an active checklist.
 
-Implementation has NOT started. Active checklist for the [Phase 9 SPEC](phase9-spec.md)
-and [PHASE decomposition](phase9-phases.md). Do not start a dependent phase
-from an unmerged predecessor.
+Original contemporaneous status: CONTINUOUS-MODE TODO READY AFTER INTERNAL CONSISTENCY REVIEW / IMPLEMENTATION AUTHORIZED under D-030 after this §10.5 artifact-update PR merges.
 
-## NEXT — Phase 9.1: Protected batch route, public types, and strict dispatch gate
+The next paragraph was true at TODO authoring time only and is not live status:
+
+> Implementation has NOT started. Active checklist for the [Phase 9 SPEC](phase9-spec.md)
+> and [PHASE decomposition](phase9-phases.md). Do not start a dependent phase
+> from an unmerged predecessor.
+
+## Phase 9.1 (historical): Protected batch route, public types, and strict dispatch gate
 
 - [x] After this artifact-update PR and Phase 8 merge, refresh and verify clean
       `downstream/main`; inspect the Phase 6 protection helper and Phase 8.3
@@ -14,7 +18,7 @@ from an unmerged predecessor.
 - [x] Write RED Worker tests for POST-only, JSON-only, exact request shape,
       valid opaque key, 16 KiB body limit, 50 unique ordered IDs, ID length,
       and exactly the three allowed actions.
-- [ ] Write RED trust tests proving no/invalid/revoked session, wrong Origin,
+- [x] Write RED trust tests proving no/invalid/revoked session, wrong Origin, (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       missing/invalid CSRF, no-scope/cross-scope/guessed IDs, and browser
       credentials/scopes/Paste data/expiry fields reject before binding,
       credential, lifecycle, or Paste activity.
@@ -40,7 +44,7 @@ from an unmerged predecessor.
       server-only per-item identities; delegate instead of duplicating lifecycle
       or Paste-client logic. Do not add batch Restore, fourth lifecycle, second
       Paste-body storage, or client expiry authority.
-- [ ] Record observed GREEN/REFACTOR/REGRESSION evidence, relevant Phase 3/6/7
+- [x] Record observed GREEN/REFACTOR/REGRESSION evidence, relevant Phase 3/6/7 (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       regressions, docs impact, current-HEAD CI, and AI Review Bot gate before
       merge.
 
@@ -54,7 +58,7 @@ from an unmerged predecessor.
       conflict, in-progress conflict, and ambiguous delete/update safety.
 - [x] Implement result serialization and durable reserve/complete/replay rules;
       retain raw upstream, credential, scope, and operation details server-side.
-- [ ] Run RED/GREEN/REFACTOR/REGRESSION checks including Phase 3/6/7 idempotency
+- [x] Run RED/GREEN/REFACTOR/REGRESSION checks including Phase 3/6/7 idempotency (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       and security regressions; record exact results and complete current-HEAD
       CI and AI Review Bot gate before merge.
 
@@ -72,7 +76,7 @@ from an unmerged predecessor.
 - [x] Replace only the deferred seam with the approved adapter/result UX; do not
       redesign Batch Mode, use serial single-entry calls, expose secrets/raw
       errors, or construct expiry deadlines in the browser.
-- [ ] Record observed GREEN/REFACTOR/REGRESSION evidence, focused frontend and
+- [x] Record observed GREEN/REFACTOR/REGRESSION evidence, focused frontend and (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       relevant Worker contract checks, type/format/build, current-HEAD CI, and
       AI Review Bot gate before merge.
 
@@ -147,20 +151,20 @@ gate remain for the orchestrator.
 
 ### Regression and review
 
-- [ ] Record exact focused Worker/frontend test, type, format, and build results
+- [x] Record exact focused Worker/frontend test, type, format, and build results (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       for every implementation phase, plus relevant Phase 3 and Phase 6–8
       regressions and any environmental limitation.
-- [ ] Confirm no change to Phase 6 trust, no batch Restore/fourth lifecycle/
+- [x] Confirm no change to Phase 6 trust, no batch Restore/fourth lifecycle/ (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       second Paste-body store, and no Phase 10, deployment, destructive
       migration, PR #5, `upstream-sync`, or `goshujin` work.
-- [ ] Obtain current-HEAD CI and a completed AI Review Bot Phase Review Gate for
+- [x] Obtain current-HEAD CI and a completed AI Review Bot Phase Review Gate for (Completed at phase merge; leftover open checkbox was contemporaneous TODO residue.)
       every implementation PR; a new HEAD requires a new review.
 
 ## Internal consistency review
 
-This TODO maps directly to the Phase 9 SPEC and its four mergeable PHASE
-milestones, begins every behavioral slice RED-first, and names Phase 9.1 as
-NEXT. It preserves the unchanged Phase 6 opaque-session, exact-Origin,
+This TODO mapped directly to the Phase 9 SPEC and its four mergeable PHASE
+milestones, began every behavioral slice RED-first, and named Phase 9.1 as
+the first increment at authoring time. It preserves the unchanged Phase 6 opaque-session, exact-Origin,
 session-bound-CSRF, server-derived-principal-to-stored-scope boundary; keeps
 credentials, Paste bodies, and expiry authority server-side; and extends the
 Phase 8 `BatchActionIntent` seam without a Batch Mode redesign. It excludes

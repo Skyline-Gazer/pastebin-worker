@@ -193,6 +193,7 @@ Required release checks:
 - `deploy.yml` still deploys `goshujin` only, and `docs/BUILD_DEPLOY.md` records the tip vs assembled `e=never`/`e=max` ops note (`downstream/tests/issue86-tip-vs-assembled.test.sh`);
 - Feishu `wrangler.toml` enables `global_fetch_strictly_public` when `PASTEBIN_ORIGIN` is the public Pastebin Worker endpoint.
 - Feishu `wrangler.toml` binds `PASTEBIN_SERVICE` to `pastebin-prod` without changing `PASTEBIN_ORIGIN=https://pb.223.im`.
+- Feishu `wrangler.toml` enables Workers Logs, invocation logs, and traces at full sample without changing `PASTEBIN_SERVICE`, `PASTEBIN_ORIGIN`, or `global_fetch_strictly_public`.
 
 ## 13. Integration tests
 

@@ -19,6 +19,8 @@ Pastebin production is live at https://pb.223.im. The Feishu Add-on source imple
 - D1 binding `FEISHU_BINDINGS_DB`; migrations 0001–0007 in order. Dedicated ingress queue + DLQ. `FEISHU_INGRESS_DLQ_CONFIGURED=true` only after consumer DLQ is verified.
 - `PASTEBIN_ORIGIN=https://pb.223.im`. Do not set `PASTEBIN_AUTHORIZATION` unless live Pastebin requires it.
 - Keep `compatibility_flags = ["global_fetch_strictly_public"]`. Internal Paste HTTP uses Service Binding `PASTEBIN_SERVICE` → `pastebin-prod`; public URL validation stays on `https://pb.223.im`. Do not replay the exhausted DLQ creates.
+- Enable native Workers Logs, invocation logs, and traces at `head_sampling_rate = 1` before another owner P2P. Existing `PASTE_CREATE_STAGE` markers stay `formdata_ready`, `transport_enter`, `transport_response`, `response_parse`, `done`. This is diagnostic configuration only; it does not change Paste transport and does not by itself establish a create-path root cause.
+- After an authorized observability deploy, read stages from the Cloudflare dashboard Observability view (or live `wrangler tail`). Wrangler OAuth can still 403 the telemetry Query API because that token has `workers_tail` and not Workers Observability Read. Do not implement a D1 stage-row fallback until the owner accepts the extra create-path write and retention policy.
 
 ## PHASE / TODO
 

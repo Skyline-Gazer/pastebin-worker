@@ -70,6 +70,8 @@ The client is responsible for URL construction/redaction and must never leak man
 
 Production `PASTEBIN_ORIGIN` is `https://pb.223.im`. Public URL construction, response validation, and user-visible links stay on that origin (`https://pb.223.im/<name>`). Internal Paste create/update/delete uses the `PASTEBIN_SERVICE` Service Binding to `pastebin-prod`; `PasteClient` still sees `https://pb.223.im` request URLs and must not rewrite returned URLs to workers.dev or service-binding hosts. Keep `global_fetch_strictly_public` during this transport transition. Do not expose `PASTEBIN_SERVICE` to frontend code.
 
+Create-only stage diagnostics already emit `console.log` markers `PASTE_CREATE_STAGE=formdata_ready|transport_enter|transport_response|response_parse|done`. The Worker contract enables native Workers Logs, invocation logs, and traces at `head_sampling_rate = 1` so those markers persist from queue-handler invocations. Do not change the marker strings, Paste create/update/delete semantics, or `PasteClient` transport to make the diagnostics readable. After an authorized deploy, read stages from Cloudflare Workers Observability (dashboard) or live `wrangler tail`. The Wrangler OAuth token used by local CLI has `workers_tail` but not Workers Observability Read, so the telemetry Query API can return 403 even when logs are stored. That credential gap is not a reason to skip enabling native logs. A durable D1 stage-row fallback is not implemented: it would add create-path writes and a retention policy, and needs an explicit owner decision first.
+
 ## 5. Binding service
 
 The binding service maps a Feishu-managed entry to:

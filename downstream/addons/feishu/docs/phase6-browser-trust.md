@@ -36,8 +36,8 @@ The Worker exposes these browser routes:
 - `GET /api/entries` lists at most 50 ready bindings for the session principal's server-mapped scopes and returns public entry state plus Paste content. Caller query parameters are ignored. The response never includes credential, password, tenant, open_id, principal, OAuth, or fingerprint fields.
 
 Provision these secrets/configuration outside source control: `PLATFORM` (`feishu` or `lark`; required, fail-closed), the selected provider's `FEISHU_*` or `LARK_*` app credentials, `FEISHU_OAUTH_REDIRECT_URI` / `LARK_OAUTH_REDIRECT_URI`, `FEISHU_ALLOWED_ORIGINS` / `LARK_ALLOWED_ORIGINS`, and
-`FEISHU_PRINCIPAL_KEY`. `FEISHU_SESSION_COOKIE_NAME` is optional; the default is
-`feishu_addon_session` because deployment topology cannot safely require `__Host-` yet.
+`FEISHU_PRINCIPAL_KEY`. Production Feishu values are `FEISHU_OAUTH_REDIRECT_URI=https://pb.test.223.im/api/auth/callback` and `FEISHU_ALLOWED_ORIGINS=https://pb.test.223.im`. `FEISHU_SESSION_COOKIE_NAME` is optional; the default is
+`feishu_addon_session` because deployment topology cannot safely require `__Host-` yet. Do not add a cookie `Domain` attribute.
 
 Apply migrations `0002_browser_trust.sql`, `0003_lifecycle_completion.sql`,
 `0004_permanent_restore.sql`, `0005_timed_restore.sql`, and

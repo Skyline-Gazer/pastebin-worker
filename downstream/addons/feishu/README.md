@@ -12,6 +12,8 @@ migrations/ Add-on state-store migrations when required
 wrangler.toml production Worker binding contract
 ```
 
+The tracked contract pins the canonical browser origin `https://pb.test.223.im`, OAuth callback `/api/auth/callback` on that origin, and `FEISHU_ALLOWED_ORIGINS` to that same origin. Production overlays must keep those values; `downstream/scripts/check-feishu-browser-origin.sh` rejects a workers.dev OAuth callback.
+
 Key rules:
 
 - Pastebin remains content source of truth;

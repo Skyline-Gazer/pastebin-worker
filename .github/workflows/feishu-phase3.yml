@@ -34,6 +34,7 @@ jobs:
       - run: downstream/tests/release-candidate.test.sh
       - run: downstream/tests/issue86-tip-vs-assembled.test.sh
       - run: downstream/tests/upstream-sync.test.sh
+      - run: downstream/tests/feishu-browser-origin.test.sh
       # git am during assembly needs a local committer identity on Actions runners.
       - run: |
           git config user.name "github-actions[bot]"

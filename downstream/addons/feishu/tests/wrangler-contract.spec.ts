@@ -23,6 +23,26 @@ describe("Feishu Worker deployment contract", () => {
     expect(config.services).toEqual([{ binding: "PASTEBIN_SERVICE", service: "pastebin-prod" }])
   })
 
+  it("pins the canonical Add-on origin as the OAuth callback and allowed browser origin", () => {
+    const config = parse(wranglerToml) as {
+      workers_dev?: boolean
+      vars?: {
+        FEISHU_OAUTH_REDIRECT_URI?: string
+        FEISHU_ALLOWED_ORIGINS?: string
+      }
+      routes?: { pattern?: string; custom_domain?: boolean }[]
+    }
+    const origin = "https://pb.test.223.im"
+    expect(config.vars?.FEISHU_OAUTH_REDIRECT_URI).toBe(`${origin}/api/auth/callback`)
+    expect(config.vars?.FEISHU_ALLOWED_ORIGINS).toBe(origin)
+    const callback = new URL(config.vars?.FEISHU_OAUTH_REDIRECT_URI || "")
+    expect(callback.origin).toBe(origin)
+    expect(callback.pathname).toBe("/api/auth/callback")
+    expect(callback.hostname.endsWith("workers.dev")).toBe(false)
+    expect(config.workers_dev).toBe(true)
+    expect(config.routes).toEqual([{ pattern: "pb.test.223.im", custom_domain: true }])
+  })
+
   it("persists Workers Logs, invocation logs, and traces at full sample without changing Paste transport", () => {
     const config = parse(wranglerToml) as {
       compatibility_flags?: string[]

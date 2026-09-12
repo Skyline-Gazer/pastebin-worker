@@ -294,7 +294,7 @@ describe("dual Feishu+Lark webhooks", () => {
         ],
       },
       { createEntry },
-      async () => true,
+      () => Promise.resolve(true),
       true,
     )
     expect(poisonAck).toHaveBeenCalled()

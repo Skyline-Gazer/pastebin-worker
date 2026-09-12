@@ -41,7 +41,7 @@ Accepted evidence: successful create, Feishu P2P request identity, same Feishu s
 | --- | --- | --- | --- | --- |
 | FT-DEFECT-01 | Pastebin upload → usable file/read/download path | Generic Pastebin patch | `pastebin-prod` | [PLAN](ft-defect-01-plan.md), [SPEC](ft-defect-01-spec.md) |
 | FT-DEFECT-03 | Simultaneous Feishu + Lark browser auth and ingestion | Add-on Worker | `pastebin-feishu-prod` | [PLAN](ft-defect-03-plan.md), [SPEC](ft-defect-03-spec.md) |
-| FT-DEFECT-02 | Add-on Web product / IA remediation | Add-on frontend (+ listing API if required) | `pastebin-feishu-prod` | [PLAN](ft-defect-02-plan.md), [SPEC](ft-defect-02-spec.md) |
+| FT-DEFECT-02 | Add-on Web product / IA remediation | Add-on frontend (+ listing API if required). **UI foundation: shadcn/ui + Lucide + Sonner on existing React 19 / Vite / Tailwind v4.** | `pastebin-feishu-prod` | [PLAN](ft-defect-02-plan.md), [SPEC](ft-defect-02-spec.md) |
 
 GitHub:
 
@@ -67,6 +67,7 @@ Rules:
 - FT-DEFECT-01 and FT-DEFECT-03 establish product/data semantics and may proceed in parallel. They do not share a deploy Worker, schema, or patch series.
 - FT-DEFECT-02 MUST NOT start implementation from an unmerged DEFECT-01 or DEFECT-03 branch. It starts only after those semantics are stable (merged, or owner-recorded as stable enough that C can consume the contracts).
 - FT-DEFECT-02 MUST use Workstream A file-vs-text URL semantics and Workstream B dual-provider login/session model. It MUST NOT assume every entry is Markdown text.
+- FT-DEFECT-02 UI primitives are shadcn/ui (new-york, neutral, OKLCH) + Lucide + Sonner. shadcn is not the product architecture. Owner visual acceptance remains required; installing shadcn does not close the UX defect.
 - `FT-03_DATA_PATH: PASS` does not mean Web UX is accepted.
 - Do not start FT-04, send a P2P, or delete test Pastes as part of this planning or later implementation unless a later owner instruction explicitly authorizes that Function Test step.
 

@@ -18,7 +18,7 @@ Pastebin production is live at https://pb.223.im. The Feishu Add-on source imple
 - Worker name: `pastebin-feishu-prod`. Public origin is the discovered workers.dev URL.
 - D1 binding `FEISHU_BINDINGS_DB`; migrations 0001–0007 in order. Dedicated ingress queue + DLQ. `FEISHU_INGRESS_DLQ_CONFIGURED=true` only after consumer DLQ is verified.
 - `PASTEBIN_ORIGIN=https://pb.223.im`. Do not set `PASTEBIN_AUTHORIZATION` unless live Pastebin requires it.
-- Enable `compatibility_flags = ["global_fetch_strictly_public"]` so Add-on `fetch()` to `pb.223.im` reaches `pastebin-prod`. Do not add a Service Binding for this M3 fix. Do not replay the exhausted DLQ create.
+- Keep `compatibility_flags = ["global_fetch_strictly_public"]`. Internal Paste HTTP uses Service Binding `PASTEBIN_SERVICE` → `pastebin-prod`; public URL validation stays on `https://pb.223.im`. Do not replay the exhausted DLQ creates.
 
 ## PHASE / TODO
 

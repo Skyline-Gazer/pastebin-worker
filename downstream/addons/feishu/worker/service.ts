@@ -428,7 +428,7 @@ export class EntryService {
     if (!(await this.store.dispatch(op.id))) return this.error("MUTATION_CONFLICT", op.id)
     try {
       if (op.kind === "create") {
-        binding.paste_name = await this.client.create(content, password)
+        binding.paste_name = await this.client.create(content, password, op.id)
         await this.store.rememberName(op, binding.paste_name)
       } else {
         await this.client.update(binding.paste_name!, password, content)

@@ -70,4 +70,50 @@ describe("reviewed Patch 010 HTTP contract", () => {
     const client = new PasteClient("https://paste.example", receiverSensitiveTransport)
     expect(await client.create("M3 Feishu live test 2", "a".repeat(64))).toBe("abcd")
   })
+
+  it("emits create-stage diagnostics without secrets", async () => {
+    const logs: string[] = []
+    const log = vi.spyOn(console, "log").mockImplementation((message: unknown) => {
+      logs.push(String(message))
+    })
+    const password = "a".repeat(64)
+    const client = new PasteClient("https://paste.example", () =>
+      Promise.resolve(
+        Response.json({
+          url: "https://paste.example/abcd",
+          manageUrl: "https://paste.example/abcd:SECRET",
+          expireAt: null,
+          expirationSeconds: null,
+        }),
+      ),
+    )
+    expect(await client.create("body", password)).toBe("abcd")
+    expect(logs).toEqual([
+      "PASTE_CREATE_STAGE=formdata_ready",
+      "PASTE_CREATE_STAGE=transport_enter",
+      "PASTE_CREATE_STAGE=transport_response",
+      "PASTE_CREATE_STAGE=response_parse",
+      "PASTE_CREATE_STAGE=done",
+    ])
+    expect(logs.join("\n")).not.toContain(password)
+    expect(logs.join("\n")).not.toContain("SECRET")
+    expect(logs.join("\n")).not.toContain("manageUrl")
+    log.mockRestore()
+  })
+
+  it("logs only a safe class and PasteError code when create transport fails", async () => {
+    const logs: string[] = []
+    const log = vi.spyOn(console, "log").mockImplementation((message: unknown) => {
+      logs.push(String(message))
+    })
+    const client = new PasteClient("https://paste.example", () =>
+      Promise.reject(new TypeError("https://secret.example")),
+    )
+    await expect(client.create("body", "a".repeat(64))).rejects.toThrow("UPSTREAM_UNCERTAIN")
+    expect(logs.some((line) => line === "PASTE_CREATE_STAGE=transport_enter")).toBe(true)
+    expect(logs.some((line) => line.includes("code=UPSTREAM_UNCERTAIN") && line.includes("class=TypeError"))).toBe(true)
+    expect(logs.join("\n")).not.toContain("secret.example")
+    expect(logs.join("\n")).not.toContain("https://")
+    log.mockRestore()
+  })
 })

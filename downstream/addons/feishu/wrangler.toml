@@ -4,8 +4,8 @@
 name = "pastebin-feishu-prod"
 main = "worker/index.ts"
 compatibility_date = "2026-07-01"
-# PASTEBIN_ORIGIN is another Worker in this account (pb.223.im → pastebin-prod).
-# Without this flag, same-zone global fetch does not reliably reach that Worker.
+# Public Paste URLs stay on PASTEBIN_ORIGIN (pb.223.im). Internal Paste HTTP uses
+# PASTEBIN_SERVICE → pastebin-prod. Keep this flag during the transport transition.
 compatibility_flags = ["global_fetch_strictly_public"]
 workers_dev = true
 
@@ -35,3 +35,7 @@ queue = "pastebin-feishu-ingress-prod"
 queue = "pastebin-feishu-ingress-prod"
 max_retries = 5
 dead_letter_queue = "pastebin-feishu-ingress-dlq-prod"
+
+[[services]]
+binding = "PASTEBIN_SERVICE"
+service = "pastebin-prod"

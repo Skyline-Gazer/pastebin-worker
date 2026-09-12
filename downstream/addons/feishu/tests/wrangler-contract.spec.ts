@@ -11,4 +11,15 @@ describe("Feishu Worker deployment contract", () => {
     expect(config.vars?.PASTEBIN_ORIGIN).toBe("https://pb.223.im")
     expect(config.compatibility_flags).toContain("global_fetch_strictly_public")
   })
+
+  it("binds PASTEBIN_SERVICE to pastebin-prod without changing the public Pastebin origin", () => {
+    const config = parse(wranglerToml) as {
+      compatibility_flags?: string[]
+      vars?: { PASTEBIN_ORIGIN?: string }
+      services?: { binding?: string; service?: string }[]
+    }
+    expect(config.vars?.PASTEBIN_ORIGIN).toBe("https://pb.223.im")
+    expect(config.compatibility_flags).toContain("global_fetch_strictly_public")
+    expect(config.services).toEqual([{ binding: "PASTEBIN_SERVICE", service: "pastebin-prod" }])
+  })
 })

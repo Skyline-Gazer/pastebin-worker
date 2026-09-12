@@ -52,6 +52,17 @@ beforeEach(async () => {
 })
 
 describe("persistent internal entry services", () => {
+  it("persists the paste name returned by create", async () => {
+    const { service, store } = await setup()
+    const created = await service.createEntry(context, input)
+    expect(created).toMatchObject({
+      ok: true,
+      entry: { pasteName: "abcd", publicUrl: "https://paste.example/abcd" },
+    })
+    if (!created.ok) throw new Error("create failed")
+    expect((await store.get(context.scopeId, created.entry.id))?.paste_name).toBe("abcd")
+  })
+
   it("keeps one mocked Paste authoritative across update, lifecycle, batch, restore, and absence reconciliation", async () => {
     const { service, store, transport } = await setup()
     const first = await service.createEntry(context, { ...input, content: "- [ ] one" })

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import worker, { createPhase4Worker } from "../worker/index"
+import worker, { createPasteClient, createPhase4Worker } from "../worker/index"
 
 const hexA = "11".repeat(32)
 const hexB = "22".repeat(32)
@@ -20,6 +20,17 @@ function productionEnv(overrides: Record<string, unknown> = {}) {
     FEISHU_PRINCIPAL_KEY: "principal-secret",
     FEISHU_INGRESS_DLQ_CONFIGURED: "true",
     PASTEBIN_ORIGIN: "https://pb.223.im",
+    PASTEBIN_SERVICE: {
+      fetch: vi.fn(() =>
+        Promise.resolve(
+          Response.json({
+            url: "https://pb.223.im/abcd",
+            expireAt: null,
+            expirationSeconds: null,
+          }),
+        ),
+      ),
+    },
     FEISHU_BINDINGS_DB: { prepare: vi.fn() },
     FEISHU_INGRESS_QUEUE: { send: vi.fn() },
     ASSETS: {
@@ -53,5 +64,32 @@ describe("Feishu production entrypoint", () => {
     await expect(
       createPhase4Worker(productionEnv({ FEISHU_CREDENTIAL_ENCRYPTION_KEY: "short" }) as never),
     ).rejects.toThrow("INVALID_SECRET_CONFIG")
+  })
+
+  it("creates Pastes through PASTEBIN_SERVICE and validates public URLs on pb.223.im", async () => {
+    const ambientFetch = vi.fn<typeof fetch>()
+    vi.stubGlobal("fetch", ambientFetch)
+    const env = productionEnv()
+    const client = createPasteClient(env as never)
+    expect(await client.create("body", "a".repeat(64))).toBe("abcd")
+    expect(client.publicUrl("abcd")).toBe("https://pb.223.im/abcd")
+    expect(env.PASTEBIN_SERVICE.fetch).toHaveBeenCalledTimes(1)
+    const [input] = (env.PASTEBIN_SERVICE.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit]
+    expect(String(input)).toBe("https://pb.223.im/")
+    expect(ambientFetch).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it("fails closed when PASTEBIN_SERVICE is missing instead of using ambient fetch", async () => {
+    const ambientFetch = vi.fn<typeof fetch>()
+    vi.stubGlobal("fetch", ambientFetch)
+    expect(() => createPasteClient(productionEnv({ PASTEBIN_SERVICE: undefined }) as never)).toThrow(
+      "MISSING_PASTEBIN_SERVICE",
+    )
+    await expect(createPhase4Worker(productionEnv({ PASTEBIN_SERVICE: undefined }) as never)).rejects.toThrow(
+      "MISSING_PASTEBIN_SERVICE",
+    )
+    expect(ambientFetch).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 })

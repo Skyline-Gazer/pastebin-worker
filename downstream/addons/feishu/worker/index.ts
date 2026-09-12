@@ -18,11 +18,20 @@ export interface Phase4Environment extends FeishuWebhookEnvironment, BrowserAuth
   FEISHU_CREDENTIAL_ENCRYPTION_KEY: string
   FEISHU_FINGERPRINT_KEY: string
   PASTEBIN_ORIGIN: string
+  PASTEBIN_SERVICE: Fetcher
   PASTEBIN_AUTHORIZATION?: string
 }
 
 export interface FeishuProductionEnvironment extends Phase4Environment {
   ASSETS?: Fetcher
+}
+
+/** Bind PasteClient to PASTEBIN_SERVICE without teaching it Cloudflare service-binding concepts. */
+export function createPasteClient(env: Phase4Environment): PasteClient {
+  const service = env.PASTEBIN_SERVICE
+  if (!service || typeof service.fetch !== "function") throw new Error("MISSING_PASTEBIN_SERVICE")
+  const pastebinTransport: typeof fetch = (input, init) => service.fetch(input, init)
+  return new PasteClient(env.PASTEBIN_ORIGIN, pastebinTransport, env.PASTEBIN_AUTHORIZATION)
 }
 
 /** Constructs the only public adapter; it never accepts caller-selected Phase 3 identities. */
@@ -33,7 +42,7 @@ export async function createPhase4Worker(env: Phase4Environment) {
     env.FEISHU_FINGERPRINT_KEY,
   )
   const bindings = new BindingStore(env.FEISHU_BINDINGS_DB)
-  const client = new PasteClient(env.PASTEBIN_ORIGIN, fetch, env.PASTEBIN_AUTHORIZATION)
+  const client = createPasteClient(env)
   const service = new EntryService(bindings, credentials, client)
   const trustStore = new BrowserTrustStore(env.FEISHU_BINDINGS_DB)
   const handler = createFeishuWebhookHandler(env, trustStore, (appId, tenantKey, openId) =>

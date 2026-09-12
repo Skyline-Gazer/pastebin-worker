@@ -13,9 +13,11 @@ export async function derivePrincipalKey(
   appId: string,
   tenantKey: string,
   openId: string,
+  provider: "feishu" | "lark" = "feishu",
 ): Promise<string> {
   if (![key, appId, tenantKey, openId].every((value) => typeof value === "string" && value.length > 0))
     throw new Error("INVALID_PRINCIPAL_INPUT")
+  if (provider !== "feishu" && provider !== "lark") throw new Error("INVALID_PRINCIPAL_INPUT")
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
     encoder.encode(key),
@@ -23,5 +25,5 @@ export async function derivePrincipalKey(
     false,
     ["sign"],
   )
-  return `feishu:v1:principal:${base64url(await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(JSON.stringify([appId, tenantKey, openId]))))}`
+  return `${provider}:v1:principal:${base64url(await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(JSON.stringify([appId, tenantKey, openId]))))}`
 }

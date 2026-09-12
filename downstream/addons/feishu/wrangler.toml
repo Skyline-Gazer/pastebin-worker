@@ -39,6 +39,9 @@ PASTEBIN_ORIGIN = "https://pb.223.im"
 # Exact value feishu | lark. Overlays may set PLATFORM=lark and must then
 # supply LARK_* provider credentials. Do not put Lark secrets in FEISHU_*.
 PLATFORM = "feishu"
+# Dual Feishu+Lark login/webhooks stay off until owner-provisioned Lark secrets
+# and console URLs exist. Unset BROWSER_AUTH_PROVIDERS keeps single-provider
+# PLATFORM=feishu behavior, including GET /api/auth/login and POST /api/feishu/events.
 FEISHU_INGRESS_DLQ_CONFIGURED = "false"
 # Canonical browser-auth origin. Overlays MUST keep these values; do not
 # silently restore a workers.dev OAuth callback. Cookie stays host-only.

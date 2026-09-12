@@ -1,9 +1,12 @@
 import type { BrowserTrustStore } from "./browser-store"
 import { type BrowserSession } from "./browser-store"
 import {
+  InvalidBrowserAuthProvidersError,
   InvalidPlatformError,
   MissingProviderConfigError,
+  parseBrowserAuthProviders,
   resolveProviderConfig,
+  type Platform,
   type ProviderConfig,
   type ProviderCredentialEnvironment,
 } from "./platform"
@@ -27,13 +30,20 @@ export class BrowserAuthError extends Error {
 function random() {
   return crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "")
 }
-function requireProvider(env: BrowserAuthEnvironment): ProviderConfig {
+function configError(error: unknown): boolean {
+  return (
+    error instanceof InvalidPlatformError ||
+    error instanceof MissingProviderConfigError ||
+    error instanceof InvalidBrowserAuthProvidersError
+  )
+}
+function requireProvider(env: BrowserAuthEnvironment, provider?: Platform): ProviderConfig {
   if (!env.FEISHU_PRINCIPAL_KEY) throw new BrowserAuthError("UNAVAILABLE", 503)
   try {
-    return resolveProviderConfig(env)
+    parseBrowserAuthProviders(env.BROWSER_AUTH_PROVIDERS)
+    return resolveProviderConfig(env, provider)
   } catch (error) {
-    if (error instanceof InvalidPlatformError || error instanceof MissingProviderConfigError)
-      throw new BrowserAuthError("UNAVAILABLE", 503)
+    if (configError(error)) throw new BrowserAuthError("UNAVAILABLE", 503)
     throw error
   }
 }
@@ -72,6 +82,37 @@ function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 }
 
+function sessionProvider(session: BrowserSession): Platform {
+  return session.provider === "lark" ? "lark" : "feishu"
+}
+
+function rejectProviderMismatch(session: BrowserSession) {
+  const provider = sessionProvider(session)
+  if (provider === "lark" && session.principalKey.startsWith("feishu:v1:"))
+    throw new BrowserAuthError("UNAUTHENTICATED", 401)
+  if (provider === "feishu" && session.principalKey.startsWith("lark:v1:"))
+    throw new BrowserAuthError("UNAUTHENTICATED", 401)
+}
+
+function loginProvider(env: BrowserAuthEnvironment, requested: Platform | undefined): ProviderConfig {
+  let enabled: Platform[] | undefined
+  try {
+    enabled = parseBrowserAuthProviders(env.BROWSER_AUTH_PROVIDERS)
+  } catch (error) {
+    if (configError(error)) throw new BrowserAuthError("UNAVAILABLE", 503)
+    throw error
+  }
+  if (enabled) {
+    const chosen = requested ?? "feishu"
+    if (!enabled.includes(chosen) || (!requested && !enabled.includes("feishu")))
+      throw new BrowserAuthError("UNAVAILABLE", 404)
+    return requireProvider(env, chosen)
+  }
+  const config = requireProvider(env)
+  if (requested && requested !== config.provider) throw new BrowserAuthError("UNAVAILABLE", 404)
+  return config
+}
+
 export async function requireBrowserSession(
   request: Request,
   env: BrowserAuthEnvironment,
@@ -82,6 +123,7 @@ export async function requireBrowserSession(
   if (!id) throw new BrowserAuthError("UNAUTHENTICATED", 401)
   const session = await store.getSession(id, new Date().toISOString())
   if (!session) throw new BrowserAuthError("UNAUTHENTICATED", 401)
+  rejectProviderMismatch(session)
   return session
 }
 export async function authorizeBrowserMutation(
@@ -100,7 +142,7 @@ export function requireBrowserRequestProtection(
   env: BrowserAuthEnvironment,
   session: BrowserSession,
 ) {
-  const origins = requireProvider(env)
+  const origins = requireProvider(env, sessionProvider(session))
     .allowedOrigins.split(",")
     .map((v) => v.trim())
     .filter(Boolean)
@@ -109,26 +151,24 @@ export function requireBrowserRequestProtection(
     throw new BrowserAuthError("INVALID_CSRF", 403)
 }
 
-export function createBrowserAuthHandler(env: BrowserAuthEnvironment, store: BrowserTrustStore) {
-  const provider = (() => {
-    try {
-      return requireProvider(env)
-    } catch {
-      return null
-    }
-  })()
-  function resolved() {
-    if (!provider) throw new BrowserAuthError("UNAVAILABLE", 503)
-    return provider
+function unauthenticatedBrand(env: BrowserAuthEnvironment): string | undefined {
+  try {
+    return requireProvider(env).brand
+  } catch {
+    return undefined
   }
+}
+
+export function createBrowserAuthHandler(env: BrowserAuthEnvironment, store: BrowserTrustStore) {
   return {
     async fetch(request: Request): Promise<Response | null> {
       const url = new URL(request.url)
       try {
-        if (url.pathname === "/api/auth/login" && request.method === "GET") {
-          const config = resolved()
+        const loginMatch = /^\/api\/auth\/login(?:\/(feishu|lark))?$/.exec(url.pathname)
+        if (loginMatch && request.method === "GET") {
+          const config = loginProvider(env, loginMatch[1] as Platform | undefined)
           const state = random()
-          await store.saveOAuthState(state, new Date(Date.now() + STATE_TTL_MS).toISOString())
+          await store.saveOAuthState(state, new Date(Date.now() + STATE_TTL_MS).toISOString(), config.provider)
           const target = new URL(config.authorizeUrl)
           target.search = new URLSearchParams({
             client_id: config.appId,
@@ -139,11 +179,12 @@ export function createBrowserAuthHandler(env: BrowserAuthEnvironment, store: Bro
           return Response.redirect(target, 302)
         }
         if (url.pathname === "/api/auth/callback" && request.method === "GET") {
-          const config = resolved()
           const state = url.searchParams.get("state")
           const code = url.searchParams.get("code")
-          if (!state || !code || !(await store.consumeOAuthState(state, new Date().toISOString())))
-            throw new BrowserAuthError("OAUTH_DENIED", 401)
+          const consumed = state ? await store.consumeOAuthState(state, new Date().toISOString()) : null
+          if (!state || !code || !consumed) throw new BrowserAuthError("OAUTH_DENIED", 401)
+          const enabled = parseBrowserAuthProviders(env.BROWSER_AUTH_PROVIDERS)
+          const config = enabled ? requireProvider(env, consumed.provider) : requireProvider(env)
           const tokenResponse = await fetch(config.tokenUrl, {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -169,10 +210,17 @@ export function createBrowserAuthHandler(env: BrowserAuthEnvironment, store: Bro
           const now = new Date()
           const session = {
             id: random(),
-            principalKey: await derivePrincipalKey(env.FEISHU_PRINCIPAL_KEY, config.appId, raw.tenant_key, raw.open_id),
+            principalKey: await derivePrincipalKey(
+              env.FEISHU_PRINCIPAL_KEY,
+              config.appId,
+              raw.tenant_key,
+              raw.open_id,
+              config.provider,
+            ),
             csrfToken: random(),
             createdAt: now.toISOString(),
             expiresAt: new Date(now.getTime() + SESSION_TTL_MS).toISOString(),
+            provider: config.provider,
           }
           await store.createSession(session)
           return new Response(null, {
@@ -181,12 +229,11 @@ export function createBrowserAuthHandler(env: BrowserAuthEnvironment, store: Bro
           })
         }
         if (url.pathname === "/api/auth/session" && request.method === "GET") {
-          const config = resolved()
           const session = await requireBrowserSession(request, env, store)
-          return Response.json({ csrfToken: session.csrfToken, expiresAt: session.expiresAt, brand: config.brand })
+          const brand = sessionProvider(session) === "lark" ? "Lark" : "Feishu"
+          return Response.json({ csrfToken: session.csrfToken, expiresAt: session.expiresAt, brand })
         }
         if (url.pathname === "/api/auth/logout" && request.method === "POST") {
-          resolved()
           const session = await requireBrowserSession(request, env, store)
           requireBrowserRequestProtection(request, env, session)
           await store.deleteSession(session.id)
@@ -195,8 +242,10 @@ export function createBrowserAuthHandler(env: BrowserAuthEnvironment, store: Bro
         return null
       } catch (error) {
         const safe = error instanceof BrowserAuthError ? error : new BrowserAuthError("UNAVAILABLE", 503)
-        if (safe.code === "UNAUTHENTICATED" && provider)
-          return Response.json({ code: safe.code, brand: provider.brand }, { status: safe.status })
+        if (safe.code === "UNAUTHENTICATED") {
+          const brand = unauthenticatedBrand(env)
+          return Response.json(brand ? { code: safe.code, brand } : { code: safe.code }, { status: safe.status })
+        }
         return Response.json({ code: safe.code }, { status: safe.status })
       }
     },

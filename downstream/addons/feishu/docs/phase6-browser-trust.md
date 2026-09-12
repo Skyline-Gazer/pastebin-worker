@@ -29,24 +29,26 @@ the public response contains only a stable code or allowlisted entry state.
 
 The Worker exposes these browser routes:
 
-- `GET /api/auth/login` starts brand-specific authorization-code OAuth (`PLATFORM=feishu` or `PLATFORM=lark`).
-- `GET /api/auth/callback` consumes one server-stored state value, exchanges the code at the platform `/open-apis/authen/v2/oauth/token` endpoint, resolves `open_id` and `tenant_key`, and issues an opaque eight-hour Add-on session cookie.
-- `GET /api/auth/session` returns the session-bound CSRF token and expiry for an authenticated session, plus a secret-free `brand` (`Feishu` or `Lark`). Unauthenticated responses include `{ code, brand }` so the login link can match the platform.
+- `GET /api/auth/login` starts single-provider OAuth when `BROWSER_AUTH_PROVIDERS` is unset (`PLATFORM=feishu` or `PLATFORM=lark`). When `BROWSER_AUTH_PROVIDERS=feishu,lark`, it is a Feishu alias only.
+- `GET /api/auth/login/feishu` and `GET /api/auth/login/lark` start that provider's OAuth when dual-provider mode is enabled. Provider is stored on the OAuth state row.
+- `GET /api/auth/callback` is shared. The provider comes from stored OAuth state, never from a caller `provider` query.
+- `GET /api/auth/session` returns the session-bound CSRF token and expiry for an authenticated session, plus a secret-free `brand` (`Feishu` or `Lark`) from the **session**. Unauthenticated responses include `{ code, brand }` so the login link can match the platform.
 - `POST /api/auth/logout` deletes the server session.
 - `GET /api/entries` lists at most 50 ready bindings for the session principal's server-mapped scopes and returns public entry state plus Paste content. Caller query parameters are ignored. The response never includes credential, password, tenant, open_id, principal, OAuth, or fingerprint fields.
 
-Provision these secrets/configuration outside source control: `PLATFORM` (`feishu` or `lark`; required, fail-closed), the selected provider's `FEISHU_*` or `LARK_*` app credentials, `FEISHU_OAUTH_REDIRECT_URI` / `LARK_OAUTH_REDIRECT_URI`, `FEISHU_ALLOWED_ORIGINS` / `LARK_ALLOWED_ORIGINS`, and
-`FEISHU_PRINCIPAL_KEY`. Production Feishu values are `FEISHU_OAUTH_REDIRECT_URI=https://pb.test.223.im/api/auth/callback` and `FEISHU_ALLOWED_ORIGINS=https://pb.test.223.im`. `FEISHU_SESSION_COOKIE_NAME` is optional; the default is
+Provision these secrets/configuration outside source control: `PLATFORM` (`feishu` or `lark`; required, fail-closed), optional `BROWSER_AUTH_PROVIDERS` (`feishu`, `lark`, or `feishu,lark`), the selected provider's `FEISHU_*` or `LARK_*` app credentials, `FEISHU_OAUTH_REDIRECT_URI` / `LARK_OAUTH_REDIRECT_URI`, `FEISHU_ALLOWED_ORIGINS` / `LARK_ALLOWED_ORIGINS`, and
+`FEISHU_PRINCIPAL_KEY`. Production Feishu values are `FEISHU_OAUTH_REDIRECT_URI=https://pb.test.223.im/api/auth/callback` and `FEISHU_ALLOWED_ORIGINS=https://pb.test.223.im`. Leave `BROWSER_AUTH_PROVIDERS` unset in production until Lark secrets and console URLs are provisioned. `FEISHU_SESSION_COOKIE_NAME` is optional; the default is
 `feishu_addon_session` because deployment topology cannot safely require `__Host-` yet. Do not add a cookie `Domain` attribute.
 
 Apply migrations `0002_browser_trust.sql`, `0003_lifecycle_completion.sql`,
-`0004_permanent_restore.sql`, `0005_timed_restore.sql`, and
-`0006_batch_operations.sql` after `0001_bindings.sql` when deploying. The latter migrations
-preserve existing binding rows while widening lifecycle and operation-kind checks.
-Migration 0002 only adds
-opaque session/OAuth-state and keyed-principal-to-scope authorization metadata. Feishu OAuth tokens,
-raw identity, management credentials, and Paste bodies are never persisted by this migration or
-returned by these routes. Future browser mutations must call `authorizeBrowserMutation` before any
+`0004_permanent_restore.sql`, `0005_timed_restore.sql`,
+`0006_batch_operations.sql`, `0007_batch_completed_results.sql`, and
+`0008_dual_provider_auth.sql` after `0001_bindings.sql` when deploying. Migration 0008 adds
+`provider` (default `feishu`) on OAuth state and browser session rows. Do not rewrite existing
+Feishu principal or scope keys. Dual inbound events use `POST /api/feishu/events` and
+`POST /api/lark/events` with no credential fallback.
+
+Future browser mutations must call `authorizeBrowserMutation` before any
 Phase 3 or Paste operation; it requires the session, exact Origin, CSRF header, and a server-side
 principal-to-binding-scope join.
 

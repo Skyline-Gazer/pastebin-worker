@@ -10,7 +10,13 @@ import { createReconciliationHandler } from "./reconcile"
 import { createEntriesListHandler } from "./entries"
 import { BatchLifecycleCoordinator, createBatchDispatch, createBatchHandler } from "./batch"
 import { derivePrincipalKey } from "./principal"
-import { consumeFeishuMessages, createFeishuWebhookHandler, type FeishuWebhookEnvironment } from "./webhook"
+import { parseBrowserAuthProviders, resolvePlatform } from "./platform"
+import {
+  consumeFeishuMessages,
+  createFeishuWebhookHandler,
+  createProviderWebhookHandler,
+  type FeishuWebhookEnvironment,
+} from "./webhook"
 
 export interface Phase4Environment extends FeishuWebhookEnvironment, BrowserAuthEnvironment {
   FEISHU_BINDINGS_DB: D1Database
@@ -53,9 +59,20 @@ export async function createPhase4Worker(env: Phase4Environment) {
   const client = createPasteClient(env)
   const service = new EntryService(bindings, credentials, client)
   const trustStore = new BrowserTrustStore(env.FEISHU_BINDINGS_DB)
-  const handler = createFeishuWebhookHandler(env, trustStore, (appId, tenantKey, openId) =>
-    derivePrincipalKey(env.FEISHU_PRINCIPAL_KEY, appId, tenantKey, openId),
-  )
+  const enabled = parseBrowserAuthProviders(env.BROWSER_AUTH_PROVIDERS)
+  const platform = resolvePlatform(env.PLATFORM).provider
+  const handler = enabled
+    ? createProviderWebhookHandler(env, "feishu", trustStore, (appId, tenantKey, openId) =>
+        derivePrincipalKey(env.FEISHU_PRINCIPAL_KEY, appId, tenantKey, openId, "feishu"),
+      )
+    : createFeishuWebhookHandler(env, trustStore, (appId, tenantKey, openId) =>
+        derivePrincipalKey(env.FEISHU_PRINCIPAL_KEY, appId, tenantKey, openId, platform),
+      )
+  const larkHandler = enabled?.includes("lark")
+    ? createProviderWebhookHandler(env, "lark", trustStore, (appId, tenantKey, openId) =>
+        derivePrincipalKey(env.FEISHU_PRINCIPAL_KEY, appId, tenantKey, openId, "lark"),
+      )
+    : null
   const browser = createBrowserAuthHandler(env, trustStore)
   const completion = createCompletionHandler(env, trustStore, bindings, service)
   const restore = createRestoreHandler(env, trustStore, bindings, service)
@@ -71,7 +88,9 @@ export async function createPhase4Worker(env: Phase4Environment) {
       (await reconciliation.fetch(request)) ??
       (await batch.fetch(request)) ??
       (await entries.fetch(request)) ??
-      handler.fetch(request),
+      (new URL(request.url).pathname === "/api/lark/events" && larkHandler
+        ? larkHandler.fetch(request)
+        : handler.fetch(request)),
     queue: (batch: Parameters<typeof consumeFeishuMessages>[0]) =>
       consumeFeishuMessages(batch, service, undefined, env.FEISHU_INGRESS_DLQ_CONFIGURED === "true"),
   }
@@ -107,6 +126,7 @@ export type { BatchAction, BatchItemResult, BatchPublicEntryState, BatchRequest,
 export {
   consumeFeishuMessages,
   createFeishuWebhookHandler,
+  createProviderWebhookHandler,
   deriveMessageIdentity,
   normalizeAuthorizedEvent,
   verifyFeishuChallenge,

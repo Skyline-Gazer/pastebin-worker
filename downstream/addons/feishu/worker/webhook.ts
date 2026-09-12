@@ -3,6 +3,7 @@ import {
   InvalidPlatformError,
   MissingProviderConfigError,
   resolveProviderConfig,
+  type Platform,
   type ProviderConfig,
   type ProviderCredentialEnvironment,
 } from "./platform"
@@ -15,6 +16,7 @@ const QUEUE_LIMIT = 120_000
 
 export interface FeishuMessageCreateV1 {
   schema: "feishu.message-create.v1"
+  provider?: Platform
   scopeId: string
   recordKey: string
   requestId: string
@@ -106,28 +108,28 @@ function boundedIdentity(value: unknown): value is string {
     })
   )
 }
-function providerOrUnavailable(env: ProviderCredentialEnvironment): ProviderConfig {
+function providerOrUnavailable(env: ProviderCredentialEnvironment, provider?: Platform): ProviderConfig {
   try {
-    return resolveProviderConfig(env)
+    return resolveProviderConfig(env, provider)
   } catch (error) {
     if (error instanceof InvalidPlatformError || error instanceof MissingProviderConfigError)
       throw new WebhookError("UNAVAILABLE", 503)
     throw error
   }
 }
-function config(env: ProviderCredentialEnvironment) {
-  const provider = providerOrUnavailable(env)
-  const tenants = provider.allowedTenantKeys.split(",")
+function config(env: ProviderCredentialEnvironment, provider?: Platform) {
+  const resolved = providerOrUnavailable(env, provider)
+  const tenants = resolved.allowedTenantKeys.split(",")
   if (
-    !boundedIdentity(provider.encryptKey) ||
-    !boundedIdentity(provider.verificationToken) ||
-    !boundedIdentity(provider.appId) ||
+    !boundedIdentity(resolved.encryptKey) ||
+    !boundedIdentity(resolved.verificationToken) ||
+    !boundedIdentity(resolved.appId) ||
     !tenants.length ||
     tenants.some((tenant) => !boundedIdentity(tenant)) ||
     new Set(tenants).size !== tenants.length
   )
     throw new WebhookError("UNAVAILABLE", 503)
-  return { ...provider, tenants: new Set(tenants) }
+  return { ...resolved, tenants: new Set(tenants) }
 }
 function bytes(value: string) {
   return encoder.encode(value)
@@ -190,8 +192,12 @@ async function decrypt(encrypt: string, keyText: string): Promise<unknown> {
   }
 }
 
-export async function verifyFeishuChallenge(value: unknown, env: ProviderCredentialEnvironment): Promise<string> {
-  const checked = config(env)
+export async function verifyFeishuChallenge(
+  value: unknown,
+  env: ProviderCredentialEnvironment,
+  provider?: Platform,
+): Promise<string> {
+  const checked = config(env, provider)
   const clear =
     value && typeof value === "object" && typeof (value as { encrypt?: unknown }).encrypt === "string"
       ? await decrypt((value as { encrypt: string }).encrypt, checked.encryptKey)
@@ -208,18 +214,29 @@ export async function verifyFeishuChallenge(value: unknown, env: ProviderCredent
   return item.challenge
 }
 
-export async function deriveMessageIdentity(appId: string, tenantKey: string, chatId: string, messageId: string) {
-  const scopeId = `feishu:v1:scope:${await digest(JSON.stringify([appId, tenantKey, chatId]))}`
-  const recordKey = `feishu:v1:message:${await digest(JSON.stringify([messageId]))}`
-  return { scopeId, recordKey, requestId: `feishu:v1:create:${await digest(JSON.stringify([scopeId, recordKey]))}` }
+export async function deriveMessageIdentity(
+  appId: string,
+  tenantKey: string,
+  chatId: string,
+  messageId: string,
+  provider: Platform = "feishu",
+) {
+  const scopeId = `${provider}:v1:scope:${await digest(JSON.stringify([appId, tenantKey, chatId]))}`
+  const recordKey = `${provider}:v1:message:${await digest(JSON.stringify([messageId]))}`
+  return {
+    scopeId,
+    recordKey,
+    requestId: `${provider}:v1:create:${await digest(JSON.stringify([scopeId, recordKey]))}`,
+  }
 }
 
 export async function normalizeAuthorizedEvent(
   value: unknown,
   env: ProviderCredentialEnvironment,
   principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
+  provider?: Platform,
 ): Promise<AuthorizedFeishuEvent | null> {
-  const checked = config(env)
+  const checked = config(env, provider)
   if (!value || typeof value !== "object") throw new WebhookError("MALFORMED", 400)
   const root = object(value)
   const header = object(root?.header)
@@ -259,10 +276,17 @@ export async function normalizeAuthorizedEvent(
   if (!boundedIdentity(senderId?.open_id)) throw new WebhookError("MALFORMED", 400)
   const principalKey = principal ? await principal(checked.appId, header.tenant_key, senderId.open_id) : ""
   return {
-    ...(await deriveMessageIdentity(checked.appId, header.tenant_key, message.chat_id, message.message_id)),
+    ...(await deriveMessageIdentity(
+      checked.appId,
+      header.tenant_key,
+      message.chat_id,
+      message.message_id,
+      checked.provider,
+    )),
     sourceMessageId: message.message_id,
     content: content.text,
     principalKey,
+    ...(checked.provider === "lark" ? { provider: "lark" as const } : {}),
   }
 }
 
@@ -291,30 +315,28 @@ function response(code: string, correlationId: string, status: number) {
   return Response.json({ code, correlationId }, { status })
 }
 
-export function createFeishuWebhookHandler(
+function createWebhookHandler(
   env: FeishuWebhookEnvironment,
+  pathname: string,
+  providerOverride: Platform | undefined,
   recorder?: PrincipalScopeRecorder,
   principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
 ) {
   return {
     async fetch(request: Request): Promise<Response> {
       const correlationId = crypto.randomUUID()
-      if (new URL(request.url).pathname !== "/api/feishu/events") return response("NOT_FOUND", correlationId, 404)
+      if (new URL(request.url).pathname !== pathname) return response("NOT_FOUND", correlationId, 404)
       if (request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST" } })
       if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json"))
         return response("UNSUPPORTED_MEDIA_TYPE", correlationId, 415)
       try {
         if (!env.FEISHU_INGRESS_QUEUE || env.FEISHU_INGRESS_DLQ_CONFIGURED !== "true")
           throw new WebhookError("UNAVAILABLE", 503)
-        const provider = config(env)
+        const provider = config(env, providerOverride)
         const raw = await readBounded(request)
         const envelope = json(decoder.decode(raw))
         if (envelope && typeof envelope === "object" && (envelope as { type?: unknown }).type === "url_verification")
-          return Response.json({ challenge: await verifyFeishuChallenge(envelope, env) })
-        // Encrypted URL verification has no clear discriminator or ordinary-event
-        // signature. A successfully decrypted, token-verified challenge is the only
-        // envelope accepted on this branch; all other envelopes continue to raw-body
-        // signature verification below.
+          return Response.json({ challenge: await verifyFeishuChallenge(envelope, env, providerOverride) })
         if (
           envelope &&
           typeof envelope === "object" &&
@@ -327,7 +349,7 @@ export function createFeishuWebhookHandler(
             // Ordinary events are deliberately authenticated from the exact raw body.
           }
           if (object(clear)?.type === "url_verification")
-            return Response.json({ challenge: await verifyFeishuChallenge(envelope, env) })
+            return Response.json({ challenge: await verifyFeishuChallenge(envelope, env, providerOverride) })
         }
         const timestamp = request.headers.get("x-lark-request-timestamp")
         const nonce = request.headers.get("x-lark-request-nonce")
@@ -348,6 +370,7 @@ export function createFeishuWebhookHandler(
           await decrypt((envelope as { encrypt: string }).encrypt, provider.encryptKey),
           env,
           principal,
+          providerOverride,
         )
         if (!normalized) return new Response(null, { status: 200 })
         if (recorder) {
@@ -370,6 +393,29 @@ export function createFeishuWebhookHandler(
     },
   }
 }
+
+export function createFeishuWebhookHandler(
+  env: FeishuWebhookEnvironment,
+  recorder?: PrincipalScopeRecorder,
+  principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
+) {
+  return createWebhookHandler(env, "/api/feishu/events", undefined, recorder, principal)
+}
+
+export function createProviderWebhookHandler(
+  env: FeishuWebhookEnvironment,
+  provider: Platform,
+  recorder?: PrincipalScopeRecorder,
+  principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
+) {
+  return createWebhookHandler(
+    env,
+    provider === "lark" ? "/api/lark/events" : "/api/feishu/events",
+    provider,
+    recorder,
+    principal,
+  )
+}
 async function digestBytes(value: Uint8Array) {
   return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", value as Uint8Array<ArrayBuffer>)), (byte) =>
     byte.toString(16).padStart(2, "0"),
@@ -380,6 +426,7 @@ function queueItem(value: unknown): value is FeishuMessageCreateV1 {
   if (!value || typeof value !== "object" || (value as FeishuMessageCreateV1).schema !== "feishu.message-create.v1")
     return false
   const item = value as FeishuMessageCreateV1
+  if (item.provider !== undefined && item.provider !== "feishu" && item.provider !== "lark") return false
   return (
     [item.scopeId, item.recordKey, item.requestId, item.sourceMessageId, item.correlationId].every(boundedIdentity) &&
     typeof item.content === "string" &&
@@ -388,6 +435,12 @@ function queueItem(value: unknown): value is FeishuMessageCreateV1 {
     bytes(JSON.stringify(value)).byteLength <= QUEUE_LIMIT
   )
 }
+
+function providerScopePoison(item: FeishuMessageCreateV1): boolean {
+  if (item.provider === "lark") return !item.scopeId.startsWith("lark:v1:")
+  return item.scopeId.startsWith("lark:v1:")
+}
+
 export async function consumeFeishuMessages(
   batch: QueueBatchLike<unknown>,
   service: EntryCreator,
@@ -396,7 +449,7 @@ export async function consumeFeishuMessages(
 ) {
   for (const message of batch.messages) {
     const item = message.body
-    if (!dlqConfigured || !queueItem(item)) {
+    if (!dlqConfigured || !queueItem(item) || providerScopePoison(item)) {
       if (
         report &&
         (await report({ code: "QUEUE_POISON", correlationId: queueItem(item) ? item.correlationId : "invalid" }))

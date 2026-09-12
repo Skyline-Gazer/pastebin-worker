@@ -115,11 +115,13 @@ Do not use a separate "Feishu enterprise app" visual shell unless explicitly req
 
 Runtime `PLATFORM` is exactly `feishu` or `lark`. Production must set it explicitly; the tracked Worker contract defaults to `feishu`. Any other value, including missing, fails closed.
 
+Optional `BROWSER_AUTH_PROVIDERS` (`feishu`, `lark`, or `feishu,lark`) enables simultaneous browser login and inbound webhooks. Leave it unset in production until Lark credentials and console URLs are provisioned; unset keeps single-provider `PLATFORM` behavior.
+
 Selected-provider credentials are separated:
 
-- `PLATFORM=feishu` → `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, `FEISHU_ENCRYPT_KEY`, `FEISHU_VERIFICATION_TOKEN`, `FEISHU_ALLOWED_TENANT_KEYS`, `FEISHU_OAUTH_REDIRECT_URI`, `FEISHU_ALLOWED_ORIGINS`
-- `PLATFORM=lark` → the matching `LARK_*` names
+- Feishu → `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, `FEISHU_ENCRYPT_KEY`, `FEISHU_VERIFICATION_TOKEN`, `FEISHU_ALLOWED_TENANT_KEYS`, `FEISHU_OAUTH_REDIRECT_URI`, `FEISHU_ALLOWED_ORIGINS`
+- Lark → the matching `LARK_*` names
 
-Do not put Lark credentials in `FEISHU_*` variables. Product-owned bindings (`FEISHU_BINDINGS_DB`, `FEISHU_INGRESS_QUEUE`, `FEISHU_PRINCIPAL_KEY`) stay as they are.
+Do not put Lark credentials in `FEISHU_*` variables. There is no cross-provider credential fallback. Product-owned bindings (`FEISHU_BINDINGS_DB`, `FEISHU_INGRESS_QUEUE`, `FEISHU_PRINCIPAL_KEY`) stay as they are.
 
-Outbound OAuth/OpenAPI hosts come from a static map (`worker/platform.ts`). The inbound webhook path remains `/api/feishu/events` for both brands. Login copy is the only user-visible brand switch.
+Outbound OAuth/OpenAPI hosts come from a static map (`worker/platform.ts`). Single-provider inbound webhook remains `/api/feishu/events`. Dual-provider mode adds `/api/lark/events` and login routes `/api/auth/login/feishu` and `/api/auth/login/lark` while keeping the canonical callback `GET /api/auth/callback`. Feishu principals stay `feishu:v1:*`; Lark principals use `lark:v1:*`. Apply migration `0008_dual_provider_auth.sql` before enabling dual providers.

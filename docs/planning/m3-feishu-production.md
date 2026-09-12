@@ -7,7 +7,8 @@ This file is the historical M3 execution contract plus the shipped production ou
 ## Production outcome
 
 - Worker: `pastebin-feishu-prod`, live version `2538a5fe-42b5-4479-900e-6eb8732c0a84` at the accepted smoke.
-- Callback: `https://pb.test.223.im/api/feishu/events` (custom hostname on zone `223.im`; workers.dev remains available).
+- Webhook callback: `https://pb.test.223.im/api/feishu/events` (custom hostname on zone `223.im`; workers.dev remains available operationally).
+- Canonical browser OAuth callback: `https://pb.test.223.im/api/auth/callback` with `FEISHU_ALLOWED_ORIGINS=https://pb.test.223.im` (Issue #130). Do not use workers.dev as the OAuth redirect host.
 - Pastebin origin: `https://pb.223.im`. Internal Paste HTTP uses Service Binding `PASTEBIN_SERVICE` → `pastebin-prod` with `service.fetch(request)`.
 - Accepted smoke operation: `f1790b7f-3268-4c88-be8a-3899e2dd0088` (`succeeded`).
 - Accepted smoke Paste: `https://pb.223.im/DRsrmX5eRifhY2dAidEA6PW5`.

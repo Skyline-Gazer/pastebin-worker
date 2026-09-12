@@ -15,7 +15,7 @@ downstream/addons/feishu/
 ```
 
 Frontend and webhook/backend are part of the same product unit even if built separately.
-Production serves both from Worker `pastebin-feishu-prod` (workers.dev, no custom Feishu hostname).
+Production serves both from Worker `pastebin-feishu-prod`. The canonical browser origin is `https://pb.test.223.im`. OAuth callback is `https://pb.test.223.im/api/auth/callback`. `FEISHU_ALLOWED_ORIGINS` is that same origin. workers.dev may stay enabled operationally but is not the OAuth/session cookie host.
 
 ## 2. Frontend responsibilities
 

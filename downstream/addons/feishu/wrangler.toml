@@ -9,6 +9,10 @@ compatibility_date = "2026-07-01"
 compatibility_flags = ["global_fetch_strictly_public"]
 workers_dev = true
 
+[[routes]]
+pattern = "pb.test.223.im"
+custom_domain = true
+
 # Persist existing PASTE_CREATE_STAGE console.log output (queue consumers included).
 # Full sample is required: this Worker is low-traffic and a single P2P must not be dropped.
 # Production overlays that replace this file MUST keep the observability block.
@@ -36,6 +40,10 @@ PASTEBIN_ORIGIN = "https://pb.223.im"
 # supply LARK_* provider credentials. Do not put Lark secrets in FEISHU_*.
 PLATFORM = "feishu"
 FEISHU_INGRESS_DLQ_CONFIGURED = "false"
+# Canonical browser-auth origin. Overlays MUST keep these values; do not
+# silently restore a workers.dev OAuth callback. Cookie stays host-only.
+FEISHU_OAUTH_REDIRECT_URI = "https://pb.test.223.im/api/auth/callback"
+FEISHU_ALLOWED_ORIGINS = "https://pb.test.223.im"
 
 [[d1_databases]]
 binding = "FEISHU_BINDINGS_DB"

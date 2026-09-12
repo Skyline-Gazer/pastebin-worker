@@ -122,7 +122,11 @@ describe("Phase 6.0 browser trust boundary", () => {
     expect(login?.status).toBe(302)
     const location = login?.headers.get("location") || ""
     expect(location).toContain("accounts.feishu.cn/open-apis/authen/v1/authorize")
-    const state = new URL(location).searchParams.get("state")!
+    const loginUrl = new URL(location)
+    expect(loginUrl.searchParams.get("redirect_uri")).toBe(config.FEISHU_OAUTH_REDIRECT_URI)
+    expect(loginUrl.searchParams.get("response_type")).toBe("code")
+    expect([...loginUrl.searchParams.keys()].some((key) => /secret|token|access/i.test(key))).toBe(false)
+    const state = loginUrl.searchParams.get("state")!
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(Response.json({ data: { access_token: "never-visible-token" } }))
@@ -131,12 +135,74 @@ describe("Phase 6.0 browser trust boundary", () => {
       new Request(`https://addon.example/api/auth/callback?state=${state}&code=code`),
     )
     expect(callback?.status).toBe(302)
-    expect(callback?.headers.get("set-cookie")).toMatch(/HttpOnly; Secure; SameSite=Lax; Path=\//)
+    expect(callback?.headers.get("location")).toBe("/")
+    const cookie = callback?.headers.get("set-cookie") || ""
+    expect(cookie).toMatch(/HttpOnly; Secure; SameSite=Lax; Path=\//)
+    expect(cookie).not.toMatch(/;\s*Domain=/i)
+    expect(new URL(callback?.headers.get("location") || "/", "https://pb.test.223.im/api/auth/callback").origin).toBe(
+      "https://pb.test.223.im",
+    )
     expect(await callback?.text()).not.toContain("never-visible-token")
     expect(fetchSpy.mock.calls[0]?.[0]).toBe("https://open.feishu.cn/open-apis/authen/v2/oauth/token")
     expect(fetchSpy.mock.calls[1]?.[0]).toBe("https://open.feishu.cn/open-apis/authen/v1/user_info")
     expect(fetchSpy).toHaveBeenCalledTimes(2)
     fetchSpy.mockRestore()
+  })
+
+  it("keeps canonical Add-on callback, host-only cookie, session, and Origin checks on the same origin", async () => {
+    const origin = "https://pb.test.223.im"
+    const canonical = {
+      ...config,
+      FEISHU_OAUTH_REDIRECT_URI: `${origin}/api/auth/callback`,
+      FEISHU_ALLOWED_ORIGINS: origin,
+    }
+    const handler = createBrowserAuthHandler(canonical, store)
+    const login = await handler.fetch(new Request(`${origin}/api/auth/login`))
+    const loginUrl = new URL(login?.headers.get("location") || "")
+    expect(loginUrl.searchParams.get("redirect_uri")).toBe(`${origin}/api/auth/callback`)
+    expect([...loginUrl.searchParams.keys()]).toEqual(["client_id", "response_type", "redirect_uri", "state"])
+    const state = loginUrl.searchParams.get("state")!
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ data: { access_token: "never-visible-token" } }))
+      .mockResolvedValueOnce(Response.json({ data: { open_id: "open-a", tenant_key: "tenant-a" } }))
+    const callback = await handler.fetch(new Request(`${origin}/api/auth/callback?state=${state}&code=code`))
+    expect(callback?.headers.get("location")).toBe("/")
+    expect(new URL("/", origin).href).toBe(`${origin}/`)
+    const cookie = callback?.headers.get("set-cookie") || ""
+    expect(cookie).toMatch(/HttpOnly; Secure; SameSite=Lax; Path=\//)
+    expect(cookie.toLowerCase()).not.toContain("domain=")
+    const sessionId = /feishu_addon_session=([^;]+)/.exec(cookie)?.[1]
+    expect(sessionId).toBeTruthy()
+    const authenticated = await handler.fetch(
+      new Request(`${origin}/api/auth/session`, { headers: { cookie: `feishu_addon_session=${sessionId}` } }),
+    )
+    expect(authenticated).not.toBeNull()
+    if (!authenticated) throw new Error("missing authenticated session")
+    expect(authenticated.status).toBe(200)
+    const body: unknown = await authenticated.json()
+    if (!body || typeof body !== "object") throw new Error("session body")
+    const record = body as Record<string, unknown>
+    expect(record.brand).toBe("Feishu")
+    expect(typeof record.csrfToken).toBe("string")
+    expect(JSON.stringify(body)).not.toMatch(/never-visible-token|open-a|tenant-a|secret/)
+    await store.upsertPrincipalScope("principal-a", "scope-a")
+    await session()
+    await expect(
+      authorizeBrowserMutation(
+        request({ origin, cookie: "feishu_addon_session=session-a", "x-csrf-token": "csrf-a" }),
+        canonical,
+        store,
+        "scope-a",
+      ),
+    ).resolves.toMatchObject({ principalKey: "principal-a" })
+    await expect(
+      authorizeBrowserMutation(
+        request({ origin: "https://evil.example", cookie: "feishu_addon_session=session-a", "x-csrf-token": "csrf-a" }),
+        canonical,
+        store,
+        "scope-a",
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_ORIGIN" })
   })
 
   it("redirects Lark login and exchanges the code at open.larksuite.com", async () => {

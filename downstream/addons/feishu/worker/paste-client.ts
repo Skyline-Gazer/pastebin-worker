@@ -27,7 +27,8 @@ export class PasteClient {
   private async request(url: string, init: RequestInit): Promise<Response> {
     let response: Response
     try {
-      response = await this.transport(url, {
+      const transport = this.transport
+      response = await transport(url, {
         ...init,
         redirect: "error",
         signal: AbortSignal.timeout(15000),

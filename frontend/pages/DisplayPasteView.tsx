@@ -136,6 +136,9 @@ export function DisplayPasteView(props: DisplayPasteViewProps) {
 
   const displayFilename = filename || metaFilename
   const placeholderName = displayFilename || (ext ? name + ext : name)
+  const attachmentHref = `/${name}?a`
+  const downloadIsPlaintextBlob = isDecrypted === "decrypted" && !!pasteFile
+  const fileDownloadHref = downloadIsPlaintextBlob ? downloadUrl : attachmentHref
   const placeholderReason = (() => {
     if (!pendingInfo) return ""
     const ct = pendingInfo.contentType
@@ -213,15 +216,7 @@ export function DisplayPasteView(props: DisplayPasteViewProps) {
                 <CopyWidget variant="light" className={buttonClasses} getCopyContent={() => pasteStringContent!} />
               </Tooltip>
             )}
-            {pasteFile ? (
-              <Tooltip content={`Download as file`}>
-                <Button aria-label="Download" isIconOnly variant="light" className={buttonClasses}>
-                  <a href={downloadUrl} download={pasteFile.name}>
-                    <DownloadIcon className="size-6 inline" />
-                  </a>
-                </Button>
-              </Tooltip>
-            ) : onDecryptDownload ? (
+            {onDecryptDownload ? (
               <Tooltip content={`Download as file`}>
                 <Button
                   aria-label="Download"
@@ -234,13 +229,16 @@ export function DisplayPasteView(props: DisplayPasteViewProps) {
                 </Button>
               </Tooltip>
             ) : (
-              (pendingInfo || mediaInfo) && (
+              (pasteFile || pendingInfo || mediaInfo) && (
                 <Tooltip content={`Download as file`}>
-                  <Button aria-label="Download" isIconOnly variant="light" className={buttonClasses}>
-                    <a href={(pendingInfo ?? mediaInfo)!.rawUrl} download={placeholderName}>
-                      <DownloadIcon className="size-6 inline" />
-                    </a>
-                  </Button>
+                  <Link
+                    href={fileDownloadHref}
+                    download={pasteFile?.name || placeholderName}
+                    aria-label="Download"
+                    className={`${buttonClasses} inline-flex items-center justify-center rounded-full p-2 hover:bg-default-100`}
+                  >
+                    <DownloadIcon className="size-6 inline" />
+                  </Link>
                 </Tooltip>
               )
             )}

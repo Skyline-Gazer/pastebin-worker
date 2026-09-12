@@ -9,6 +9,22 @@ compatibility_date = "2026-07-01"
 compatibility_flags = ["global_fetch_strictly_public"]
 workers_dev = true
 
+# Persist existing PASTE_CREATE_STAGE console.log output (queue consumers included).
+# Full sample is required: this Worker is low-traffic and a single P2P must not be dropped.
+# Production overlays that replace this file MUST keep the observability block.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 1
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 1
+
 [assets]
 directory = "./dist/frontend"
 binding = "ASSETS"

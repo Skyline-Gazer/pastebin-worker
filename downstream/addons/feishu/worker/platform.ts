@@ -10,6 +10,7 @@ export interface PlatformEndpoints {
 
 export interface ProviderCredentialEnvironment {
   PLATFORM: string
+  BROWSER_AUTH_PROVIDERS?: string
   FEISHU_APP_ID?: string
   FEISHU_APP_SECRET?: string
   FEISHU_ENCRYPT_KEY?: string
@@ -66,6 +67,29 @@ export class MissingProviderConfigError extends Error {
   }
 }
 
+export class InvalidBrowserAuthProvidersError extends Error {
+  constructor() {
+    super("INVALID_BROWSER_AUTH_PROVIDERS")
+  }
+}
+
+/** Exact tokens only; unknown values fail closed. Unset/empty keeps single-provider PLATFORM mode. */
+export function parseBrowserAuthProviders(value: unknown): Platform[] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== "string") throw new InvalidBrowserAuthProvidersError()
+  const tokens = value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (tokens.length === 0) return undefined
+  const providers: Platform[] = []
+  for (const token of tokens) {
+    if (token !== "feishu" && token !== "lark") throw new InvalidBrowserAuthProvidersError()
+    if (!providers.includes(token)) providers.push(token)
+  }
+  return providers
+}
+
 /** Exact static mapping only; unknown or missing values fail closed. */
 export function resolvePlatform(value: unknown): PlatformEndpoints & { provider: Platform } {
   if (value === "feishu" || value === "lark") return { provider: value, ...endpoints[value] }
@@ -99,8 +123,8 @@ function selectedCredentials(env: ProviderCredentialEnvironment, provider: Platf
 }
 
 /** Selected-provider credentials only. No Feishu/Lark cross-fallback. */
-export function resolveProviderConfig(env: ProviderCredentialEnvironment): ProviderConfig {
-  const resolved = resolvePlatform(env.PLATFORM)
+export function resolveProviderConfig(env: ProviderCredentialEnvironment, provider?: Platform): ProviderConfig {
+  const resolved = resolvePlatform(provider ?? env.PLATFORM)
   const credentials = selectedCredentials(env, resolved.provider)
   if (!Object.values(credentials).every(Boolean)) throw new MissingProviderConfigError()
   try {

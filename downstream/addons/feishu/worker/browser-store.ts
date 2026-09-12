@@ -1,42 +1,64 @@
+import type { Platform } from "./platform"
+
 export interface BrowserSession {
   id: string
   principalKey: string
   csrfToken: string
   createdAt: string
   expiresAt: string
+  provider?: Platform
+}
+
+function asProvider(value: string | undefined): Platform {
+  return value === "lark" ? "lark" : "feishu"
 }
 
 export class BrowserTrustStore {
   constructor(private readonly db: D1Database) {}
-  async saveOAuthState(state: string, expiresAt: string) {
+  async saveOAuthState(state: string, expiresAt: string, provider: Platform = "feishu") {
     await this.db
-      .prepare("INSERT INTO feishu_oauth_states (state, expires_at) VALUES (?, ?)")
-      .bind(state, expiresAt)
+      .prepare("INSERT INTO feishu_oauth_states (state, expires_at, provider) VALUES (?, ?, ?)")
+      .bind(state, expiresAt, provider)
       .run()
   }
-  async consumeOAuthState(state: string, now: string) {
+  async consumeOAuthState(state: string, now: string): Promise<{ provider: Platform } | null> {
     const row = await this.db
-      .prepare("SELECT expires_at FROM feishu_oauth_states WHERE state = ?")
+      .prepare("SELECT expires_at, provider FROM feishu_oauth_states WHERE state = ?")
       .bind(state)
-      .first<{ expires_at: string }>()
+      .first<{ expires_at: string; provider?: string }>()
     await this.db.prepare("DELETE FROM feishu_oauth_states WHERE state = ?").bind(state).run()
-    return !!row && row.expires_at > now
+    if (!row || row.expires_at <= now) return null
+    return { provider: asProvider(row.provider) }
   }
   async createSession(session: BrowserSession) {
     await this.db
       .prepare(
-        "INSERT INTO feishu_browser_sessions (id, principal_key, csrf_token, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO feishu_browser_sessions (id, principal_key, csrf_token, created_at, expires_at, provider) VALUES (?, ?, ?, ?, ?, ?)",
       )
-      .bind(session.id, session.principalKey, session.csrfToken, session.createdAt, session.expiresAt)
+      .bind(
+        session.id,
+        session.principalKey,
+        session.csrfToken,
+        session.createdAt,
+        session.expiresAt,
+        asProvider(session.provider),
+      )
       .run()
   }
   async getSession(id: string, now: string): Promise<BrowserSession | null> {
     const row = await this.db
       .prepare(
-        "SELECT id, principal_key, csrf_token, created_at, expires_at FROM feishu_browser_sessions WHERE id = ? AND expires_at > ?",
+        "SELECT id, principal_key, csrf_token, created_at, expires_at, provider FROM feishu_browser_sessions WHERE id = ? AND expires_at > ?",
       )
       .bind(id, now)
-      .first<{ id: string; principal_key: string; csrf_token: string; created_at: string; expires_at: string }>()
+      .first<{
+        id: string
+        principal_key: string
+        csrf_token: string
+        created_at: string
+        expires_at: string
+        provider?: string
+      }>()
     return (
       row && {
         id: row.id,
@@ -44,6 +66,7 @@ export class BrowserTrustStore {
         csrfToken: row.csrf_token,
         createdAt: row.created_at,
         expiresAt: row.expires_at,
+        provider: asProvider(row.provider),
       }
     )
   }

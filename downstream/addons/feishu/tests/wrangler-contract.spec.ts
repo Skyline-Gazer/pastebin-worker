@@ -41,6 +41,7 @@ describe("Feishu Worker deployment contract", () => {
     expect(callback.hostname.endsWith("workers.dev")).toBe(false)
     expect(config.workers_dev).toBe(true)
     expect(config.routes).toEqual([{ pattern: "pb.test.223.im", custom_domain: true }])
+    expect(config.vars).not.toHaveProperty("BROWSER_AUTH_PROVIDERS")
   })
 
   it("persists Workers Logs, invocation logs, and traces at full sample without changing Paste transport", () => {

@@ -2,6 +2,7 @@ import { env } from "cloudflare:test"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import migration1 from "../migrations/0001_bindings.sql?raw"
 import migration2 from "../migrations/0002_browser_trust.sql?raw"
+import migration8 from "../migrations/0008_dual_provider_auth.sql?raw"
 import { authorizeBrowserMutation, createBrowserAuthHandler, requireBrowserSession } from "../worker/browser-auth"
 import { BrowserTrustStore } from "../worker/browser-store"
 import { derivePrincipalKey } from "../worker/principal"
@@ -39,6 +40,7 @@ beforeEach(async () => {
   )
   await migrate(migration1)
   await migrate(migration2)
+  await migrate(migration8)
 })
 afterEach(() => {
   vi.restoreAllMocks()

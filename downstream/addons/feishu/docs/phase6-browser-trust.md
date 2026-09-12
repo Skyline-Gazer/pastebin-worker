@@ -29,14 +29,13 @@ the public response contains only a stable code or allowlisted entry state.
 
 The Worker exposes these browser routes:
 
-- `GET /api/auth/login` starts Feishu authorization-code OAuth.
-- `GET /api/auth/callback` consumes one server-stored state value, exchanges the code server-side, resolves `open_id` and `tenant_key`, and issues an opaque eight-hour Add-on session cookie.
-- `GET /api/auth/session` returns the session-bound CSRF token and expiry for an authenticated session.
+- `GET /api/auth/login` starts brand-specific authorization-code OAuth (`PLATFORM=feishu` or `PLATFORM=lark`).
+- `GET /api/auth/callback` consumes one server-stored state value, exchanges the code at the platform `/open-apis/authen/v2/oauth/token` endpoint, resolves `open_id` and `tenant_key`, and issues an opaque eight-hour Add-on session cookie.
+- `GET /api/auth/session` returns the session-bound CSRF token and expiry for an authenticated session, plus a secret-free `brand` (`Feishu` or `Lark`). Unauthenticated responses include `{ code, brand }` so the login link can match the platform.
 - `POST /api/auth/logout` deletes the server session.
 - `GET /api/entries` lists at most 50 ready bindings for the session principal's server-mapped scopes and returns public entry state plus Paste content. Caller query parameters are ignored. The response never includes credential, password, tenant, open_id, principal, OAuth, or fingerprint fields.
 
-Provision these secrets/configuration outside source control: `FEISHU_APP_SECRET`,
-`FEISHU_OAUTH_REDIRECT_URI`, `FEISHU_ALLOWED_ORIGINS` (comma-separated exact origins), and
+Provision these secrets/configuration outside source control: `PLATFORM` (`feishu` or `lark`; required, fail-closed), the selected provider's `FEISHU_*` or `LARK_*` app credentials, `FEISHU_OAUTH_REDIRECT_URI` / `LARK_OAUTH_REDIRECT_URI`, `FEISHU_ALLOWED_ORIGINS` / `LARK_ALLOWED_ORIGINS`, and
 `FEISHU_PRINCIPAL_KEY`. `FEISHU_SESSION_COOKIE_NAME` is optional; the default is
 `feishu_addon_session` because deployment topology cannot safely require `__Host-` yet.
 

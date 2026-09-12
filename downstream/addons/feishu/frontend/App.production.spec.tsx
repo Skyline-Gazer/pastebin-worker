@@ -9,12 +9,24 @@ afterEach(() => {
 
 describe("Feishu production boot", () => {
   it("does not render fixture entries as the production default", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 401 }))
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ code: "UNAUTHENTICATED", brand: "Feishu" }), { status: 401 }),
+    )
     render(<App />)
     await waitFor(() => expect(screen.getByRole("link", { name: "Sign in with Feishu" })).toBeVisible())
     expect(screen.queryByText("Active fixture")).not.toBeInTheDocument()
     expect(screen.queryByText("Permanent archive fixture")).not.toBeInTheDocument()
     expect(screen.queryByText("Timed archive fixture")).not.toBeInTheDocument()
+  })
+
+  it("offers Lark login copy when the session brand is Lark", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ code: "UNAUTHENTICATED", brand: "Lark" }), { status: 401 }),
+    )
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole("link", { name: "Sign in with Lark" })).toBeVisible())
+    expect(screen.queryByRole("link", { name: "Sign in with Feishu" })).not.toBeInTheDocument()
+    expect(screen.queryByText("Active fixture")).not.toBeInTheDocument()
   })
 
   it("shows ERROR instead of fixtures when the authenticated list fails", async () => {

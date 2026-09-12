@@ -1,4 +1,11 @@
 import type { EntryResult } from "../shared/entries"
+import {
+  InvalidPlatformError,
+  MissingProviderConfigError,
+  resolveProviderConfig,
+  type ProviderConfig,
+  type ProviderCredentialEnvironment,
+} from "./platform"
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder("utf-8", { fatal: true })
@@ -21,11 +28,7 @@ export interface AuthorizedFeishuEvent extends Omit<FeishuMessageCreateV1, "sche
   principalKey: string
 }
 
-export interface FeishuWebhookEnvironment {
-  FEISHU_ENCRYPT_KEY: string
-  FEISHU_VERIFICATION_TOKEN: string
-  FEISHU_APP_ID: string
-  FEISHU_ALLOWED_TENANT_KEYS: string
+export interface FeishuWebhookEnvironment extends ProviderCredentialEnvironment {
   FEISHU_INGRESS_QUEUE: { send(message: FeishuMessageCreateV1): Promise<void> }
   /** Deployment validation marker: a consumer must have a configured DLQ. */
   FEISHU_INGRESS_DLQ_CONFIGURED: string
@@ -103,23 +106,28 @@ function boundedIdentity(value: unknown): value is string {
     })
   )
 }
-function config(
-  env: Pick<
-    FeishuWebhookEnvironment,
-    "FEISHU_ENCRYPT_KEY" | "FEISHU_VERIFICATION_TOKEN" | "FEISHU_APP_ID" | "FEISHU_ALLOWED_TENANT_KEYS"
-  >,
-) {
-  const tenants = env.FEISHU_ALLOWED_TENANT_KEYS?.split(",") ?? []
+function providerOrUnavailable(env: ProviderCredentialEnvironment): ProviderConfig {
+  try {
+    return resolveProviderConfig(env)
+  } catch (error) {
+    if (error instanceof InvalidPlatformError || error instanceof MissingProviderConfigError)
+      throw new WebhookError("UNAVAILABLE", 503)
+    throw error
+  }
+}
+function config(env: ProviderCredentialEnvironment) {
+  const provider = providerOrUnavailable(env)
+  const tenants = provider.allowedTenantKeys.split(",")
   if (
-    !boundedIdentity(env.FEISHU_ENCRYPT_KEY) ||
-    !boundedIdentity(env.FEISHU_VERIFICATION_TOKEN) ||
-    !boundedIdentity(env.FEISHU_APP_ID) ||
+    !boundedIdentity(provider.encryptKey) ||
+    !boundedIdentity(provider.verificationToken) ||
+    !boundedIdentity(provider.appId) ||
     !tenants.length ||
     tenants.some((tenant) => !boundedIdentity(tenant)) ||
     new Set(tenants).size !== tenants.length
   )
     throw new WebhookError("UNAVAILABLE", 503)
-  return { ...env, tenants: new Set(tenants) }
+  return { ...provider, tenants: new Set(tenants) }
 }
 function bytes(value: string) {
   return encoder.encode(value)
@@ -182,17 +190,11 @@ async function decrypt(encrypt: string, keyText: string): Promise<unknown> {
   }
 }
 
-export async function verifyFeishuChallenge(
-  value: unknown,
-  env: Pick<
-    FeishuWebhookEnvironment,
-    "FEISHU_ENCRYPT_KEY" | "FEISHU_VERIFICATION_TOKEN" | "FEISHU_APP_ID" | "FEISHU_ALLOWED_TENANT_KEYS"
-  >,
-): Promise<string> {
+export async function verifyFeishuChallenge(value: unknown, env: ProviderCredentialEnvironment): Promise<string> {
   const checked = config(env)
   const clear =
     value && typeof value === "object" && typeof (value as { encrypt?: unknown }).encrypt === "string"
-      ? await decrypt((value as { encrypt: string }).encrypt, checked.FEISHU_ENCRYPT_KEY)
+      ? await decrypt((value as { encrypt: string }).encrypt, checked.encryptKey)
       : value
   if (!clear || typeof clear !== "object") throw new WebhookError("MALFORMED", 400)
   const item = clear as { type?: unknown; token?: unknown; challenge?: unknown }
@@ -200,7 +202,7 @@ export async function verifyFeishuChallenge(
     item.type !== "url_verification" ||
     !boundedIdentity(item.challenge) ||
     typeof item.token !== "string" ||
-    !equal(item.token, checked.FEISHU_VERIFICATION_TOKEN)
+    !equal(item.token, checked.verificationToken)
   )
     throw new WebhookError("UNAUTHORIZED", 401)
   return item.challenge
@@ -214,10 +216,7 @@ export async function deriveMessageIdentity(appId: string, tenantKey: string, ch
 
 export async function normalizeAuthorizedEvent(
   value: unknown,
-  env: Pick<
-    FeishuWebhookEnvironment,
-    "FEISHU_ENCRYPT_KEY" | "FEISHU_VERIFICATION_TOKEN" | "FEISHU_APP_ID" | "FEISHU_ALLOWED_TENANT_KEYS"
-  >,
+  env: ProviderCredentialEnvironment,
   principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
 ): Promise<AuthorizedFeishuEvent | null> {
   const checked = config(env)
@@ -229,10 +228,10 @@ export async function normalizeAuthorizedEvent(
   const senderId = object(sender?.sender_id)
   const message = object(event?.message)
   if (root?.schema !== "2.0" || !header || !event || !message) throw new WebhookError("MALFORMED", 400)
-  if (typeof header.token !== "string" || !equal(header.token, checked.FEISHU_VERIFICATION_TOKEN))
+  if (typeof header.token !== "string" || !equal(header.token, checked.verificationToken))
     throw new WebhookError("UNAUTHORIZED", 401)
   if (
-    header.app_id !== checked.FEISHU_APP_ID ||
+    header.app_id !== checked.appId ||
     typeof header.tenant_key !== "string" ||
     !checked.tenants.has(header.tenant_key)
   )
@@ -258,9 +257,9 @@ export async function normalizeAuthorizedEvent(
   // A supported P2P event establishes browser authorization only when Feishu supplied
   // a sender open_id. Missing identity is deliberately fail-closed, never queued.
   if (!boundedIdentity(senderId?.open_id)) throw new WebhookError("MALFORMED", 400)
-  const principalKey = principal ? await principal(checked.FEISHU_APP_ID, header.tenant_key, senderId.open_id) : ""
+  const principalKey = principal ? await principal(checked.appId, header.tenant_key, senderId.open_id) : ""
   return {
-    ...(await deriveMessageIdentity(checked.FEISHU_APP_ID, header.tenant_key, message.chat_id, message.message_id)),
+    ...(await deriveMessageIdentity(checked.appId, header.tenant_key, message.chat_id, message.message_id)),
     sourceMessageId: message.message_id,
     content: content.text,
     principalKey,
@@ -307,6 +306,7 @@ export function createFeishuWebhookHandler(
       try {
         if (!env.FEISHU_INGRESS_QUEUE || env.FEISHU_INGRESS_DLQ_CONFIGURED !== "true")
           throw new WebhookError("UNAVAILABLE", 503)
+        const provider = config(env)
         const raw = await readBounded(request)
         const envelope = json(decoder.decode(raw))
         if (envelope && typeof envelope === "object" && (envelope as { type?: unknown }).type === "url_verification")
@@ -322,7 +322,7 @@ export function createFeishuWebhookHandler(
         ) {
           let clear: unknown
           try {
-            clear = await decrypt((envelope as { encrypt: string }).encrypt, env.FEISHU_ENCRYPT_KEY)
+            clear = await decrypt((envelope as { encrypt: string }).encrypt, provider.encryptKey)
           } catch {
             // Ordinary events are deliberately authenticated from the exact raw body.
           }
@@ -334,9 +334,9 @@ export function createFeishuWebhookHandler(
         const signature = request.headers.get("x-lark-signature")
         if (!timestamp || !nonce || !signature || !/^[a-f0-9]{64}$/i.test(signature))
           throw new WebhookError("UNAUTHORIZED", 401)
-        const signed = new Uint8Array(bytes(timestamp + nonce + env.FEISHU_ENCRYPT_KEY).byteLength + raw.byteLength)
-        signed.set(bytes(timestamp + nonce + env.FEISHU_ENCRYPT_KEY))
-        signed.set(raw, bytes(timestamp + nonce + env.FEISHU_ENCRYPT_KEY).byteLength)
+        const signed = new Uint8Array(bytes(timestamp + nonce + provider.encryptKey).byteLength + raw.byteLength)
+        signed.set(bytes(timestamp + nonce + provider.encryptKey))
+        signed.set(raw, bytes(timestamp + nonce + provider.encryptKey).byteLength)
         if (!equal(await digestBytes(signed), signature.toLowerCase())) throw new WebhookError("UNAUTHORIZED", 401)
         if (
           !envelope ||
@@ -345,7 +345,7 @@ export function createFeishuWebhookHandler(
         )
           throw new WebhookError("MALFORMED", 400)
         const normalized = await normalizeAuthorizedEvent(
-          await decrypt((envelope as { encrypt: string }).encrypt, env.FEISHU_ENCRYPT_KEY),
+          await decrypt((envelope as { encrypt: string }).encrypt, provider.encryptKey),
           env,
           principal,
         )

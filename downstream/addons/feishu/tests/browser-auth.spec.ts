@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import migration1 from "../migrations/0001_bindings.sql?raw"
 import migration2 from "../migrations/0002_browser_trust.sql?raw"
 import { authorizeBrowserMutation, createBrowserAuthHandler, requireBrowserSession } from "../worker/browser-auth"
@@ -8,11 +8,26 @@ import { derivePrincipalKey } from "../worker/principal"
 
 const db = (env as unknown as { DB: D1Database }).DB
 const config = {
+  PLATFORM: "feishu",
   FEISHU_APP_ID: "cli_test",
   FEISHU_APP_SECRET: "secret",
+  FEISHU_ENCRYPT_KEY: "encrypt-key",
+  FEISHU_VERIFICATION_TOKEN: "verify-token",
+  FEISHU_ALLOWED_TENANT_KEYS: "tenant-a",
   FEISHU_OAUTH_REDIRECT_URI: "https://addon.example/api/auth/callback",
   FEISHU_ALLOWED_ORIGINS: "https://addon.example",
   FEISHU_PRINCIPAL_KEY: "principal-secret",
+}
+const larkConfig = {
+  ...config,
+  PLATFORM: "lark",
+  LARK_APP_ID: "cli_lark",
+  LARK_APP_SECRET: "lark-secret",
+  LARK_ENCRYPT_KEY: "lark-encrypt",
+  LARK_VERIFICATION_TOKEN: "lark-token",
+  LARK_ALLOWED_TENANT_KEYS: "tenant-lark",
+  LARK_OAUTH_REDIRECT_URI: "https://addon.example/api/auth/callback",
+  LARK_ALLOWED_ORIGINS: "https://addon.example",
 }
 const store = new BrowserTrustStore(db)
 async function migrate(sql: string) {
@@ -24,6 +39,9 @@ beforeEach(async () => {
   )
   await migrate(migration1)
   await migrate(migration2)
+})
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 async function session(principalKey = "principal-a") {
   const now = new Date()
@@ -107,7 +125,7 @@ describe("Phase 6.0 browser trust boundary", () => {
     const state = new URL(location).searchParams.get("state")!
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(Response.json({ access_token: "never-visible-token" }))
+      .mockResolvedValueOnce(Response.json({ data: { access_token: "never-visible-token" } }))
       .mockResolvedValueOnce(Response.json({ data: { open_id: "open-a", tenant_key: "tenant-a" } }))
     const callback = await handler.fetch(
       new Request(`https://addon.example/api/auth/callback?state=${state}&code=code`),
@@ -115,8 +133,58 @@ describe("Phase 6.0 browser trust boundary", () => {
     expect(callback?.status).toBe(302)
     expect(callback?.headers.get("set-cookie")).toMatch(/HttpOnly; Secure; SameSite=Lax; Path=\//)
     expect(await callback?.text()).not.toContain("never-visible-token")
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe("https://open.feishu.cn/open-apis/authen/v2/oauth/token")
+    expect(fetchSpy.mock.calls[1]?.[0]).toBe("https://open.feishu.cn/open-apis/authen/v1/user_info")
     expect(fetchSpy).toHaveBeenCalledTimes(2)
     fetchSpy.mockRestore()
+  })
+
+  it("redirects Lark login and exchanges the code at open.larksuite.com", async () => {
+    const handler = createBrowserAuthHandler(larkConfig, store)
+    const login = await handler.fetch(new Request("https://addon.example/api/auth/login"))
+    expect(login?.status).toBe(302)
+    const location = login?.headers.get("location") || ""
+    expect(location).toContain("accounts.larksuite.com/open-apis/authen/v1/authorize")
+    expect(location).not.toContain("feishu.cn")
+    const state = new URL(location).searchParams.get("state")!
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ data: { access_token: "never-visible-token" } }))
+      .mockResolvedValueOnce(Response.json({ data: { open_id: "open-a", tenant_key: "tenant-a" } }))
+    const callback = await handler.fetch(
+      new Request(`https://addon.example/api/auth/callback?state=${state}&code=code`),
+    )
+    expect(callback?.status).toBe(302)
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe("https://open.larksuite.com/open-apis/authen/v2/oauth/token")
+    expect(fetchSpy.mock.calls[1]?.[0]).toBe("https://open.larksuite.com/open-apis/authen/v1/user_info")
+    const tokenBody = fetchSpy.mock.calls[0]?.[1]
+    const rawBody = tokenBody && typeof tokenBody === "object" && "body" in tokenBody ? tokenBody.body : undefined
+    expect(typeof rawBody).toBe("string")
+    if (typeof rawBody !== "string") throw new Error("expected token request body")
+    expect(JSON.parse(rawBody)).toMatchObject({ client_id: "cli_lark" })
+    expect(rawBody).not.toContain("cli_test")
+    fetchSpy.mockRestore()
+  })
+
+  it("returns a secret-free brand on unauthenticated session and fails closed without PLATFORM", async () => {
+    const handler = createBrowserAuthHandler(config, store)
+    const session = await handler.fetch(new Request("https://addon.example/api/auth/session"))
+    expect(session?.status).toBe(401)
+    expect(await session?.json()).toEqual({ code: "UNAUTHENTICATED", brand: "Feishu" })
+    const lark = await createBrowserAuthHandler(larkConfig, store).fetch(
+      new Request("https://addon.example/api/auth/session"),
+    )
+    expect(await lark?.json()).toEqual({ code: "UNAUTHENTICATED", brand: "Lark" })
+    const missing = await createBrowserAuthHandler({ ...config, PLATFORM: "" }, store).fetch(
+      new Request("https://addon.example/api/auth/login"),
+    )
+    expect(missing?.status).toBe(503)
+    expect(await missing?.json()).toEqual({ code: "UNAVAILABLE" })
+    const crossed = await createBrowserAuthHandler({ ...config, PLATFORM: "lark" }, store).fetch(
+      new Request("https://addon.example/api/auth/login"),
+    )
+    expect(crossed?.status).toBe(503)
+    expect(await crossed?.json()).toEqual({ code: "UNAVAILABLE" })
   })
   it("rejects invalid OAuth state and logout revokes its opaque session", async () => {
     const handler = createBrowserAuthHandler(config, store)

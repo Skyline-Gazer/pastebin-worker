@@ -18,6 +18,8 @@ State-changing browser requests require the authenticated opaque Add-on session,
 
 `GET /api/entries` is the production boot list. It requires the opaque session cookie and ignores caller-supplied scope/tenant query parameters. CSRF/Origin are not authority for this GET. The Worker lists at most 50 ready bindings for server-mapped scopes, reads each Paste body via `PasteClient`, and returns `{ entries }` with public fields plus `content` and `managedTask`. It never returns credential, password, tenant, open_id, principal, OAuth, or fingerprint fields.
 
+Unauthenticated `GET /api/auth/session` returns `{ "code": "UNAUTHENTICATED", "brand": "Feishu" | "Lark" }`. Authenticated session JSON may include the same secret-free `brand`. `PLATFORM` is never returned as a raw config value.
+
 ## 2. Entry shape returned to frontend
 
 Example public shape:

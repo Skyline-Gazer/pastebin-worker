@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { resolveProviderConfig } from "../worker/platform"
 import {
   createFeishuWebhookHandler,
   consumeFeishuMessages,
@@ -9,10 +10,14 @@ import {
 } from "../worker/webhook"
 
 const secrets = {
+  PLATFORM: "feishu",
   FEISHU_ENCRYPT_KEY: "0123456789abcdef0123456789abcdef",
   FEISHU_VERIFICATION_TOKEN: "verification-token",
   FEISHU_APP_ID: "cli_phase4",
+  FEISHU_APP_SECRET: "feishu-secret",
   FEISHU_ALLOWED_TENANT_KEYS: "tenant-a,tenant-b",
+  FEISHU_OAUTH_REDIRECT_URI: "https://addon.example/cb",
+  FEISHU_ALLOWED_ORIGINS: "https://addon.example",
 }
 
 function event(overrides: Record<string, unknown> = {}) {
@@ -60,7 +65,8 @@ async function signedRequest(value: unknown, env: FeishuWebhookEnvironment, muta
   const raw = mutate?.(JSON.stringify(value)) ?? JSON.stringify(value)
   const timestamp = "1700000000"
   const nonce = "nonce-vector"
-  const signed = new Uint8Array(new TextEncoder().encode(timestamp + nonce + env.FEISHU_ENCRYPT_KEY + raw))
+  const encryptKey = resolveProviderConfig(env).encryptKey
+  const signed = new Uint8Array(new TextEncoder().encode(timestamp + nonce + encryptKey + raw))
   const hash = await crypto.subtle.digest("SHA-256", signed)
   const signature = Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, "0")).join("")
   return new Request("https://worker/api/feishu/events", {
@@ -386,6 +392,60 @@ describe("Feishu webhook ingress", () => {
     expect(result.status).toBe(503)
     expect(await result.json()).toMatchObject({ code: "UNAVAILABLE" })
     expect(send).not.toHaveBeenCalled()
+  })
+
+  it("authenticates Lark events with LARK_* credentials and ignores leftover FEISHU_APP_ID", async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      PLATFORM: "lark",
+      LARK_APP_ID: "cli_lark",
+      LARK_APP_SECRET: "lark-secret",
+      LARK_ENCRYPT_KEY: "lark-encrypt-key-value",
+      LARK_VERIFICATION_TOKEN: "lark-verification",
+      LARK_ALLOWED_TENANT_KEYS: "tenant-lark",
+      LARK_OAUTH_REDIRECT_URI: "https://addon.example/lark/cb",
+      LARK_ALLOWED_ORIGINS: "https://addon.example",
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    const larkEvent = event({
+      header: {
+        event_type: "im.message.receive_v1",
+        app_id: "cli_lark",
+        tenant_key: "tenant-lark",
+        event_id: "evt-lark",
+        token: "lark-verification",
+      },
+    })
+    const envelope = { encrypt: await encrypted(larkEvent, env.LARK_ENCRYPT_KEY) }
+    expect((await createFeishuWebhookHandler(env).fetch(await signedRequest(envelope, env))).status).toBe(200)
+    expect(send).toHaveBeenCalledTimes(1)
+    const leftover = {
+      encrypt: await encrypted(
+        event({
+          header: {
+            event_type: "im.message.receive_v1",
+            app_id: secrets.FEISHU_APP_ID,
+            tenant_key: "tenant-lark",
+            event_id: "evt-leftover",
+            token: "lark-verification",
+          },
+        }),
+        env.LARK_ENCRYPT_KEY,
+      ),
+    }
+    expect((await createFeishuWebhookHandler(env).fetch(await signedRequest(leftover, env))).status).toBe(403)
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it("fails closed when PLATFORM=lark has only Feishu credentials", async () => {
+    await expect(
+      verifyFeishuChallenge(
+        { type: "url_verification", token: "verification-token", challenge: "x" },
+        { ...secrets, PLATFORM: "lark" },
+      ),
+    ).rejects.toMatchObject({ code: "UNAVAILABLE" })
   })
 })
 

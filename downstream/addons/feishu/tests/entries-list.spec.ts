@@ -13,8 +13,12 @@ import { BindingStore } from "../worker/store"
 const db = (testEnv as unknown as { DB: D1Database }).DB
 
 const env = {
+  PLATFORM: "feishu",
   FEISHU_APP_ID: "a",
   FEISHU_APP_SECRET: "s",
+  FEISHU_ENCRYPT_KEY: "e",
+  FEISHU_VERIFICATION_TOKEN: "t",
+  FEISHU_ALLOWED_TENANT_KEYS: "tenant-a",
   FEISHU_OAUTH_REDIRECT_URI: "https://addon.example/cb",
   FEISHU_ALLOWED_ORIGINS: "https://addon.example",
   FEISHU_PRINCIPAL_KEY: "p",

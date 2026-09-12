@@ -34,7 +34,7 @@ Frontend MUST NOT hold management credentials.
 
 ## 3. Worker responsibilities
 
-- perform Feishu OAuth code callback exchange and server-side identity resolution;
+- perform Feishu/Lark OAuth code callback exchange and server-side identity resolution;
 - create/revoke opaque Add-on sessions and enforce exact Origin plus session-bound CSRF for browser mutations;
 - derive principals and maintain additive trusted principal-to-Phase-3-scope authorization metadata from authenticated Feishu-side events;
 - verify/process Feishu webhook events;
@@ -106,3 +106,16 @@ Pastebin Worker / Feishu
 ```
 
 Do not use a separate "Feishu enterprise app" visual shell unless explicitly requested later.
+
+## 9. Feishu / Lark platform endpoints
+
+Runtime `PLATFORM` is exactly `feishu` or `lark`. Production must set it explicitly; the tracked Worker contract defaults to `feishu`. Any other value, including missing, fails closed.
+
+Selected-provider credentials are separated:
+
+- `PLATFORM=feishu` → `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, `FEISHU_ENCRYPT_KEY`, `FEISHU_VERIFICATION_TOKEN`, `FEISHU_ALLOWED_TENANT_KEYS`, `FEISHU_OAUTH_REDIRECT_URI`, `FEISHU_ALLOWED_ORIGINS`
+- `PLATFORM=lark` → the matching `LARK_*` names
+
+Do not put Lark credentials in `FEISHU_*` variables. Product-owned bindings (`FEISHU_BINDINGS_DB`, `FEISHU_INGRESS_QUEUE`, `FEISHU_PRINCIPAL_KEY`) stay as they are.
+
+Outbound OAuth/OpenAPI hosts come from a static map (`worker/platform.ts`). The inbound webhook path remains `/api/feishu/events` for both brands. Login copy is the only user-visible brand switch.

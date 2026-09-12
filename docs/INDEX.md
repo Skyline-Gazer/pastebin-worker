@@ -16,6 +16,7 @@
 - [`CHANGE_CONTEXT_AND_REVIEW.md`](CHANGE_CONTEXT_AND_REVIEW.md) — business context, acceptance criteria, commit-body and AI-review requirements; canonical home of the mandatory Phase Review Gate and the PLAN/SPEC/PHASE/TODO development workflow.
 - [`IMPLEMENTATION_ORDER.md`](IMPLEMENTATION_ORDER.md) — TDD-oriented implementation order.
 - [`planning/m3-feishu-production.md`](planning/m3-feishu-production.md) — M3 Feishu production wiring PLAN/SPEC.
+- [`planning/m3-platform-endpoints.md`](planning/m3-platform-endpoints.md) — Feishu/Lark `PLATFORM` endpoint selection.
 
 ## Operational scaffold
 

@@ -18,6 +18,7 @@ import {
 
 import type { PasteResponse } from "../../shared/interfaces.js"
 import { tst } from "../utils/overrides.js"
+import { classifyPasteShare, makeDecryptionUrl, primaryShareUrl, withPathPrefix } from "../utils/pasteShare.js"
 import type { UploadProgress } from "../utils/uploader.js"
 import { formatSize } from "../utils/utils.js"
 import { CopyWidget } from "./CopyWidget.js"
@@ -31,17 +32,6 @@ interface UploadedPanelProps extends CardProps {
   encryptionKey?: string
   highlightLang?: string
   isUrlPaste?: boolean
-}
-
-function withPathPrefix(url: string, prefix: string): string {
-  const u = new URL(url)
-  u.pathname = prefix + u.pathname
-  return u.toString()
-}
-
-function makeDecryptionUrl(url: string, key?: string): string {
-  const base = withPathPrefix(url, "/d")
-  return key ? `${base}#${key}` : base
 }
 
 const RAW_URL_FLAGS: { syntax: string; desc: string }[] = [
@@ -141,6 +131,11 @@ export function UploadedPanel({
 
   const isEncrypted = Boolean(encryptionKey)
   const isMarkdown = highlightLang === "markdown"
+  const shareClass = classifyPasteShare({ encryptionKey, mimeType: pasteResponse?.mimeType })
+  const displayUrl = pasteResponse ? makeDecryptionUrl(pasteResponse.url, encryptionKey) : ""
+  const fileDownloadUrl =
+    pasteResponse && shareClass === "unencrypted-file" ? primaryShareUrl(pasteResponse.url, shareClass) : ""
+  const qrUrl = pasteResponse ? primaryShareUrl(pasteResponse.url, shareClass, encryptionKey) : ""
 
   const urlInput = (label: string, value: string, labelExtra?: React.ReactNode) => (
     <Input
@@ -184,6 +179,15 @@ export function UploadedPanel({
         ) : (
           pasteResponse && (
             <>
+              {fileDownloadUrl &&
+                urlInput(
+                  "Download URL",
+                  fileDownloadUrl,
+                  <>
+                    <UrlTooltip desc="Forces a file download (Content-Disposition: attachment). Display below is a viewer/info page, not the file bytes." />
+                    <QrTooltip url={qrUrl} />
+                  </>,
+                )}
               <Input
                 {...inputProps}
                 label={"Display URL"}
@@ -193,6 +197,7 @@ export function UploadedPanel({
                       desc={
                         <>
                           Browser-friendly view with syntax highlighting.
+                          {fileDownloadUrl && " This is a viewer/info page, not the file bytes."}
                           {encryptionKey && (
                             <>
                               {" "}
@@ -204,16 +209,16 @@ export function UploadedPanel({
                       }
                       flags={DISPLAY_URL_FLAGS}
                     />
-                    <QrTooltip url={makeDecryptionUrl(pasteResponse.url, encryptionKey)} />
+                    {!fileDownloadUrl && <QrTooltip url={qrUrl} />}
                   </>
                 }
                 color={encryptionKey ? "success" : "default"}
                 className="mb-2"
-                value={makeDecryptionUrl(pasteResponse.url, encryptionKey)}
+                value={displayUrl}
                 endContent={
                   <CopyWidget
                     className={encryptionKey ? `${copyWidgetClassNames} hover:bg-success-100` : copyWidgetClassNames}
-                    getCopyContent={() => makeDecryptionUrl(pasteResponse.url, encryptionKey)}
+                    getCopyContent={() => displayUrl}
                   />
                 }
               />

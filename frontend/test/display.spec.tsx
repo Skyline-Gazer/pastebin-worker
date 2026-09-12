@@ -418,4 +418,22 @@ describe("DisplayPaste", () => {
     expect(await screen.findByText(/Not a renderable file/)).toBeInTheDocument()
     expect(screen.getByText("Download raw")).toBeInTheDocument()
   })
+
+  it("offers an accessible unencrypted file download as a ?a link, not a nested button", async () => {
+    server.use(
+      ...mockPaste("filedl", {
+        body: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).buffer,
+        headers: {
+          "Content-Type": "image/png",
+          "Content-Disposition": "inline; filename*=UTF-8''cat.png",
+        },
+      }),
+    )
+    vi.stubGlobal("location", new URL("https://example.com/d/filedl"))
+    render(<DisplayPaste config={__WRANGLER_CONFIG__} />)
+    const download = await screen.findByRole("link", { name: "Download" })
+    expect(download).toHaveAttribute("href", "/filedl?a")
+    expect(download.closest("button")).toBeNull()
+    expect(screen.queryByRole("button", { name: "Download" })).not.toBeInTheDocument()
+  })
 })

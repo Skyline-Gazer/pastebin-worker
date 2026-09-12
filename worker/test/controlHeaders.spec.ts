@@ -5,7 +5,7 @@ import { BASE_URL, genRandomBlob, upload, workerFetch } from "./testUtils.js"
 
 test("mime type", async () => {
   const ctx = createExecutionContext()
-  const url = (await upload(ctx, { c: genRandomBlob(1024) })).url
+  const url = (await upload(ctx, { c: "hello" })).url
 
   const url_pic = (await upload(ctx, { c: { content: genRandomBlob(1024), filename: "xx.jpg" } })).url
 

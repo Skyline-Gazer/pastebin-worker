@@ -37,11 +37,11 @@ Accepted evidence: successful create, Feishu P2P request identity, same Feishu s
 
 ## Workstreams
 
-| ID | Title | Ownership | Later deploy | Docs |
-| --- | --- | --- | --- | --- |
-| FT-DEFECT-01 | Pastebin upload → usable file/read/download path | Generic Pastebin patch | `pastebin-prod` | [PLAN](ft-defect-01-plan.md), [SPEC](ft-defect-01-spec.md) |
-| FT-DEFECT-03 | Simultaneous Feishu + Lark browser auth and ingestion | Add-on Worker | `pastebin-feishu-prod` | [PLAN](ft-defect-03-plan.md), [SPEC](ft-defect-03-spec.md) |
-| FT-DEFECT-02 | Add-on Web product / IA remediation | Add-on frontend (+ listing API if required). **UI foundation: shadcn/ui + Lucide + Sonner on existing React 19 / Vite / Tailwind v4.** | `pastebin-feishu-prod` | [PLAN](ft-defect-02-plan.md), [SPEC](ft-defect-02-spec.md) |
+| ID           | Title                                                 | Ownership                                                                                                                              | Later deploy           | Docs                                                       |
+| ------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------- |
+| FT-DEFECT-01 | Pastebin upload → usable file/read/download path      | Generic Pastebin patch                                                                                                                 | `pastebin-prod`        | [PLAN](ft-defect-01-plan.md), [SPEC](ft-defect-01-spec.md) |
+| FT-DEFECT-03 | Simultaneous Feishu + Lark browser auth and ingestion | Add-on Worker                                                                                                                          | `pastebin-feishu-prod` | [PLAN](ft-defect-03-plan.md), [SPEC](ft-defect-03-spec.md) |
+| FT-DEFECT-02 | Add-on Web product / IA remediation                   | Add-on frontend (+ listing API if required). **UI foundation: shadcn/ui + Lucide + Sonner on existing React 19 / Vite / Tailwind v4.** | `pastebin-feishu-prod` | [PLAN](ft-defect-02-plan.md), [SPEC](ft-defect-02-spec.md) |
 
 GitHub:
 

@@ -74,9 +74,9 @@ Cloudflare Worker Assets
 
 shadcn/ui is the **primitive / design-system layer**. It MUST NOT become the product architecture.
 
-| Layer | Owns | Must not own |
-| --- | --- | --- |
-| `components/ui/*` | Generated shadcn primitives (Button, Card, Dialog, …) | Provider, lifecycle, file vs text, Paste URLs |
+| Layer              | Owns                                                          | Must not own                                       |
+| ------------------ | ------------------------------------------------------------- | -------------------------------------------------- |
+| `components/ui/*`  | Generated shadcn primitives (Button, Card, Dialog, …)         | Provider, lifecycle, file vs text, Paste URLs      |
 | Product components | Add-on IA, session/provider, entry kinds, GFM, batch, archive | Re-implementing dialog/focus/keyboard from scratch |
 
 Only add primitives that are actually used. Do not `shadcn add --all`. Do not import dashboard templates or third-party registries for appearance.
@@ -147,21 +147,21 @@ Required:
 
 ### Product need → primitive mapping
 
-| Product need | Foundation |
-| --- | --- |
-| Active / Archive | `Tabs` |
-| Entry container | `Card` |
-| Provider / retention state | `Badge` |
-| Primary actions | `Button` |
-| Secondary / lifecycle actions | `DropdownMenu` |
-| Archive / timed settings | `Dialog` |
-| Delete confirmation | `AlertDialog` |
-| Batch selection | `Checkbox` |
-| Hover explanation | `Tooltip` |
-| Loading | `Skeleton` |
-| Notifications | `Sonner` |
-| Section separation | `Separator` |
-| Long body (only if utilities fail) | `ScrollArea` |
+| Product need                       | Foundation     |
+| ---------------------------------- | -------------- |
+| Active / Archive                   | `Tabs`         |
+| Entry container                    | `Card`         |
+| Provider / retention state         | `Badge`        |
+| Primary actions                    | `Button`       |
+| Secondary / lifecycle actions      | `DropdownMenu` |
+| Archive / timed settings           | `Dialog`       |
+| Delete confirmation                | `AlertDialog`  |
+| Batch selection                    | `Checkbox`     |
+| Hover explanation                  | `Tooltip`      |
+| Loading                            | `Skeleton`     |
+| Notifications                      | `Sonner`       |
+| Section separation                 | `Separator`    |
+| Long body (only if utilities fail) | `ScrollArea`   |
 
 Do not use a Checkbox for lifecycle completion unless it is a real Markdown task.
 
@@ -253,11 +253,11 @@ Encrypted Pastebin files with `#key` are not expected on Feishu-managed creates.
 
 ### Checkbox semantics (three concepts)
 
-| Concept | Control | When it appears | Behavior |
-| --- | --- | --- | --- |
-| Markdown task checkbox | GFM-rendered checkbox inside `MarkdownContent` | Only if parsed Markdown actually contains a task list item outside fences | Existing completion dialog (永久归档 / 限期归档 / 删除). Cancel leaves Markdown unchanged |
-| Lifecycle / completion | `LifecycleMenu` / dialogs — **not** a Checkbox | Always for Active (archive/delete); Archive shows restore + countdown | Not a second checkbox on every card |
-| Batch Mode selection | shadcn `Checkbox` in `BatchToolbar` / per-card selector | Only when Batch Mode is on | Separate control; never the GFM checkbox |
+| Concept                | Control                                                 | When it appears                                                           | Behavior                                                                                  |
+| ---------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Markdown task checkbox | GFM-rendered checkbox inside `MarkdownContent`          | Only if parsed Markdown actually contains a task list item outside fences | Existing completion dialog (永久归档 / 限期归档 / 删除). Cancel leaves Markdown unchanged |
+| Lifecycle / completion | `LifecycleMenu` / dialogs — **not** a Checkbox          | Always for Active (archive/delete); Archive shows restore + countdown     | Not a second checkbox on every card                                                       |
+| Batch Mode selection   | shadcn `Checkbox` in `BatchToolbar` / per-card selector | Only when Batch Mode is on                                                | Separate control; never the GFM checkbox                                                  |
 
 **Remove** `ManagedTaskCheckbox` from the default card. Do not create an unrelated generic “Managed task” checkbox when content has no task. Do not use a shadcn `Checkbox` for lifecycle completion.
 

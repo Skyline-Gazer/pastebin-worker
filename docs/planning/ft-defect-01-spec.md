@@ -51,11 +51,11 @@ Verified against tracked source and accepted audit:
 
 Use existing client and stored metadata. Do not special-case Feishu.
 
-| Class | How it is recognized | Primary returned link / QR | Display primary action |
-| --- | --- | --- | --- |
-| TEXT | Not encrypted; treated as text (`text/*` or valid UTF-8 paste without a binary `mimeType`) | Display `/d/<name>` (plus Markdown URL when highlight is markdown) | View. Secondary: Raw, Copy |
-| UNENCRYPTED FILE | Not encrypted; binary `mimeType`, non-UTF-8 body, or a file upload whose stored type is not text | Download `/<name>?a` | Download file → `/<name>?a`. Display/info page may remain secondary. Do not present `/d/<name>` as file bytes |
-| ENCRYPTED FILE | Client encryption key present | `/d/<name>#<key>` | Functioning plaintext decrypt/download. Raw remains ciphertext. No `?key=` |
+| Class            | How it is recognized                                                                             | Primary returned link / QR                                         | Display primary action                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| TEXT             | Not encrypted; treated as text (`text/*` or valid UTF-8 paste without a binary `mimeType`)       | Display `/d/<name>` (plus Markdown URL when highlight is markdown) | View. Secondary: Raw, Copy                                                                                    |
+| UNENCRYPTED FILE | Not encrypted; binary `mimeType`, non-UTF-8 body, or a file upload whose stored type is not text | Download `/<name>?a`                                               | Download file → `/<name>?a`. Display/info page may remain secondary. Do not present `/d/<name>` as file bytes |
+| ENCRYPTED FILE   | Client encryption key present                                                                    | `/d/<name>#<key>`                                                  | Functioning plaintext decrypt/download. Raw remains ciphertext. No `?key=`                                    |
 
 Encrypted **text** pastes keep the existing Display `#key` share URL (not a file-download lie).
 
@@ -154,20 +154,20 @@ No new database. Uses existing paste metadata: name, filename, mimeType, size, e
 
 Minimum matrix (fixtures in tests/CI, not production deletes):
 
-| Case | Assert |
-| --- | --- |
-| Small text | Display primary; raw GET is body; `/d/` is HTML; HEAD is not HTML file-bytes |
-| Small PNG or other sniffed binary | Upload primary `?a`; GET `?a` attachment + image MIME; `/d/` HTML; download control href `?a`; nested button absent |
-| Binary MIME not in current magic | After commit 1: classified as file if non-UTF-8; `?a` works; not highlighted as text. Commit 2 only if this stays RED |
-| Large/MPU unencrypted | `?a` download; Range where supported |
-| Encrypted small file with `#key` | Display decrypt/download plaintext; no `?key=` |
-| Encrypted opened without fragment | No plaintext download success |
-| Raw GET | Bytes / ciphertext as applicable |
-| `?a` | Content-Disposition attachment |
-| `/d/` | HTML viewer |
-| HEAD | Metadata; not consume-on-HEAD if that is already the 130 contract |
-| Filename | Stored name / `Untitled` |
-| Content-Type | Stored or classified type |
+| Case                              | Assert                                                                                                                |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Small text                        | Display primary; raw GET is body; `/d/` is HTML; HEAD is not HTML file-bytes                                          |
+| Small PNG or other sniffed binary | Upload primary `?a`; GET `?a` attachment + image MIME; `/d/` HTML; download control href `?a`; nested button absent   |
+| Binary MIME not in current magic  | After commit 1: classified as file if non-UTF-8; `?a` works; not highlighted as text. Commit 2 only if this stays RED |
+| Large/MPU unencrypted             | `?a` download; Range where supported                                                                                  |
+| Encrypted small file with `#key`  | Display decrypt/download plaintext; no `?key=`                                                                        |
+| Encrypted opened without fragment | No plaintext download success                                                                                         |
+| Raw GET                           | Bytes / ciphertext as applicable                                                                                      |
+| `?a`                              | Content-Disposition attachment                                                                                        |
+| `/d/`                             | HTML viewer                                                                                                           |
+| HEAD                              | Metadata; not consume-on-HEAD if that is already the 130 contract                                                     |
+| Filename                          | Stored name / `Untitled`                                                                                              |
+| Content-Type                      | Stored or classified type                                                                                             |
 
 Also: a11y/role test that download is one control; QR payload test per class; negative test that copy/QR/href never contain `key=` query.
 

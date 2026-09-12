@@ -68,7 +68,7 @@ Exact method names may differ.
 
 The client is responsible for URL construction/redaction and must never leak management URLs into logs.
 
-Production `PASTEBIN_ORIGIN` is `https://pb.223.im` (`pastebin-prod`). The Add-on Worker must enable `global_fetch_strictly_public` so that global `fetch()` to that origin reaches Pastebin through Cloudflare's public front door. Do not replace this with a Service Binding while public URL validation still uses `PASTEBIN_ORIGIN`.
+Production `PASTEBIN_ORIGIN` is `https://pb.223.im` (`pastebin-prod`). The Add-on Worker must enable `global_fetch_strictly_public` so that global `fetch()` to that origin reaches Pastebin through Cloudflare's public front door. Invoke the injected `fetch` as a detached function; `this.transport(...)` supplies `PasteClient` as the receiver and workerd rejects that call with `Illegal invocation` before any HTTP subrequest. Do not replace this with a Service Binding while public URL validation still uses `PASTEBIN_ORIGIN`.
 
 ## 5. Binding service
 

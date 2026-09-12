@@ -49,4 +49,25 @@ describe("reviewed Patch 010 HTTP contract", () => {
     for (const origin of ["http://paste.example", "https://user:secret@paste.example", "https://paste.example/path"])
       expect(() => new PasteClient(origin)).toThrow("INVALID_UPSTREAM_ORIGIN")
   })
+
+  it("invokes the injected transport without a PasteClient receiver", async () => {
+    function receiverSensitiveTransport(
+      this: unknown,
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> {
+      if (this !== undefined) throw new Error("WRONG_FETCH_RECEIVER")
+      void input
+      void init
+      return Promise.resolve(
+        Response.json({
+          url: "https://paste.example/abcd",
+          expireAt: null,
+          expirationSeconds: null,
+        }),
+      )
+    }
+    const client = new PasteClient("https://paste.example", receiverSensitiveTransport)
+    expect(await client.create("M3 Feishu live test 2", "a".repeat(64))).toBe("abcd")
+  })
 })

@@ -6,6 +6,7 @@ const hexB = "22".repeat(32)
 
 function productionEnv(overrides: Record<string, unknown> = {}) {
   return {
+    PLATFORM: "feishu",
     FEISHU_APP_ID: "cli_test",
     FEISHU_APP_SECRET: "secret",
     FEISHU_ENCRYPT_KEY: "encrypt-key",

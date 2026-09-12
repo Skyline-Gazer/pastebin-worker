@@ -73,7 +73,7 @@ Protect critical layout semantics rather than exact pixels:
 - Batch control is compact and separate;
 - light/dark behavior follows upstream-aligned tokens where implemented.
 - production `App` does not default to fixture entries;
-- unauthenticated boot offers Feishu login and never renders fixtures;
+- unauthenticated boot offers Feishu or Lark login from the secret-free session `brand` and never renders fixtures;
 - authenticated empty list is EMPTY;
 - list or session failure is ERROR, never fixtures.
 

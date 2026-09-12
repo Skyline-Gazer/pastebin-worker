@@ -36,7 +36,9 @@ Browser mutation uses official Feishu/Lark OAuth authorization-code only to esta
 - authorize entry mutation by server-side principal → allowed scopes → binding/entry join. Only a trusted authenticated Feishu-side event establishes that mapping; no mapping, default/global scope, guessed entry ID, or browser-supplied scope authorizes mutation;
 - browser supplies only Add-on entry IDs, actions, idempotency identities, and normal session/CSRF material. Single and batch mutations remain server-side.
 
-Never expose/log raw OAuth tokens, session or CSRF secrets, raw tenant/chat/open IDs where avoidable, scope IDs, credential ciphertext, or raw upstream errors. Use safe correlation IDs and keyed/hashed identifiers.
+Never expose/log raw OAuth tokens, session or CSRF secrets, raw tenant/chat/open IDs where avoidable, scope IDs, credential ciphertext, or raw upstream errors. Use safe correlation IDs and keyed/hashed identifiers. Do not log `client_secret`, authorization codes, `access_token`, or `refresh_token`.
+
+Outbound Feishu/Lark OAuth hosts are selected by runtime `PLATFORM` (`feishu` | `lark`) from a static map. Invalid or missing `PLATFORM` fails closed. `PLATFORM=feishu` uses `FEISHU_*` provider credentials; `PLATFORM=lark` uses `LARK_*` provider credentials. There is no cross-provider fallback. Unauthenticated session JSON may include a secret-free `brand` only.
 
 ## 3. Feishu webhook security
 

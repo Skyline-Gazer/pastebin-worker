@@ -71,6 +71,7 @@ the [webhook configuration and DLQ recovery runbook](docs/phase4-webhook.md).
 ## Phase 6.0 browser trust boundary
 
 OAuth, opaque sessions, CSRF/Origin validation, and trusted principal-to-scope metadata are now
-available for future browser mutations. The Phase 6.0 routes/configuration and migration order are
+available for future browser mutations. `PLATFORM=feishu|lark` selects outbound OAuth hosts and
+the matching `FEISHU_*` or `LARK_*` credentials from a static map; inbound `/api/feishu/events` is unchanged. The Phase 6.0 routes/configuration and migration order are
 documented in [browser trust boundary](docs/phase6-browser-trust.md). No completion endpoint or UI
 is included in this phase.

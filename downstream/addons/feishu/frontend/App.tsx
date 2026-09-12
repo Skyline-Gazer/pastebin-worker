@@ -251,6 +251,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
   const [retryIntent, setRetryIntent] = useState<BatchActionIntent | null>(null)
   const [batchPending, setBatchPending] = useState(false)
   const [boot, setBoot] = useState<BootState>(fixtureMode ? "ready" : "loading")
+  const [loginBrand, setLoginBrand] = useState<"Feishu" | "Lark">("Feishu")
   const [entries, setEntries] = useState<FixtureEntry[]>(() => (fixtureMode ? [...initialEntries] : []))
   const [action, setAction] = useState<CompletionAction | null>(null)
   const [completionEntryId, setCompletionEntryId] = useState<string | null>(null)
@@ -278,7 +279,12 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
       try {
         const sessionResponse = await fetch("/api/auth/session", { credentials: "include" })
         if (sessionResponse.status === 401) {
-          if (!cancelled) setBoot("unauthenticated")
+          const payload: unknown = await sessionResponse.json().catch(() => null)
+          const brand = payload && typeof payload === "object" ? (payload as { brand?: unknown }).brand : undefined
+          if (!cancelled) {
+            if (brand === "Feishu" || brand === "Lark") setLoginBrand(brand)
+            setBoot("unauthenticated")
+          }
           return
         }
         if (!sessionResponse.ok) {
@@ -502,7 +508,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
           {boot === "loading" && <p>Loading…</p>}
           {boot === "unauthenticated" && (
             <p>
-              <a href="/api/auth/login">Sign in with Feishu</a>
+              <a href="/api/auth/login">Sign in with {loginBrand}</a>
             </p>
           )}
           {boot === "error" && <p role="alert">Unable to load entries.</p>}

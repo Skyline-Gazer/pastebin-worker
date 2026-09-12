@@ -13,6 +13,9 @@ run_worker_first = true
 
 [vars]
 PASTEBIN_ORIGIN = "https://pb.223.im"
+# Exact value feishu | lark. Overlays may set PLATFORM=lark and must then
+# supply LARK_* provider credentials. Do not put Lark secrets in FEISHU_*.
+PLATFORM = "feishu"
 FEISHU_INGRESS_DLQ_CONFIGURED = "false"
 
 [[d1_databases]]

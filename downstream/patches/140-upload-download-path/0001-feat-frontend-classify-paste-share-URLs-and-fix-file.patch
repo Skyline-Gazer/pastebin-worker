@@ -1,0 +1,501 @@
+From 6ac36888beddef4d39a81e14130cd76d2c2824aa Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 23:57:15 +0800
+Subject: [PATCH] feat(frontend): classify paste share URLs and fix file
+ download
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Context:
+FT-DEFECT-01 (#133): uploading a file persisted bytes and raw/?a worked,
+but the upload result and Display page treated the paste like text.
+Display URL was primary, QR always targeted /d/<name>, and the small-file
+download control was a nested interactive <Button><a> that often did not
+activate. Unrecognized non-UTF-8 bodies could still be served as text.
+
+Expected behavior:
+- TEXT: Display /d/<name> remains primary; QR follows Display.
+- UNENCRYPTED FILE (binary mimeType): Download /<name>?a is primary;
+  Display is a secondary viewer; QR encodes the ?a URL.
+- ENCRYPTED FILE: primary share stays /d/<name>#<key>; never ?key=.
+- Display download is one accessible control. Unencrypted files use
+  /<name>?a. Decrypted plaintext keeps a blob/download handler.
+- If stored mimeType is missing and UTF-8 detection fails, store
+  application/octet-stream. Do not expand the magic table in this commit.
+
+Acceptance criteria:
+- UploadedPanel shows Download URL + ?a QR for image/png
+- Encrypted file share URL keeps the key in the fragment
+- Display Download is a link to /<name>?a, not a nested button
+- Unrecognized non-UTF-8 upload is octet-stream with attachment ?a
+- Existing UTF-8 / named-extension MIME behavior remains
+
+Constraints:
+- Generic Pastebin patch only; no Feishu concepts.
+- Do not merge into upstream-sync.
+- Do not deploy pastebin-prod.
+- Magic-table expansion deferred unless residual RED remains (none after this commit).
+
+Validation:
+- RED: pasteShare.spec, uploadedPanelShare, display download link,
+  nonUtf8FileClassification failed on current assembled tree
+- GREEN: pnpm exec vitest run — 33 files / 251 tests PASS
+- Node v22 / pnpm 10.28.0
+- TDD: RED → GREEN recorded
+
+Docs:
+- Behavior covered by frontend/worker tests in this commit.
+- Patch README/export is Stage B after source review.
+
+Refs:
+- #132 #133
+- Patch ID: 140-upload-download-path
+- Upstream base: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+- Assembled 010–130 tip: b63d5b10520b1979ac76a79a6c4d65b511a8c36f
+- Dependencies: series through 130-max-reads-consume
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ frontend/components/UploadedPanel.tsx         | 33 ++++++----
+ frontend/pages/DisplayPasteView.tsx           | 28 ++++----
+ frontend/test/display.spec.tsx                | 18 +++++
+ frontend/test/pasteShare.spec.ts              | 23 +++++++
+ frontend/test/uploadedPanelShare.spec.tsx     | 65 +++++++++++++++++++
+ frontend/utils/pasteShare.ts                  | 34 ++++++++++
+ worker/mime.ts                                | 14 +++-
+ worker/test/controlHeaders.spec.ts            |  2 +-
+ worker/test/head.spec.ts                      |  2 +-
+ worker/test/nonUtf8FileClassification.spec.ts | 17 +++++
+ 10 files changed, 202 insertions(+), 34 deletions(-)
+ create mode 100644 frontend/test/pasteShare.spec.ts
+ create mode 100644 frontend/test/uploadedPanelShare.spec.tsx
+ create mode 100644 frontend/utils/pasteShare.ts
+ create mode 100644 worker/test/nonUtf8FileClassification.spec.ts
+
+diff --git a/frontend/components/UploadedPanel.tsx b/frontend/components/UploadedPanel.tsx
+index 3dfeba905a49034779e467cd34d3a2abe0c3e9f5..293b6415063296326c65bfbacc4ab65b54d1c983 100644
+--- a/frontend/components/UploadedPanel.tsx
++++ b/frontend/components/UploadedPanel.tsx
+@@ -18,6 +18,7 @@ import {
+ 
+ import type { PasteResponse } from "../../shared/interfaces.js"
+ import { tst } from "../utils/overrides.js"
++import { classifyPasteShare, makeDecryptionUrl, primaryShareUrl, withPathPrefix } from "../utils/pasteShare.js"
+ import type { UploadProgress } from "../utils/uploader.js"
+ import { formatSize } from "../utils/utils.js"
+ import { CopyWidget } from "./CopyWidget.js"
+@@ -33,17 +34,6 @@ interface UploadedPanelProps extends CardProps {
+   isUrlPaste?: boolean
+ }
+ 
+-function withPathPrefix(url: string, prefix: string): string {
+-  const u = new URL(url)
+-  u.pathname = prefix + u.pathname
+-  return u.toString()
+-}
+-
+-function makeDecryptionUrl(url: string, key?: string): string {
+-  const base = withPathPrefix(url, "/d")
+-  return key ? `${base}#${key}` : base
+-}
+-
+ const RAW_URL_FLAGS: { syntax: string; desc: string }[] = [
+   { syntax: "?mime=…", desc: "Override the Content-Type" },
+   { syntax: "?a", desc: "Force download (Content-Disposition: attachment)" },
+@@ -141,6 +131,11 @@ export function UploadedPanel({
+ 
+   const isEncrypted = Boolean(encryptionKey)
+   const isMarkdown = highlightLang === "markdown"
++  const shareClass = classifyPasteShare({ encryptionKey, mimeType: pasteResponse?.mimeType })
++  const displayUrl = pasteResponse ? makeDecryptionUrl(pasteResponse.url, encryptionKey) : ""
++  const fileDownloadUrl =
++    pasteResponse && shareClass === "unencrypted-file" ? primaryShareUrl(pasteResponse.url, shareClass) : ""
++  const qrUrl = pasteResponse ? primaryShareUrl(pasteResponse.url, shareClass, encryptionKey) : ""
+ 
+   const urlInput = (label: string, value: string, labelExtra?: React.ReactNode) => (
+     <Input
+@@ -184,6 +179,15 @@ export function UploadedPanel({
+         ) : (
+           pasteResponse && (
+             <>
++              {fileDownloadUrl &&
++                urlInput(
++                  "Download URL",
++                  fileDownloadUrl,
++                  <>
++                    <UrlTooltip desc="Forces a file download (Content-Disposition: attachment). Display below is a viewer/info page, not the file bytes." />
++                    <QrTooltip url={qrUrl} />
++                  </>,
++                )}
+               <Input
+                 {...inputProps}
+                 label={"Display URL"}
+@@ -193,6 +197,7 @@ export function UploadedPanel({
+                       desc={
+                         <>
+                           Browser-friendly view with syntax highlighting.
++                          {fileDownloadUrl && " This is a viewer/info page, not the file bytes."}
+                           {encryptionKey && (
+                             <>
+                               {" "}
+@@ -204,16 +209,16 @@ export function UploadedPanel({
+                       }
+                       flags={DISPLAY_URL_FLAGS}
+                     />
+-                    <QrTooltip url={makeDecryptionUrl(pasteResponse.url, encryptionKey)} />
++                    {!fileDownloadUrl && <QrTooltip url={qrUrl} />}
+                   </>
+                 }
+                 color={encryptionKey ? "success" : "default"}
+                 className="mb-2"
+-                value={makeDecryptionUrl(pasteResponse.url, encryptionKey)}
++                value={displayUrl}
+                 endContent={
+                   <CopyWidget
+                     className={encryptionKey ? `${copyWidgetClassNames} hover:bg-success-100` : copyWidgetClassNames}
+-                    getCopyContent={() => makeDecryptionUrl(pasteResponse.url, encryptionKey)}
++                    getCopyContent={() => displayUrl}
+                   />
+                 }
+               />
+diff --git a/frontend/pages/DisplayPasteView.tsx b/frontend/pages/DisplayPasteView.tsx
+index 124c620b7078fcdbb3a36de4a4d7716a6c6d8ade..e164bf8878e1eca99b526e2cc87dbdbdaceeaf36 100644
+--- a/frontend/pages/DisplayPasteView.tsx
++++ b/frontend/pages/DisplayPasteView.tsx
+@@ -136,6 +136,9 @@ export function DisplayPasteView(props: DisplayPasteViewProps) {
+ 
+   const displayFilename = filename || metaFilename
+   const placeholderName = displayFilename || (ext ? name + ext : name)
++  const attachmentHref = `/${name}?a`
++  const downloadIsPlaintextBlob = isDecrypted === "decrypted" && !!pasteFile
++  const fileDownloadHref = downloadIsPlaintextBlob ? downloadUrl : attachmentHref
+   const placeholderReason = (() => {
+     if (!pendingInfo) return ""
+     const ct = pendingInfo.contentType
+@@ -213,15 +216,7 @@ export function DisplayPasteView(props: DisplayPasteViewProps) {
+                 <CopyWidget variant="light" className={buttonClasses} getCopyContent={() => pasteStringContent!} />
+               </Tooltip>
+             )}
+-            {pasteFile ? (
+-              <Tooltip content={`Download as file`}>
+-                <Button aria-label="Download" isIconOnly variant="light" className={buttonClasses}>
+-                  <a href={downloadUrl} download={pasteFile.name}>
+-                    <DownloadIcon className="size-6 inline" />
+-                  </a>
+-                </Button>
+-              </Tooltip>
+-            ) : onDecryptDownload ? (
++            {onDecryptDownload ? (
+               <Tooltip content={`Download as file`}>
+                 <Button
+                   aria-label="Download"
+@@ -234,13 +229,16 @@ export function DisplayPasteView(props: DisplayPasteViewProps) {
+                 </Button>
+               </Tooltip>
+             ) : (
+-              (pendingInfo || mediaInfo) && (
++              (pasteFile || pendingInfo || mediaInfo) && (
+                 <Tooltip content={`Download as file`}>
+-                  <Button aria-label="Download" isIconOnly variant="light" className={buttonClasses}>
+-                    <a href={(pendingInfo ?? mediaInfo)!.rawUrl} download={placeholderName}>
+-                      <DownloadIcon className="size-6 inline" />
+-                    </a>
+-                  </Button>
++                  <Link
++                    href={fileDownloadHref}
++                    download={pasteFile?.name || placeholderName}
++                    aria-label="Download"
++                    className={`${buttonClasses} inline-flex items-center justify-center rounded-full p-2 hover:bg-default-100`}
++                  >
++                    <DownloadIcon className="size-6 inline" />
++                  </Link>
+                 </Tooltip>
+               )
+             )}
+diff --git a/frontend/test/display.spec.tsx b/frontend/test/display.spec.tsx
+index 3d3f9c56beaf161afaf87cc2d4cc31edf46d6aa2..453c0a20bd846aa973dad2a0a18616ad45b40b76 100644
+--- a/frontend/test/display.spec.tsx
++++ b/frontend/test/display.spec.tsx
+@@ -418,4 +418,22 @@ describe("DisplayPaste", () => {
+     expect(await screen.findByText(/Not a renderable file/)).toBeInTheDocument()
+     expect(screen.getByText("Download raw")).toBeInTheDocument()
+   })
++
++  it("offers an accessible unencrypted file download as a ?a link, not a nested button", async () => {
++    server.use(
++      ...mockPaste("filedl", {
++        body: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).buffer,
++        headers: {
++          "Content-Type": "image/png",
++          "Content-Disposition": "inline; filename*=UTF-8''cat.png",
++        },
++      }),
++    )
++    vi.stubGlobal("location", new URL("https://example.com/d/filedl"))
++    render(<DisplayPaste config={__WRANGLER_CONFIG__} />)
++    const download = await screen.findByRole("link", { name: "Download" })
++    expect(download).toHaveAttribute("href", "/filedl?a")
++    expect(download.closest("button")).toBeNull()
++    expect(screen.queryByRole("button", { name: "Download" })).not.toBeInTheDocument()
++  })
+ })
+diff --git a/frontend/test/pasteShare.spec.ts b/frontend/test/pasteShare.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..3911c283761baeb6f9e6d4d9bf972bba5c596601
+--- /dev/null
++++ b/frontend/test/pasteShare.spec.ts
+@@ -0,0 +1,23 @@
++import { describe, expect, it } from "vitest"
++import { classifyPasteShare, primaryShareUrl } from "../utils/pasteShare.js"
++
++describe("paste share classification", () => {
++  it("classifies UTF-8/text pastes as text with Display primary URL", () => {
++    expect(classifyPasteShare({})).toBe("text")
++    expect(classifyPasteShare({ mimeType: "text/plain" })).toBe("text")
++    expect(primaryShareUrl("https://example.com/abcd", "text")).toBe("https://example.com/d/abcd")
++  })
++
++  it("classifies binary mime as unencrypted file with ?a primary URL", () => {
++    expect(classifyPasteShare({ mimeType: "image/png" })).toBe("unencrypted-file")
++    expect(classifyPasteShare({ mimeType: "application/octet-stream" })).toBe("unencrypted-file")
++    expect(primaryShareUrl("https://example.com/abcd", "unencrypted-file")).toBe("https://example.com/abcd?a")
++  })
++
++  it("classifies encryption key as encrypted share on Display fragment, never query key", () => {
++    expect(classifyPasteShare({ encryptionKey: "secret-key", mimeType: "image/png" })).toBe("encrypted-file")
++    const url = primaryShareUrl("https://example.com/abcd", "encrypted-file", "secret-key")
++    expect(url).toBe("https://example.com/d/abcd#secret-key")
++    expect(url).not.toMatch(/[?&]key=/)
++  })
++})
+diff --git a/frontend/test/uploadedPanelShare.spec.tsx b/frontend/test/uploadedPanelShare.spec.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..0076021f792b3a39128138c1c42263ed5e7eebb2
+--- /dev/null
++++ b/frontend/test/uploadedPanelShare.spec.tsx
+@@ -0,0 +1,65 @@
++import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
++import { cleanup, render, screen } from "@testing-library/react"
++import { userEvent } from "@testing-library/user-event"
++import { UploadedPanel } from "../components/UploadedPanel.js"
++import type { PasteResponse } from "../../shared/interfaces.js"
++import { stubBrowerFunctions, unStubBrowerFunctions } from "./testUtils.js"
++import "@testing-library/jest-dom/vitest"
++
++const paste: PasteResponse = {
++  url: "https://example.com/abcd",
++  manageUrl: "https://example.com/abcd:aaaaaaaaaaaaaaaaaa",
++  expireAt: "2025-05-01T00:00:00.000Z",
++  expirationSeconds: 300,
++  lastModifiedAt: "2025-04-30T23:55:00.000Z",
++  createdAt: "2025-04-30T23:55:00.000Z",
++  sizeBytes: 9,
++  location: "KV",
++}
++
++beforeAll(() => {
++  stubBrowerFunctions()
++})
++
++afterEach(() => {
++  cleanup()
++})
++
++afterAll(() => {
++  unStubBrowerFunctions()
++})
++
++describe("UploadedPanel share URLs", () => {
++  it("keeps Display URL primary for text pastes and QR on Display", () => {
++    render(<UploadedPanel isLoading={false} pasteResponse={paste} />)
++    expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue("https://example.com/d/abcd")
++    expect(screen.getByRole("button", { name: "QR code" })).toBeInTheDocument()
++    expect(screen.queryByRole("textbox", { name: "Download URL" })).not.toBeInTheDocument()
++  })
++
++  it("makes unencrypted file download URL primary with ?a and QR on that URL", async () => {
++    render(<UploadedPanel isLoading={false} pasteResponse={{ ...paste, mimeType: "image/png", filename: "cat.png" }} />)
++    const download = screen.getByRole("textbox", { name: "Download URL" })
++    expect(download).toHaveValue("https://example.com/abcd?a")
++    expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue("https://example.com/d/abcd")
++    expect(screen.getAllByRole("button", { name: "QR code" })).toHaveLength(1)
++    await userEvent.hover(screen.getByRole("button", { name: "QR code" }))
++    const tooltip = await screen.findByRole("tooltip")
++    expect(tooltip.querySelector("img")).not.toBeNull()
++  })
++
++  it("keeps encrypted file share on Display fragment and never puts the key in a query", () => {
++    render(
++      <UploadedPanel
++        isLoading={false}
++        pasteResponse={{ ...paste, mimeType: "image/png", filename: "cat.png" }}
++        encryptionKey="secret-key"
++      />,
++    )
++    const display = screen.getByRole("textbox", { name: "Display URL" })
++    expect(display).toHaveValue("https://example.com/d/abcd#secret-key")
++    expect((display as HTMLInputElement).value).not.toMatch(/[?&]key=/)
++    expect(screen.queryByRole("textbox", { name: "Download URL" })).not.toBeInTheDocument()
++    expect(screen.getByRole("textbox", { name: "Raw URL" })).toHaveValue("https://example.com/abcd")
++  })
++})
+diff --git a/frontend/utils/pasteShare.ts b/frontend/utils/pasteShare.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..9acc49fcc85d496492acf1bb41c269f99345034e
+--- /dev/null
++++ b/frontend/utils/pasteShare.ts
+@@ -0,0 +1,34 @@
++export type PasteShareClass = "text" | "unencrypted-file" | "encrypted-file"
++
++const TEXTISH_MIME = /^(text\/|application\/(json|xml|javascript|xhtml\+xml|x-javascript))/i
++
++export function isBinaryMimeType(mimeType?: string): boolean {
++  const type = mimeType?.split(";")[0]?.trim()
++  if (!type) return false
++  return !TEXTISH_MIME.test(type)
++}
++
++export function classifyPasteShare(input: { encryptionKey?: string; mimeType?: string }): PasteShareClass {
++  if (input.encryptionKey) return isBinaryMimeType(input.mimeType) ? "encrypted-file" : "text"
++  return isBinaryMimeType(input.mimeType) ? "unencrypted-file" : "text"
++}
++
++export function withPathPrefix(url: string, prefix: string): string {
++  const parsed = new URL(url)
++  parsed.pathname = prefix + parsed.pathname
++  return parsed.toString()
++}
++
++export function makeDecryptionUrl(url: string, key?: string): string {
++  const base = withPathPrefix(url, "/d")
++  return key ? `${base}#${key}` : base
++}
++
++export function attachmentUrl(url: string): string {
++  return url.includes("?") ? `${url}&a` : `${url}?a`
++}
++
++export function primaryShareUrl(pasteUrl: string, cls: PasteShareClass, encryptionKey?: string): string {
++  if (cls === "unencrypted-file") return attachmentUrl(pasteUrl)
++  return makeDecryptionUrl(pasteUrl, encryptionKey)
++}
+diff --git a/worker/mime.ts b/worker/mime.ts
+index 13ac48d31edbfc69029b0dd85c1ec6eeddda87c5..93cdc1f1152f9bf1888eab61842f6bb8ec6e9d99 100644
+--- a/worker/mime.ts
++++ b/worker/mime.ts
+@@ -1,4 +1,5 @@
+ import mime from "mime"
++import { detectUtf8 } from "../shared/encoding.js"
+ import { sniffMimeType } from "../shared/mimeSniff.js"
+ 
+ const SNIFF_BYTES = 16
+@@ -13,14 +14,21 @@ export async function storedMimeTypeForUpload(
+   if (options.filename && mime.getType(options.filename)) return undefined
+ 
+   let header: Uint8Array | undefined
++  let body: Uint8Array | undefined
+   if (options.isMPUComplete) {
+     const object = await env.R2.get(pasteName, { range: { offset: 0, length: SNIFF_BYTES } })
+     if (object === null) return undefined
+     header = new Uint8Array(await object.arrayBuffer())
+   } else if (content instanceof ArrayBuffer) {
+-    header = new Uint8Array(content.slice(0, SNIFF_BYTES))
++    body = new Uint8Array(content)
++    header = body.subarray(0, SNIFF_BYTES)
+   } else if (ArrayBuffer.isView(content)) {
+-    header = new Uint8Array(content.buffer, content.byteOffset, Math.min(SNIFF_BYTES, content.byteLength))
++    body = new Uint8Array(content.buffer, content.byteOffset, content.byteLength)
++    header = body.subarray(0, Math.min(SNIFF_BYTES, body.byteLength))
+   }
+-  return header ? sniffMimeType(header) : undefined
++  const sniffed = header ? sniffMimeType(header) : undefined
++  if (sniffed) return sniffed
++  const sample = body ?? header
++  if (sample && detectUtf8(sample) === null) return "application/octet-stream"
++  return undefined
+ }
+diff --git a/worker/test/controlHeaders.spec.ts b/worker/test/controlHeaders.spec.ts
+index 875b8f7ea951168ebd680d8bbed0c70fc447e0b7..c5c0cafe99bbc6a72d5fd22a882a35600a603a34 100644
+--- a/worker/test/controlHeaders.spec.ts
++++ b/worker/test/controlHeaders.spec.ts
+@@ -5,7 +5,7 @@ import { BASE_URL, genRandomBlob, upload, workerFetch } from "./testUtils.js"
+ 
+ test("mime type", async () => {
+   const ctx = createExecutionContext()
+-  const url = (await upload(ctx, { c: genRandomBlob(1024) })).url
++  const url = (await upload(ctx, { c: "hello" })).url
+ 
+   const url_pic = (await upload(ctx, { c: { content: genRandomBlob(1024), filename: "xx.jpg" } })).url
+ 
+diff --git a/worker/test/head.spec.ts b/worker/test/head.spec.ts
+index 42d5c4189ce01eb7d80d11e68d84978801632091..da2b8d337803810be9f0b7e1c634d8b2e08bd3b9 100644
+--- a/worker/test/head.spec.ts
++++ b/worker/test/head.spec.ts
+@@ -17,7 +17,7 @@ test("HEAD", async () => {
+     }),
+   )
+   expect(headResp.status).toStrictEqual(200)
+-  expect(headResp.headers.get("Content-Type")).toStrictEqual("text/plain;charset=UTF-8")
++  expect(headResp.headers.get("Content-Type")).toStrictEqual("application/octet-stream")
+   expect(headResp.headers.get("Content-Length")).toStrictEqual(blob1.size.toString())
+   expect(headResp.headers.has("Last-Modified")).toStrictEqual(true)
+   expect(headResp.headers.get("Content-Disposition")).toStrictEqual("inline; filename*=UTF-8''Untitled")
+diff --git a/worker/test/nonUtf8FileClassification.spec.ts b/worker/test/nonUtf8FileClassification.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..96ef3cf12044cacb59ca6f42be6bf14a18a0922b
+--- /dev/null
++++ b/worker/test/nonUtf8FileClassification.spec.ts
+@@ -0,0 +1,17 @@
++import { createExecutionContext } from "cloudflare:test"
++import { expect, test } from "vitest"
++import { upload, workerFetch } from "./testUtils.js"
++
++test("unrecognized non-UTF-8 body is stored as a file, not text/plain", async () => {
++  const ctx = createExecutionContext()
++  const binary = new Blob([new Uint8Array([0xff, 0xfe, 0xfd, 0xfc, 0x00, 0x11, 0x22, 0x33])])
++  const uploaded = await upload(ctx, { c: binary })
++  expect(uploaded.mimeType).toStrictEqual("application/octet-stream")
++
++  const raw = await workerFetch(ctx, uploaded.url)
++  expect(raw.headers.get("Content-Type")).toStrictEqual("application/octet-stream")
++
++  const attachment = await workerFetch(ctx, `${uploaded.url}?a`)
++  expect(attachment.headers.get("Content-Disposition")).toMatch(/^attachment;/)
++  expect(attachment.headers.get("Content-Type")).toStrictEqual("application/octet-stream")
++})
+
+base-commit: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+prerequisite-patch-id: 6e6f1a1b3b822a7f6055757439f06a3a2956b89a
+prerequisite-patch-id: bb8280cc63d877f55dabba700c59f2d9ce0d6307
+prerequisite-patch-id: 292fa63936f41c768c09dedce9c0b951924707f3
+prerequisite-patch-id: a18edec9995be81e122eb2ca0fc03fe3bfd7712d
+prerequisite-patch-id: 7fb6594968364a928abd12177313831c752d65e2
+prerequisite-patch-id: d9b8fd398a206be4b4b283398a4697914c5c82e1
+prerequisite-patch-id: f2ebf4e613c40007615eec143b83069eeb24c791
+prerequisite-patch-id: 6ad43923c9ad3ed939663717809fa4661e96f6ab
+prerequisite-patch-id: 1c8a98c04997a1641ac1cc9df45e69f95dcaef15
+prerequisite-patch-id: c233d552de04f8104c3dfde89f89423feab89385
+prerequisite-patch-id: 6ac78d342fc593d80301fff4344bb005463223a0
+prerequisite-patch-id: 7c636f5c8826bcf7c64729128f8a057c6a97c59f
+prerequisite-patch-id: 30bb2ff317dc3ebebe8be3b176e7e24c0844a032
+prerequisite-patch-id: 25696ff912a94f7b2dad737e1cfe422a167c1a5d
+prerequisite-patch-id: 70595ee35b43fe7306ef36c5ffea4f1249b8c912
+prerequisite-patch-id: 4ba60b0e344bc823c5181af8c8a1379d50a8645b
+prerequisite-patch-id: 7af0827b075af64e354f1131aae72cbfd9a6f509
+prerequisite-patch-id: c2ce21a9f0373e1f9303860f6145f9d8b5ea088e
+prerequisite-patch-id: a128861995f39dbd676052826465b3bec1da7c3c
+prerequisite-patch-id: 317d38b2389df13ce09e899c96916601381962d0
+prerequisite-patch-id: fdc4e79bc0a1f9df3ce8690c5ee71fc5d7b06e70
+prerequisite-patch-id: c34b24303bd216f7b517595635049556ca252c00
+prerequisite-patch-id: 09d1dd390a03007452d6584f050d859f04cd1ed9
+prerequisite-patch-id: 17b18a35aaa2766b942290e3c91ccccb7829ad70
+prerequisite-patch-id: e72b7426d0b07052e9f0878f0af0ca6a448e6bfb
+prerequisite-patch-id: 986d9cec733c7c707bcb5348f26c3944cb91bcc4
+prerequisite-patch-id: 6d86662087a73376cc1e1006915f9c7b956d814a
+prerequisite-patch-id: 9f889e0f1c371231cd5ed35e8c595b74af2863e7
+prerequisite-patch-id: 2c06369c51be1e2950ffad3c8aa302ffaffdf317
+prerequisite-patch-id: d6d72660aae2b7362e94a298a8e7e962987455a7
+-- 
+2.50.1 (Apple Git-155)
+

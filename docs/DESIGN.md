@@ -26,20 +26,20 @@ Core actions:
 Preferred minimal shape:
 
 ```text
-Pastebin Worker / Feishu
+Pastebin / Feishu · Lark Add-on
+
+[ Continue with Feishu ]  [ Continue with Lark ]
 
 进行中    归档                                      批量
 
 --------------------------------------------------------
-☐ test A
---------------------------------------------------------
-☐ test B
---------------------------------------------------------
-☑ test C
+Weekly notes                         Open  Copy URL  更多
+aGrT
+☐ first Markdown task
 --------------------------------------------------------
 ```
 
-The rendered Markdown checkbox is the task-state control in normal mode.
+The rendered Markdown checkbox is the task-state control when the body actually contains a GFM task. Lifecycle actions use the menu. Batch selection is a separate checkbox that appears only in Batch Mode.
 
 Do not add unnecessary sidebar navigation, profiles, avatars, dashboards, creator metadata, decorative illustrations, or Feishu-client chrome.
 

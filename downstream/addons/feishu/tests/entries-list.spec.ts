@@ -105,6 +105,7 @@ describe("GET /api/entries", () => {
           retentionMode: "permanent",
           expiresAt: null,
           version: 1,
+          kind: "text",
           content: "- [ ] live task",
           managedTask: { state: "unchecked" },
         },
@@ -113,6 +114,61 @@ describe("GET /api/entries", () => {
     expect(JSON.stringify(body)).not.toMatch(/sealed|credential|scope-a|principal-a|record-a|csrf|tenant|open_id/)
     expect(bindings.listReadyForScopes).toHaveBeenCalledWith(["scope-a"], 50)
     expect(client.read).toHaveBeenCalledWith("abcd")
+  })
+
+  it("projects honest file metadata and omits binary content", async () => {
+    const trust = { getSession: vi.fn().mockResolvedValue(session), scopes: vi.fn().mockResolvedValue(["scope-a"]) }
+    const bindings = {
+      listReadyForScopes: vi.fn().mockResolvedValue([
+        {
+          id: "entry-file",
+          scope_id: "scope-a",
+          record_key: "record-file",
+          credential: "sealed.credential.secret",
+          paste_name: "filepaste",
+          visibility: "active",
+          retention_mode: "permanent",
+          expires_at: null,
+          version: 1,
+        },
+      ]),
+      getById: vi.fn().mockResolvedValue({
+        id: "entry-file",
+        paste_name: "filepaste",
+        visibility: "active",
+        retention_mode: "permanent",
+        expires_at: null,
+        version: 1,
+      }),
+      pending: vi.fn().mockResolvedValue(null),
+    }
+    const client = {
+      publicUrl: vi.fn((name: string) => `https://pb.223.im/${name}`),
+      inspect: vi.fn().mockResolvedValue({ filename: "cat.png", sizeBytes: 12, mimeType: "image/png" }),
+      read: vi.fn().mockResolvedValue("\uFFFD binary"),
+    }
+    const handler = createEntriesListHandler(env, trust as never, bindings as never, client)
+    const result = await handler.fetch(request())
+    expect(result?.status).toBe(200)
+    expect(await result?.json()).toEqual({
+      entries: [
+        {
+          id: "entry-file",
+          pasteName: "filepaste",
+          publicUrl: "https://pb.223.im/filepaste",
+          visibility: "active",
+          retentionMode: "permanent",
+          expiresAt: null,
+          version: 1,
+          kind: "file",
+          filename: "cat.png",
+          mimeType: "image/png",
+          sizeBytes: 12,
+          managedTask: { state: "unchecked" },
+        },
+      ],
+    })
+    expect(client.read).not.toHaveBeenCalled()
   })
 
   it("omits a binding that gains a pending mutation after the final binding read starts", async () => {
@@ -167,6 +223,7 @@ describe("GET /api/entries", () => {
           retentionMode: "permanent",
           expiresAt: null,
           version: 1,
+          kind: "text",
           content: "- [ ] live task",
           managedTask: { state: "unchecked" },
         },
@@ -222,6 +279,7 @@ describe("GET /api/entries", () => {
           retentionMode: "permanent",
           expiresAt: null,
           version: 1,
+          kind: "text",
           content: "- [ ] live task",
           managedTask: { state: "unchecked" },
         },
@@ -315,6 +373,7 @@ describe("GET /api/entries", () => {
           retentionMode: "permanent",
           expiresAt: null,
           version: 1,
+          kind: "text",
           content: "- [ ] live task",
           managedTask: { state: "unchecked" },
         },

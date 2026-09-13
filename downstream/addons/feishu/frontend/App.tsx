@@ -1,18 +1,43 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { toast } from "sonner"
 import type { BatchResult } from "../shared/batch"
 import type { PublicEntry } from "../shared/entries"
 import { type FixtureEntry } from "./fixtures"
-import { ArchiveStatus } from "./ArchiveStatus"
-import { BatchActionBar, type BatchAction } from "./BatchActionBar"
+import { AppHeader } from "@/components/AppHeader"
+import { ProviderLogin } from "@/components/auth/ProviderLogin"
+import { BatchToolbar, type BatchAction } from "@/components/batch/BatchToolbar"
+import { EmptyState } from "@/components/EmptyState"
+import { EntryCard } from "@/components/entries/EntryCard"
+import { ErrorState } from "@/components/ErrorState"
+import { Toaster } from "@/components/ui/sonner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { BatchActionDialog } from "./BatchActionDialog"
-import { BatchModeToggle } from "./BatchModeToggle"
-import { BatchSelector } from "./BatchSelector"
-import { ManagedTaskCheckbox } from "./ManagedTaskCheckbox"
-import { RenderedMarkdown } from "./RenderedMarkdown"
 
 type Theme = "light" | "dark"
 type Tab = "active" | "archived"
 type CompletionAction = "archive_permanent" | "archive_expiring" | "delete"
+type AuthProvider = "feishu" | "lark"
 export interface BatchActionIntent {
   action: BatchAction
   entryIds: readonly string[]
@@ -177,13 +202,6 @@ async function reconcileEntry(id: string): Promise<PublicEntry | null> {
   return entry as PublicEntry
 }
 
-function needsReconciliation(entry: FixtureEntry) {
-  return (
-    entry.retentionMode === "timed" &&
-    (!entry.expiresAt || !Number.isFinite(Date.parse(entry.expiresAt)) || Date.parse(entry.expiresAt) <= Date.now())
-  )
-}
-
 function applyPublicResult(
   entries: readonly FixtureEntry[],
   result: PublicEntry | null,
@@ -207,34 +225,50 @@ function applyPublicResult(
 
 type BootState = "unauthenticated" | "loading" | "ready" | "empty" | "error"
 
+function asProviders(value: unknown, brand?: string): AuthProvider[] {
+  if (Array.isArray(value)) return value.filter((item): item is AuthProvider => item === "feishu" || item === "lark")
+  return brand === "Lark" ? ["lark"] : ["feishu"]
+}
+
 function asListEntries(value: unknown): FixtureEntry[] | null {
   if (!value || typeof value !== "object" || !Array.isArray((value as { entries?: unknown }).entries)) return null
   const parsed: FixtureEntry[] = []
   for (const item of (value as { entries: unknown[] }).entries) {
     if (!item || typeof item !== "object") return null
     const entry = item as Record<string, unknown>
+    const kind = entry.kind === "file" ? "file" : "text"
+    const content = entry.content
+    if (kind === "text" && typeof content !== "string") return null
+    if (content != null && typeof content !== "string") return null
     const task = entry.managedTask
+    const managedTask =
+      task &&
+      typeof task === "object" &&
+      ((task as { state?: unknown }).state === "checked" || (task as { state?: unknown }).state === "unchecked")
+        ? { state: (task as { state: "checked" | "unchecked" }).state }
+        : { state: entry.visibility === "archived" ? ("checked" as const) : ("unchecked" as const) }
     if (
       typeof entry.id !== "string" ||
       typeof entry.pasteName !== "string" ||
-      typeof entry.content !== "string" ||
       (entry.visibility !== "active" && entry.visibility !== "archived") ||
       (entry.retentionMode !== "permanent" && entry.retentionMode !== "timed") ||
-      (entry.expiresAt !== null && typeof entry.expiresAt !== "string") ||
-      !task ||
-      typeof task !== "object" ||
-      ((task as { state?: unknown }).state !== "checked" && (task as { state?: unknown }).state !== "unchecked")
+      (entry.expiresAt !== null && typeof entry.expiresAt !== "string")
     )
       return null
     parsed.push({
       id: entry.id,
       pasteName: entry.pasteName,
       publicUrl: typeof entry.publicUrl === "string" ? entry.publicUrl : "",
-      content: entry.content,
+      content: typeof content === "string" ? content : null,
       visibility: entry.visibility,
       retentionMode: entry.retentionMode,
       expiresAt: entry.expiresAt,
-      managedTask: { state: (task as { state: "checked" | "unchecked" }).state },
+      managedTask,
+      kind,
+      filename: typeof entry.filename === "string" ? entry.filename : undefined,
+      mimeType: typeof entry.mimeType === "string" ? entry.mimeType : undefined,
+      sizeBytes: typeof entry.sizeBytes === "number" ? entry.sizeBytes : undefined,
+      encrypted: entry.encrypted === true,
     })
   }
   return parsed
@@ -251,25 +285,28 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
   const [retryIntent, setRetryIntent] = useState<BatchActionIntent | null>(null)
   const [batchPending, setBatchPending] = useState(false)
   const [boot, setBoot] = useState<BootState>(fixtureMode ? "ready" : "loading")
-  const [loginBrand, setLoginBrand] = useState<"Feishu" | "Lark">("Feishu")
+  const [loginProviders, setLoginProviders] = useState<AuthProvider[]>(["feishu"])
+  const [sessionBrand, setSessionBrand] = useState<"Feishu" | "Lark" | undefined>(undefined)
   const [entries, setEntries] = useState<FixtureEntry[]>(() => (fixtureMode ? [...initialEntries] : []))
   const [action, setAction] = useState<CompletionAction | null>(null)
   const [completionEntryId, setCompletionEntryId] = useState<string | null>(null)
-  const [completionRequestId, setCompletionRequestId] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [restorePendingId, setRestorePendingId] = useState<string | null>(null)
   const [reconciliationPendingId, setReconciliationPendingId] = useState<string | null>(null)
   const [error, setError] = useState(false)
-  const completionTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const completionTriggerRef = useRef<HTMLButtonElement | HTMLInputElement | null>(null)
   const batchActionTriggerRef = useRef<HTMLButtonElement | null>(null)
-  const completionDialogRef = useRef<HTMLDivElement | null>(null)
+  const actionRef = useRef<CompletionAction | null>(null)
+  const completionRequestIdRef = useRef<string | null>(null)
   const nextTheme = theme === "light" ? "dark" : "light"
   const visibleEntries = entries.filter((entry) => entry.visibility === tab)
   const visibleEligibleIds = useMemo(() => deriveVisibleEligibleActiveIds(entries, tab), [entries, tab])
   const prunedSelectedIds = pruneSelectedIds(selectedIds, visibleEligibleIds)
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme
+    document.documentElement.classList.toggle("dark", theme === "dark")
+    document.documentElement.classList.toggle("light", theme === "light")
+    delete document.documentElement.dataset.theme
   }, [theme])
 
   useEffect(() => {
@@ -278,11 +315,13 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
     async function loadLiveEntries() {
       try {
         const sessionResponse = await fetch("/api/auth/session", { credentials: "include" })
+        const payload: unknown = await sessionResponse.json().catch(() => null)
+        const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {}
+        const brand = record.brand === "Feishu" || record.brand === "Lark" ? record.brand : undefined
         if (sessionResponse.status === 401) {
-          const payload: unknown = await sessionResponse.json().catch(() => null)
-          const brand = payload && typeof payload === "object" ? (payload as { brand?: unknown }).brand : undefined
           if (!cancelled) {
-            if (brand === "Feishu" || brand === "Lark") setLoginBrand(brand)
+            setLoginProviders(asProviders(record.providers, brand))
+            setSessionBrand(undefined)
             setBoot("unauthenticated")
           }
           return
@@ -291,6 +330,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
           if (!cancelled) setBoot("error")
           return
         }
+        if (!cancelled && brand) setSessionBrand(brand)
         const listResponse = await fetch("/api/entries", { credentials: "include" })
         if (!listResponse.ok) {
           if (!cancelled) setBoot("error")
@@ -314,10 +354,6 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
       cancelled = true
     }
   }, [fixtureMode])
-
-  useEffect(() => {
-    if (action && !pending) completionDialogRef.current?.focus()
-  }, [action, pending])
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -344,11 +380,21 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
   }
 
   function closeCompletion() {
+    actionRef.current = null
+    completionRequestIdRef.current = null
+    const trigger = completionTriggerRef.current
     setAction(null)
     setCompletionEntryId(null)
-    setCompletionRequestId(null)
     setError(false)
-    completionTriggerRef.current?.focus()
+    queueMicrotask(() => trigger?.focus())
+  }
+
+  function selectCompletionAction(nextAction: CompletionAction) {
+    if (actionRef.current !== nextAction || !completionRequestIdRef.current) {
+      completionRequestIdRef.current = requestIdentity()
+    }
+    actionRef.current = nextAction
+    setAction(nextAction)
   }
 
   function toggleBatchMode() {
@@ -405,6 +451,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
       setSelectedIds(new Set(failedIds))
       setBatchResult(result)
       setRetryIntent(failedIds.length > 0 ? { action: intent.action, entryIds: failedIds } : null)
+      if (result.failed > 0) toast.error(`已处理 ${result.succeeded} 项，${result.failed} 项失败`)
       await refreshLiveEntries()
     } catch {
       setError(true)
@@ -436,23 +483,28 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
     batchActionTriggerRef.current?.focus()
   }
 
-  function selectCompletionAction(nextAction: CompletionAction) {
-    if (action !== nextAction || !completionRequestId) setCompletionRequestId(requestIdentity())
-    setAction(nextAction)
+  function beginCompletion(id: string, nextAction: CompletionAction, trigger?: HTMLButtonElement | HTMLInputElement) {
+    if (trigger) completionTriggerRef.current = trigger
+    setCompletionEntryId(id)
+    setError(false)
+    selectCompletionAction(nextAction)
   }
 
   async function submitCompletion() {
-    if (!action || !completionRequestId || pending) return
+    const currentAction = actionRef.current
+    const currentKey = completionRequestIdRef.current
+    if (!currentAction || !currentKey || pending) return
     const active = entries.find((entry) => entry.id === completionEntryId && entry.visibility === "active")
     if (!active) return
     setPending(true)
     setError(false)
     try {
-      const result = await completeEntry(active.id, action, completionRequestId)
+      const result = await completeEntry(active.id, currentAction, currentKey)
       setEntries((current) => applyPublicResult(current, result, active.id))
+      actionRef.current = null
+      completionRequestIdRef.current = null
       setAction(null)
       setCompletionEntryId(null)
-      setCompletionRequestId(null)
       await refreshLiveEntries()
     } catch {
       setError(true)
@@ -492,70 +544,77 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
     }
   }
 
+  async function logout() {
+    try {
+      const sessionResponse = await fetch("/api/auth/session", { credentials: "include" })
+      const payload: unknown = await sessionResponse.json().catch(() => null)
+      const csrf = payload && typeof payload === "object" ? (payload as { csrfToken?: unknown }).csrfToken : undefined
+      if (typeof csrf === "string") {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          credentials: "include",
+          headers: { "X-CSRF-Token": csrf },
+        })
+      }
+    } finally {
+      setSessionBrand(undefined)
+      setEntries([])
+      setBoot("unauthenticated")
+    }
+  }
+
+  async function copyUrl(url: string) {
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success("Copied URL")
+    } catch {
+      toast.error("Unable to copy URL")
+    }
+  }
+
+  const chooserOpen = action === "archive_permanent" || action === "archive_expiring"
+  const deleteOpen = action === "delete"
+
   return (
-    <main aria-label="Feishu Pastebin" className="page-shell">
-      <section className="content-panel" aria-labelledby="page-title">
-        <header className="shell-header">
-          <div>
-            <p className="eyebrow">Feishu Add-on</p>
-            <h1 id="page-title">Feishu Pastebin</h1>
+    <TooltipProvider>
+      <main aria-label="Feishu Pastebin" className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 p-4">
+        <AppHeader
+          authenticated={boot === "ready" || boot === "empty"}
+          brand={sessionBrand}
+          theme={theme}
+          onLogout={() => void logout()}
+          onToggleTheme={() => setTheme(nextTheme)}
+        />
+        {boot === "loading" && (
+          <div className="space-y-3">
+            <p>Loading…</p>
+            <Skeleton className="h-24 w-full" />
           </div>
-          <button type="button" className="theme-control" onClick={() => setTheme(nextTheme)}>
-            Switch to {nextTheme} theme
-          </button>
-        </header>
-        <div className="shell-body">
-          {boot === "loading" && <p>Loading…</p>}
-          {boot === "unauthenticated" && (
-            <p>
-              <a href="/api/auth/login">Sign in with {loginBrand}</a>
-            </p>
-          )}
-          {boot === "error" && <p role="alert">Unable to load entries.</p>}
-          {(boot === "ready" || boot === "empty") && (
-            <>
-              <div aria-label="Entry views" role="tablist" className="view-tabs">
-                <button
-                  aria-controls="entry-panel"
-                  aria-selected={tab === "active"}
-                  onClick={() => setTab("active")}
-                  role="tab"
-                  type="button"
-                >
-                  进行中
-                </button>
-                <button
-                  aria-controls="entry-panel"
-                  aria-selected={tab === "archived"}
-                  onClick={() => setTab("archived")}
-                  role="tab"
-                  type="button"
-                >
-                  归档
-                </button>
-              </div>
-              {tab === "active" && <BatchModeToggle batchMode={batchMode} onToggle={toggleBatchMode} />}
+        )}
+        {boot === "unauthenticated" && <ProviderLogin providers={loginProviders} />}
+        {boot === "error" && <ErrorState message="Unable to load entries." />}
+        {(boot === "ready" || boot === "empty") && (
+          <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
+            <TabsList aria-label="Entry views">
+              <TabsTrigger value="active">进行中</TabsTrigger>
+              <TabsTrigger value="archived">归档</TabsTrigger>
+            </TabsList>
+            <TabsContent value="active" className="space-y-4">
+              <BatchToolbar
+                batchMode={batchMode}
+                tab="active"
+                eligible={Boolean(visibleEligibleIds)}
+                count={prunedSelectedIds.size}
+                disabled={batchPending}
+                onToggleMode={toggleBatchMode}
+                onSelectAll={selectAllVisibleEligible}
+                onClear={() => setSelectedIds(new Set())}
+                onAction={(nextAction) => beginBatchAction(nextAction, document.activeElement as HTMLButtonElement)}
+              />
               {batchMode && (
                 <p className="visually-hidden" id="batch-mode-lock-explanation">
                   Batch Mode is active. Use Batch Selectors or exit Batch Mode to complete an entry.
                 </p>
-              )}
-              {batchMode && tab === "active" && visibleEligibleIds && (
-                <div aria-label="Batch selection controls" className="batch-selection-controls">
-                  <button type="button" onClick={selectAllVisibleEligible}>
-                    全选
-                  </button>
-                  <button type="button" onClick={() => setSelectedIds(new Set())}>
-                    清空
-                  </button>
-                </div>
-              )}
-              {batchMode && tab === "active" && (
-                <BatchActionBar
-                  count={prunedSelectedIds.size}
-                  disabled={batchPending}
-                  onAction={(nextAction) => beginBatchAction(nextAction, document.activeElement as HTMLButtonElement)}
-                />
               )}
               {batchResult && (
                 <p role="status">
@@ -563,125 +622,147 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
                 </p>
               )}
               {retryIntent && !batchPending && (
-                <button type="button" onClick={() => void submitBatchIntent(retryIntent)}>
+                <Button type="button" variant="outline" onClick={() => void submitBatchIntent(retryIntent)}>
                   Retry failed items
-                </button>
+                </Button>
               )}
-              {error && <p role="alert">Unable to update entry. Please try again.</p>}
-              <section id="entry-panel" aria-label={tab === "active" ? "进行中" : "归档"} role="tabpanel">
+              {error && <ErrorState message="Unable to update entry. Please try again." />}
+              <section aria-label="进行中">
                 {visibleEntries.length === 0 ? (
-                  <p>暂无条目</p>
+                  <EmptyState />
                 ) : (
-                  visibleEntries.map((entry) => (
-                    <article className="fixture-entry" key={entry.id}>
-                      <h2>{entry.pasteName}</h2>
-                      {tab === "active" ? (
-                        <div className="active-entry-controls">
-                          {batchMode && visibleEligibleIds?.has(entry.id) && (
-                            <BatchSelector
-                              checked={prunedSelectedIds.has(entry.id)}
-                              entryName={entry.pasteName}
-                              onToggle={() => toggleBatchSelection(entry.id)}
-                            />
-                          )}
-                          <ManagedTaskCheckbox
-                            checked={entry.managedTask.state === "checked"}
-                            disabled={pending || batchMode}
-                            disabledDescriptionId={batchMode ? "batch-mode-lock-explanation" : undefined}
-                            onComplete={(control) => {
-                              completionTriggerRef.current = control
-                              setCompletionEntryId(entry.id)
-                              setError(false)
-                              selectCompletionAction("archive_permanent")
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <>
-                          <ArchiveStatus expiresAt={entry.expiresAt} retentionMode={entry.retentionMode} />
-                          {needsReconciliation(entry) && (
-                            <button
-                              type="button"
-                              disabled={reconciliationPendingId !== null}
-                              onClick={() => void submitReconciliation(entry)}
-                            >
-                              {reconciliationPendingId === entry.id ? "Reconciling…" : "Reconcile archive"}
-                            </button>
-                          )}
-                          {(entry.retentionMode === "permanent" || entry.retentionMode === "timed") && (
-                            <button
-                              type="button"
-                              disabled={restorePendingId !== null}
-                              onClick={() => void submitRestore(entry)}
-                            >
-                              {restorePendingId === entry.id ? "Restoring…" : "Restore"}
-                            </button>
-                          )}
-                        </>
-                      )}
-                      <RenderedMarkdown content={entry.content} />
-                    </article>
-                  ))
+                  <div className="flex flex-col gap-4">
+                    {visibleEntries.map((entry) => (
+                      <EntryCard
+                        key={entry.id}
+                        entry={entry}
+                        tab="active"
+                        batchMode={batchMode}
+                        selected={prunedSelectedIds.has(entry.id)}
+                        eligible={Boolean(visibleEligibleIds?.has(entry.id))}
+                        pending={pending}
+                        restorePending={restorePendingId !== null}
+                        reconciliationPending={reconciliationPendingId !== null}
+                        onBatchToggle={() => toggleBatchSelection(entry.id)}
+                        onLifecycle={(nextAction) => beginCompletion(entry.id, nextAction)}
+                        onRestore={() => void submitRestore(entry)}
+                        onReconcile={() => void submitReconciliation(entry)}
+                        onCopy={(url) => void copyUrl(url)}
+                        onTaskActivate={(control) => beginCompletion(entry.id, "archive_permanent", control)}
+                      />
+                    ))}
+                  </div>
                 )}
               </section>
-            </>
-          )}
-        </div>
-      </section>
-      {action && (
-        <div
-          aria-labelledby="completion-title"
-          aria-modal="true"
-          className="completion-dialog"
-          onKeyDown={(event) => {
-            if (event.key === "Escape" && !pending) closeCompletion()
-          }}
-          ref={completionDialogRef}
-          role="dialog"
-          tabIndex={-1}
-        >
-          {action === "delete" ? (
-            <>
-              <h2 id="completion-title">Confirm delete</h2>
-              <p>This permanently deletes the entry.</p>
-            </>
-          ) : (
-            <>
-              <h2 id="completion-title">Choose completion action</h2>
-              <p>{actionLabels[action]}</p>
-            </>
-          )}
-          {action !== "delete" && (
-            <div className="completion-actions">
-              <button type="button" disabled={pending} onClick={() => selectCompletionAction("archive_permanent")}>
+            </TabsContent>
+            <TabsContent value="archived" className="space-y-4">
+              {error && <ErrorState message="Unable to update entry. Please try again." />}
+              <section aria-label="归档">
+                {visibleEntries.length === 0 ? (
+                  <EmptyState />
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {visibleEntries.map((entry) => (
+                      <EntryCard
+                        key={entry.id}
+                        entry={entry}
+                        tab="archived"
+                        batchMode={false}
+                        selected={false}
+                        eligible={false}
+                        pending={pending}
+                        restorePending={restorePendingId !== null}
+                        reconciliationPending={reconciliationPendingId !== null}
+                        onBatchToggle={() => undefined}
+                        onLifecycle={() => undefined}
+                        onRestore={() => void submitRestore(entry)}
+                        onReconcile={() => void submitReconciliation(entry)}
+                        onCopy={(url) => void copyUrl(url)}
+                        onTaskActivate={() => undefined}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            </TabsContent>
+          </Tabs>
+        )}
+        <Dialog open={chooserOpen} onOpenChange={(open) => !open && !pending && closeCompletion()}>
+          <DialogContent
+            onInteractOutside={(event) => event.preventDefault()}
+            onOpenAutoFocus={(event) => {
+              event.preventDefault()
+              ;(event.currentTarget as HTMLElement).focus()
+            }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault()
+              completionTriggerRef.current?.focus()
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Choose completion action</DialogTitle>
+              <DialogDescription>{action ? actionLabels[action] : ""}</DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" disabled={pending} onClick={() => selectCompletionAction("archive_permanent")}>
                 永久归档
-              </button>
-              <button type="button" disabled={pending} onClick={() => selectCompletionAction("archive_expiring")}>
+              </Button>
+              <Button type="button" disabled={pending} onClick={() => selectCompletionAction("archive_expiring")}>
                 限期归档
-              </button>
-              <button type="button" disabled={pending} onClick={() => selectCompletionAction("delete")}>
+              </Button>
+              <Button type="button" disabled={pending} onClick={() => selectCompletionAction("delete")}>
                 删除
-              </button>
+              </Button>
             </div>
-          )}
-          <div className="completion-actions">
-            <button type="button" disabled={pending} onClick={closeCompletion}>
-              Cancel
-            </button>
-            <button type="button" disabled={pending} onClick={() => void submitCompletion()}>
-              {action === "delete" ? "Delete entry" : "Confirm archive"}
-            </button>
-          </div>
-        </div>
-      )}
-      {batchAction && (
-        <BatchActionDialog
-          action={batchAction}
-          count={prunedSelectedIds.size}
-          onCancel={closeBatchAction}
-          onConfirm={() => handoffBatchIntent(batchAction)}
-        />
-      )}
-    </main>
+            {error && <ErrorState message="Unable to update entry. Please try again." />}
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={pending} onClick={closeCompletion}>
+                Cancel
+              </Button>
+              <Button type="button" disabled={pending} onClick={() => void submitCompletion()}>
+                Confirm archive
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <AlertDialog open={deleteOpen} onOpenChange={(open) => !open && !pending && closeCompletion()}>
+          <AlertDialogContent
+            onCloseAutoFocus={(event) => {
+              event.preventDefault()
+              completionTriggerRef.current?.focus()
+            }}
+          >
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm delete</AlertDialogTitle>
+              <AlertDialogDescription>This permanently deletes the entry.</AlertDialogDescription>
+            </AlertDialogHeader>
+            {error && <ErrorState message="Unable to update entry. Please try again." />}
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={pending} onClick={closeCompletion}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                disabled={pending}
+                onClick={(event) => {
+                  event.preventDefault()
+                  void submitCompletion()
+                }}
+              >
+                Delete entry
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        {batchAction && (
+          <BatchActionDialog
+            action={batchAction}
+            count={prunedSelectedIds.size}
+            onCancel={closeBatchAction}
+            onConfirm={() => handoffBatchIntent(batchAction)}
+          />
+        )}
+        <Toaster theme={theme} />
+      </main>
+    </TooltipProvider>
   )
 }

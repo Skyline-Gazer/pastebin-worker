@@ -199,7 +199,31 @@ describe("dual Feishu+Lark browser auth", () => {
       }),
     )
     expect(session?.status).toBe(200)
-    expect(await session?.json()).toMatchObject({ brand: "Lark", csrfToken: "csrf-lark" })
+    expect(await session?.json()).toMatchObject({
+      brand: "Lark",
+      csrfToken: "csrf-lark",
+      providers: ["feishu", "lark"],
+    })
+  })
+
+  it("advertises enabled login providers on unauthenticated session without merging identities", async () => {
+    const dualUnauth = await createBrowserAuthHandler(dual, store).fetch(
+      new Request("https://addon.example/api/auth/session"),
+    )
+    expect(dualUnauth?.status).toBe(401)
+    expect(await dualUnauth?.json()).toEqual({
+      code: "UNAUTHENTICATED",
+      brand: "Feishu",
+      providers: ["feishu", "lark"],
+    })
+    const platformOnly = await createBrowserAuthHandler(feishu, store).fetch(
+      new Request("https://addon.example/api/auth/session"),
+    )
+    expect(await platformOnly?.json()).toEqual({
+      code: "UNAUTHENTICATED",
+      brand: "Feishu",
+      providers: ["feishu"],
+    })
   })
 })
 

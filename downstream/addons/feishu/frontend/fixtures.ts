@@ -5,11 +5,16 @@ export interface FixtureEntry {
   id: string
   pasteName: string
   publicUrl: string
-  content: string
+  content?: string | null
   visibility: FixtureVisibility
   retentionMode: FixtureRetention
   expiresAt: string | null
   managedTask: { state: "unchecked" | "checked" }
+  kind?: "text" | "file"
+  filename?: string
+  mimeType?: string
+  sizeBytes?: number
+  encrypted?: boolean
 }
 
 function isValidIsoTimestamp(value: string | null): value is string {
@@ -38,7 +43,7 @@ const entries: readonly FixtureEntry[] = [
   {
     id: "active-fixture",
     pasteName: "Active fixture",
-    publicUrl: "https://example.invalid/p/active-fixture",
+    publicUrl: "https://example.invalid/active-fixture",
     content: `- [ ] first Markdown task
 - [x] lowercase checked task
   - [X] nested uppercase checked task
@@ -56,7 +61,7 @@ const entries: readonly FixtureEntry[] = [
   {
     id: "permanent-archive-fixture",
     pasteName: "Permanent archive fixture",
-    publicUrl: "https://example.invalid/p/permanent-archive-fixture",
+    publicUrl: "https://example.invalid/permanent-archive-fixture",
     content: "Archived fixture content.",
     visibility: "archived",
     retentionMode: "permanent",
@@ -66,7 +71,7 @@ const entries: readonly FixtureEntry[] = [
   {
     id: "timed-archive-fixture",
     pasteName: "Timed archive fixture",
-    publicUrl: "https://example.invalid/p/timed-archive-fixture",
+    publicUrl: "https://example.invalid/timed-archive-fixture",
     content: "Timed archived fixture content.",
     visibility: "archived",
     retentionMode: "timed",

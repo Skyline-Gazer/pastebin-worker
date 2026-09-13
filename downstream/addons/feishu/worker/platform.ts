@@ -90,6 +90,11 @@ export function parseBrowserAuthProviders(value: unknown): Platform[] | undefine
   return providers
 }
 
+/** Unset `BROWSER_AUTH_PROVIDERS` keeps single-provider PLATFORM mode. */
+export function enabledBrowserAuthProviders(env: ProviderCredentialEnvironment): Platform[] {
+  return parseBrowserAuthProviders(env.BROWSER_AUTH_PROVIDERS) ?? [resolvePlatform(env.PLATFORM).provider]
+}
+
 /** Exact static mapping only; unknown or missing values fail closed. */
 export function resolvePlatform(value: unknown): PlatformEndpoints & { provider: Platform } {
   if (value === "feishu" || value === "lark") return { provider: value, ...endpoints[value] }

@@ -9,8 +9,13 @@ export interface PublicEntry {
 }
 
 export interface PublicListEntry extends PublicEntry {
-  content: string
-  managedTask: { state: "unchecked" | "checked" }
+  kind: "text" | "file"
+  content?: string | null
+  managedTask?: { state: "unchecked" | "checked" }
+  filename?: string
+  mimeType?: string
+  sizeBytes?: number
+  encrypted?: boolean
 }
 
 export type EntryResult =

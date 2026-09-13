@@ -13,7 +13,7 @@ describe("Feishu production boot", () => {
       new Response(JSON.stringify({ code: "UNAUTHENTICATED", brand: "Feishu" }), { status: 401 }),
     )
     render(<App />)
-    await waitFor(() => expect(screen.getByRole("link", { name: "Sign in with Feishu" })).toBeVisible())
+    await waitFor(() => expect(screen.getByRole("link", { name: "Continue with Feishu" })).toBeVisible())
     expect(screen.queryByText("Active fixture")).not.toBeInTheDocument()
     expect(screen.queryByText("Permanent archive fixture")).not.toBeInTheDocument()
     expect(screen.queryByText("Timed archive fixture")).not.toBeInTheDocument()
@@ -24,8 +24,8 @@ describe("Feishu production boot", () => {
       new Response(JSON.stringify({ code: "UNAUTHENTICATED", brand: "Lark" }), { status: 401 }),
     )
     render(<App />)
-    await waitFor(() => expect(screen.getByRole("link", { name: "Sign in with Lark" })).toBeVisible())
-    expect(screen.queryByRole("link", { name: "Sign in with Feishu" })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole("link", { name: "Continue with Lark" })).toBeVisible())
+    expect(screen.queryByRole("link", { name: "Continue with Feishu" })).not.toBeInTheDocument()
     expect(screen.queryByText("Active fixture")).not.toBeInTheDocument()
   })
 
@@ -97,7 +97,7 @@ describe("Feishu production boot", () => {
     render(<App />)
     await waitFor(() => expect(screen.getByText("Live entry")).toBeVisible())
     expect(screen.getByRole("checkbox", { name: "Markdown task" })).not.toBeChecked()
-    await user.click(screen.getByRole("checkbox", { name: "Complete managed entry" }))
+    await user.click(screen.getByRole("checkbox", { name: "Markdown task" }))
     await user.click(screen.getByRole("button", { name: "永久归档" }))
     await user.click(screen.getByRole("button", { name: "Confirm archive" }))
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())

@@ -1,10 +1,10 @@
 # FT-DEFECT-02 SPEC — Add-on Web product / information architecture
 
-Status: SPEC READY FOR OWNER REVIEW
+Status: IMPLEMENTING
 
 Parent: [ft-defect-02-plan.md](ft-defect-02-plan.md) — [#135](https://github.com/Skyline-Gazer/pastebin-worker/issues/135)
 
-Implementation has NOT started. Function Test remains PAUSED. `FT-03_DATA_PATH: PASS` is not UX acceptance. No production mutation. No P2P. No Paste deletion.
+Implementation is in `feat/feishu-web-ia`. Function Test remains PAUSED. Visual PASS requires owner review of authenticated `https://pb.test.223.im` after later deploy authorization. No production mutation. No P2P. No Paste deletion.
 
 Later deploy: `pastebin-feishu-prod`. Depends on FT-DEFECT-03 merge and FT-DEFECT-01 file semantics (stable contract, not the same PR).
 
@@ -432,5 +432,5 @@ None requiring owner product input. The owner locked shadcn/ui + Lucide + Sonner
 
 Owner visual acceptance after implementation is a **validation** step, not an open design fork.
 
-Status: SPEC READY FOR OWNER REVIEW
-Implementation has NOT started.
+Status: IMPLEMENTING
+Implementation PR: `feat/feishu-web-ia`. Visual PASS is not claimed from fixtures.

@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef } from "react"
 import { marked } from "marked"
 import { filterXSS } from "xss"
 
@@ -43,13 +44,50 @@ function renderSafeMarkdown(content: string) {
       input.remove()
       return
     }
-
     input.setAttribute("aria-label", "Markdown task")
-    input.setAttribute("disabled", "")
   })
   return documentFragment.body.innerHTML
 }
 
-export function RenderedMarkdown({ content }: { content: string }) {
-  return <div className="rendered-markdown" dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(content) }} />
+export function RenderedMarkdown({
+  content,
+  interactive = false,
+  onTaskActivate,
+}: {
+  content: string
+  interactive?: boolean
+  onTaskActivate?: (control: HTMLInputElement) => void
+}) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const activateRef = useRef(onTaskActivate)
+  activateRef.current = onTaskActivate
+  const markup = useMemo(() => ({ __html: renderSafeMarkdown(content) }), [content])
+
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+    root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((input) => {
+      input.disabled = !interactive
+    })
+    if (!interactive) return
+    function revert(target: HTMLInputElement) {
+      target.checked = target.hasAttribute("checked")
+    }
+    function intercept(event: Event) {
+      const target = event.target
+      if (!(target instanceof HTMLInputElement) || target.type !== "checkbox" || target.disabled) return
+      event.preventDefault()
+      revert(target)
+      if (event.type === "click") activateRef.current?.(target)
+      queueMicrotask(() => revert(target))
+    }
+    root.addEventListener("click", intercept, true)
+    root.addEventListener("change", intercept, true)
+    return () => {
+      root.removeEventListener("click", intercept, true)
+      root.removeEventListener("change", intercept, true)
+    }
+  }, [markup, interactive])
+
+  return <div className="rendered-markdown" dangerouslySetInnerHTML={markup} ref={rootRef} />
 }

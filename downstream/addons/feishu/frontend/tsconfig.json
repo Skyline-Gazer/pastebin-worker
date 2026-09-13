@@ -3,6 +3,11 @@
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "@/*": ["./*"]
+    },
     "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
   "include": ["**/*.ts", "**/*.tsx"]

@@ -116,4 +116,31 @@ describe("reviewed Patch 010 HTTP contract", () => {
     expect(logs.join("\n")).not.toContain("https://")
     log.mockRestore()
   })
+
+  it("inspects public metadata without exposing manage secrets", async () => {
+    const transport = vi.fn<typeof fetch>(() =>
+      Promise.resolve(
+        Response.json({
+          lastModifiedAt: "2026-01-01T00:00:00.000Z",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          expireAt: null,
+          sizeBytes: 12,
+          location: "KV",
+          filename: "cat.png",
+          encryptionScheme: undefined,
+          manageUrl: "SECRET",
+          passwd: "never-return",
+        }),
+      ),
+    )
+    const client = new PasteClient("https://paste.example", transport)
+    const inspected = await client.inspect("abcd")
+    expect(inspected).toEqual({
+      filename: "cat.png",
+      sizeBytes: 12,
+      mimeType: "image/png",
+    })
+    expect(transport.mock.calls[0][0]).toBe("https://paste.example/m/abcd")
+    expect(JSON.stringify(inspected)).not.toMatch(/SECRET|never-return|manageUrl|passwd/)
+  })
 })

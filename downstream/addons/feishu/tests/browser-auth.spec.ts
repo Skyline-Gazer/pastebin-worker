@@ -238,11 +238,11 @@ describe("Phase 6.0 browser trust boundary", () => {
     const handler = createBrowserAuthHandler(config, store)
     const session = await handler.fetch(new Request("https://addon.example/api/auth/session"))
     expect(session?.status).toBe(401)
-    expect(await session?.json()).toEqual({ code: "UNAUTHENTICATED", brand: "Feishu" })
+    expect(await session?.json()).toEqual({ code: "UNAUTHENTICATED", brand: "Feishu", providers: ["feishu"] })
     const lark = await createBrowserAuthHandler(larkConfig, store).fetch(
       new Request("https://addon.example/api/auth/session"),
     )
-    expect(await lark?.json()).toEqual({ code: "UNAUTHENTICATED", brand: "Lark" })
+    expect(await lark?.json()).toEqual({ code: "UNAUTHENTICATED", brand: "Lark", providers: ["lark"] })
     const missing = await createBrowserAuthHandler({ ...config, PLATFORM: "" }, store).fetch(
       new Request("https://addon.example/api/auth/login"),
     )

@@ -4,12 +4,18 @@
 
 Use:
 
-- React
+- React 19
 - Vite
 - TypeScript
-- Tailwind CSS
+- Tailwind CSS 4
+- shadcn/ui (new-york, neutral, Radix primitives)
+- Lucide
+- Sonner
+- Cloudflare Worker Assets
 
-Align with upstream dependency/tooling choices where practical.
+Add-on-only UI libraries live in `downstream/addons/feishu/package.json`, not the upstream-owned root `package.json`. Alias `@/` points at `downstream/addons/feishu/frontend`.
+
+Align with upstream dependency/tooling choices where practical. Do not migrate to Next.js, Remix, Ant, Arco, Semi, or MUI.
 
 ## 2. Visual rule: upstream Pastebin Worker first
 
@@ -17,11 +23,11 @@ The Add-on web page is independent in code but should look like a natural Pasteb
 
 Prefer reuse/alignment with upstream:
 
-- `Button`, `Link`, `Tooltip`, icons where imports are practical;
-- dark-mode behavior;
-- background/foreground/default color tokens;
+- shadcn `Button` / `Tooltip` and Lucide icons for chrome;
+- dark-mode via the `.dark` class on `document.documentElement`;
+- OKLCH / CSS-variable color tokens;
 - compact rounded surfaces;
-- content width/spacing similar to upstream display pages.
+- content width/spacing similar to upstream display pages (bounded ~64rem).
 
 If direct imports create fragile coupling, implement a thin Add-on-local equivalent that matches appearance/behavior rather than modifying upstream structure.
 
@@ -38,27 +44,27 @@ Forbidden by default:
 ## 3. Suggested component model
 
 ```text
-FeishuPage
-|- PageHeader
-|- ViewTabs                # 进行中 / 归档
-|- BatchModeToggle
-|- ActiveEntryList
-|  `- EntryRow
-|     |- BatchSelector     # only in Batch Mode
-|     `- RenderedMarkdown
-|        `- ManagedTaskCheckbox
-|- ArchiveEntryList
-|  `- ArchiveRow
-|     |- RenderedPreview
-|     |- RetentionBadge/Countdown
-|     `- RestoreButton
-|- BatchActionBar
-|- CompletionActionDialog
-|- DeleteConfirmDialog
-`- BatchResultNotice
+App
+|- AppHeader              # product name, session ProviderBadge, theme, logout
+|- ProviderLogin          # Continue with Feishu / Continue with Lark
+|- Tabs                   # 进行中 / 归档
+|- BatchToolbar           # Batch Mode only
+|- EntryCard
+|  |- TextEntryCard       # first-line title, Open / Copy URL, GFM body
+|  |  |- MarkdownContent  # existing GFM parser, not a shadcn Markdown kit
+|  `- FileEntryCard       # honest filename/MIME/size only; Download uses ?a
+|- LifecycleMenu          # 永久归档 / 限期归档 / 删除 — not a checkbox
+|- ArchiveStatus          # authoritative expiresAt countdown
+|- EmptyState / ErrorState
 ```
 
 Names are suggestions, semantics are required.
+
+Logged-out chrome shows `Continue with Feishu` → `/api/auth/login/feishu` and `Continue with Lark` → `/api/auth/login/lark` when the session advertises both providers. Hidden providers stay hidden. Provider badge after login comes from session `brand`, never hostname or localStorage.
+
+Text titles are the first non-empty content line (80 characters, otherwise `Untitled`). `pasteName` is secondary metadata. Open uses Display `/d/<name>`; Copy uses `publicUrl`; file Download uses `/<name>?a` and is omitted unless listing metadata honestly identifies a file.
+
+There is no generic ManagedTaskCheckbox. Markdown task checkboxes stay content semantics. Batch checkboxes appear only in Batch Mode. Lifecycle uses the menu plus Dialog / AlertDialog.
 
 Production boot loads entries from the Add-on session and `GET /api/entries`. Typed fixtures are test-only via explicit `initialEntries`; the production page must not render them by default.
 
@@ -81,13 +87,13 @@ Sanitize generated HTML.
 
 ## 5. Normal-mode task interaction
 
-Clicking an unchecked managed task does not immediately persist `[x]`.
+Clicking an unchecked **GFM task checkbox** (or choosing a lifecycle menu action) does not immediately persist `[x]`.
 
 Flow:
 
 ```text
-click checkbox
--> open CompletionActionDialog
+check real GFM task or open LifecycleMenu
+-> open completion Dialog / AlertDialog
 -> choose archive_permanent / archive_expiring / delete
 -> confirm
 -> backend mutation
@@ -96,7 +102,7 @@ click checkbox
 
 Cancel means no mutation.
 
-Delete requires a second/destructive confirm step or a destructive final confirmation state in the same dialog.
+Delete uses `AlertDialog`. There is no generic "Complete managed entry" checkbox on entries without a GFM task.
 
 ## 6. Batch Mode state
 

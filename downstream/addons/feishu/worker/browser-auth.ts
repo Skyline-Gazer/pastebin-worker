@@ -4,6 +4,7 @@ import {
   InvalidBrowserAuthProvidersError,
   InvalidPlatformError,
   MissingProviderConfigError,
+  enabledBrowserAuthProviders,
   parseBrowserAuthProviders,
   resolveProviderConfig,
   type Platform,
@@ -231,7 +232,12 @@ export function createBrowserAuthHandler(env: BrowserAuthEnvironment, store: Bro
         if (url.pathname === "/api/auth/session" && request.method === "GET") {
           const session = await requireBrowserSession(request, env, store)
           const brand = sessionProvider(session) === "lark" ? "Lark" : "Feishu"
-          return Response.json({ csrfToken: session.csrfToken, expiresAt: session.expiresAt, brand })
+          return Response.json({
+            csrfToken: session.csrfToken,
+            expiresAt: session.expiresAt,
+            brand,
+            providers: enabledBrowserAuthProviders(env),
+          })
         }
         if (url.pathname === "/api/auth/logout" && request.method === "POST") {
           const session = await requireBrowserSession(request, env, store)
@@ -244,7 +250,18 @@ export function createBrowserAuthHandler(env: BrowserAuthEnvironment, store: Bro
         const safe = error instanceof BrowserAuthError ? error : new BrowserAuthError("UNAVAILABLE", 503)
         if (safe.code === "UNAUTHENTICATED") {
           const brand = unauthenticatedBrand(env)
-          return Response.json(brand ? { code: safe.code, brand } : { code: safe.code }, { status: safe.status })
+          let providers: Platform[] | undefined
+          try {
+            providers = enabledBrowserAuthProviders(env)
+          } catch {
+            providers = undefined
+          }
+          return Response.json(
+            brand
+              ? { code: safe.code, brand, ...(providers ? { providers } : {}) }
+              : { code: safe.code, ...(providers ? { providers } : {}) },
+            { status: safe.status },
+          )
         }
         return Response.json({ code: safe.code }, { status: safe.status })
       }

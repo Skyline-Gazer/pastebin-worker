@@ -1,3 +1,5 @@
+import { mimeTypeFromFilename } from "../shared/entryKind"
+
 export class PasteError extends Error {
   constructor(readonly code: "UPSTREAM_REJECTED" | "UPSTREAM_UNCERTAIN" | "ENTRY_NOT_FOUND" | "UPSTREAM_INVALID") {
     super(code)
@@ -185,6 +187,40 @@ export class PasteClient {
       return await response.text()
     } catch {
       throw new PasteError("UPSTREAM_UNCERTAIN")
+    }
+  }
+
+  async inspect(name: string): Promise<{
+    filename?: string
+    mimeType?: string
+    sizeBytes?: number
+    encryptionScheme?: string
+  }> {
+    this.publicUrl(name)
+    const response = await this.request(`${this.origin}/m/${name}`, { method: "GET" })
+    try {
+      const metadata = await response.json<Record<string, unknown>>()
+      const filename = typeof metadata.filename === "string" && metadata.filename ? metadata.filename : undefined
+      const sizeBytes =
+        typeof metadata.sizeBytes === "number" && Number.isFinite(metadata.sizeBytes) ? metadata.sizeBytes : undefined
+      const encryptionScheme =
+        typeof metadata.encryptionScheme === "string" && metadata.encryptionScheme
+          ? metadata.encryptionScheme
+          : undefined
+      const inspected: {
+        filename?: string
+        mimeType?: string
+        sizeBytes?: number
+        encryptionScheme?: string
+      } = {}
+      if (filename) inspected.filename = filename
+      const mimeType = mimeTypeFromFilename(filename)
+      if (mimeType) inspected.mimeType = mimeType
+      if (sizeBytes !== undefined) inspected.sizeBytes = sizeBytes
+      if (encryptionScheme) inspected.encryptionScheme = encryptionScheme
+      return inspected
+    } catch {
+      throw new PasteError("UPSTREAM_INVALID")
     }
   }
 }

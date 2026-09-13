@@ -16,9 +16,9 @@ Browser authentication is Feishu/Lark OAuth authorization-code followed by a ser
 
 State-changing browser requests require the authenticated opaque Add-on session, exact allowed `Origin`, and a session-bound CSRF header. The Worker derives the principal server-side and authorizes by principal → allowed scopes → binding/entry; entry ID alone never establishes scope.
 
-`GET /api/entries` is the production boot list. It requires the opaque session cookie and ignores caller-supplied scope/tenant query parameters. CSRF/Origin are not authority for this GET. The Worker lists at most 50 ready bindings for server-mapped scopes, reads each Paste body via `PasteClient`, and returns `{ entries }` with public fields plus `content` and `managedTask`. It never returns credential, password, tenant, open_id, principal, OAuth, or fingerprint fields.
+`GET /api/entries` is the production boot list. It requires the opaque session cookie and ignores caller-supplied scope/tenant query parameters. CSRF/Origin are not authority for this GET. The Worker lists at most 50 ready bindings for server-mapped scopes, inspects Paste metadata via `GET /m/<name>`, reads UTF-8 text bodies via `PasteClient`, and returns `{ entries }` with public fields plus `kind`, optional honest `filename` / `mimeType` / `sizeBytes`, `content` for text, and `managedTask`. File kind omits binary `content`. It never returns credential, password, tenant, open_id, principal, OAuth, or fingerprint fields.
 
-Unauthenticated `GET /api/auth/session` returns `{ "code": "UNAUTHENTICATED", "brand": "Feishu" | "Lark" }`. Authenticated session JSON may include the same secret-free `brand`. `PLATFORM` is never returned as a raw config value.
+Unauthenticated `GET /api/auth/session` returns `{ "code": "UNAUTHENTICATED", "brand": "Feishu" | "Lark", "providers": ["feishu"] | ["lark"] | ["feishu", "lark"] }`. Authenticated session JSON includes secret-free `brand` plus the same `providers` enablement list. `PLATFORM` is never returned as a raw config value. When `BROWSER_AUTH_PROVIDERS` is unset, `providers` is the single PLATFORM provider.
 
 ## 2. Entry shape returned to frontend
 
@@ -29,12 +29,15 @@ Example public shape:
   "id": "entry_123",
   "pasteName": "aGrT",
   "publicUrl": "https://paste.example/aGrT",
+  "kind": "text",
   "content": "- [ ] test",
   "visibility": "active",
   "retentionMode": "permanent",
   "expiresAt": null
 }
 ```
+
+`kind` is `"file"` only when metadata honestly identifies a non-text paste (non-text MIME, or a filename with a non-UTF-8 body). File entries may include `filename`, `mimeType`, and `sizeBytes` when those values come from upstream `/m/` metadata; they omit `content`. Do not invent MIME or filename from `pasteName`.
 
 Never include password/manageUrl.
 

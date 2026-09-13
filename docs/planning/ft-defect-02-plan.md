@@ -1,8 +1,8 @@
 # FT-DEFECT-02 PLAN — Add-on Web product / information architecture remediation
 
-Status: PLAN READY FOR OWNER REVIEW
+Status: IMPLEMENTING
 
-Implementation has NOT started.
+Implementation is on `feat/feishu-web-ia`.
 
 Parent umbrella: [ft-defect-remediation.md](ft-defect-remediation.md) — [#132](https://github.com/Skyline-Gazer/pastebin-worker/issues/132)
 

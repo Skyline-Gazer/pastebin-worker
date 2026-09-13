@@ -6,6 +6,11 @@ import { defineConfig } from "vite"
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
   plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL(".", import.meta.url)),
+    },
+  },
   build: {
     outDir: "../dist/frontend",
     emptyOutDir: true,

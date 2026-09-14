@@ -246,8 +246,8 @@ describe("Phase 6.0 browser trust boundary", () => {
     const missing = await createBrowserAuthHandler({ ...config, PLATFORM: "" }, store).fetch(
       new Request("https://addon.example/api/auth/login"),
     )
-    expect(missing?.status).toBe(503)
-    expect(await missing?.json()).toEqual({ code: "UNAVAILABLE" })
+    expect(missing?.status).toBe(302)
+    expect(missing?.headers.get("location") || "").toContain("accounts.feishu.cn")
     const crossed = await createBrowserAuthHandler({ ...config, PLATFORM: "lark" }, store).fetch(
       new Request("https://addon.example/api/auth/login"),
     )

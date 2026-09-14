@@ -89,7 +89,7 @@ function rejectProviderMismatch(session: BrowserSession) {
 
 function loginProvider(env: BrowserAuthEnvironment, requested: Platform | undefined): ProviderOAuthConfig {
   try {
-    const chosen = requested ?? resolvePlatform(env.PLATFORM).provider
+    const chosen = requested ?? (env.PLATFORM === "feishu" || env.PLATFORM === "lark" ? env.PLATFORM : "feishu")
     return requireOAuth(env, chosen)
   } catch (error) {
     if (error instanceof BrowserAuthError) throw error

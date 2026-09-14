@@ -72,7 +72,7 @@ Incomplete webhook config → provider-local `503 UNAVAILABLE`. Incomplete OAuth
 
 `/api/lark/events` must never fall through into the Feishu handler.
 
-`GET /api/auth/login` remains a legacy default-provider alias. Default alias remains Feishu when `PLATFORM` is unset/invalid-as-default: `PLATFORM` is used **only** as that alias input. It is not provider enablement.
+`GET /api/auth/login` remains a legacy default-provider alias. Unset or invalid `PLATFORM` defaults that alias to Feishu. `PLATFORM` is not provider enablement.
 
 ## PLATFORM
 

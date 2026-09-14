@@ -115,7 +115,7 @@ Do not use a separate "Feishu enterprise app" visual shell unless explicitly req
 
 Feishu and Lark are independent adapters in a provider registry. They are not architectural modes. There is no single/dual/triple switch.
 
-`PLATFORM` is a legacy default-provider alias for `GET /api/auth/login` only. Provider-specific routes do not depend on it.
+`PLATFORM` is a legacy default-provider alias for `GET /api/auth/login` only. Unset or invalid `PLATFORM` defaults that alias to Feishu. Provider-specific routes do not depend on it.
 
 Optional `BROWSER_AUTH_PROVIDERS` is an emergency OAuth allowlist/kill-switch, not provider discovery. Absence does not imply “only PLATFORM exists”. Webhook readiness and OAuth readiness are independent: a Lark URL challenge can succeed with only Lark webhook secrets.
 

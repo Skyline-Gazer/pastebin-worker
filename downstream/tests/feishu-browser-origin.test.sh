@@ -4,9 +4,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHECK="$ROOT/downstream/scripts/check-feishu-browser-origin.sh"
-TRACKED="$ROOT/downstream/addons/feishu/wrangler.toml"
+TRACKED="$ROOT/downstream/addons/messaging/wrangler.toml"
 DOCS_BUILD="$ROOT/docs/BUILD_DEPLOY.md"
-DOCS_ADDON="$ROOT/docs/FEISHU_ADDON.md"
+DOCS_ADDON="$ROOT/docs/MESSAGING_ADDON.md"
 FIXTURE="$(mktemp)"
 trap 'rm -f "$FIXTURE"' EXIT
 

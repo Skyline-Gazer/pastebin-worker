@@ -9,7 +9,7 @@ A. Patched Pastebin
    exact upstream SHA + ordered generic patch series
 
 B. Feishu Add-on
-   downstream/addons/feishu at exact downstream release SHA/tag
+   downstream/addons/messaging at exact downstream release SHA/tag
 ```
 
 They belong to one downstream product release but should not be forced into one source tree or one Cloudflare Worker artifact.
@@ -78,7 +78,7 @@ If any patch fails:
 The Add-on is built from:
 
 ```text
-downstream/addons/feishu
+downstream/addons/messaging
 ```
 
 at the same exact downstream release commit/tag.
@@ -94,7 +94,7 @@ FEISHU_OAUTH_REDIRECT_URI=https://pb.test.223.im/api/auth/callback
 FEISHU_ALLOWED_ORIGINS=https://pb.test.223.im
 ```
 
-The OAuth callback origin MUST equal that public Add-on origin, and the callback path MUST be `/api/auth/callback`. Do not restore a workers.dev redirect URI. Session cookies stay host-only (`HttpOnly; Secure; SameSite=Lax; Path=/`; no `Domain`). Production overlays that replace the tracked Wrangler file MUST keep these browser-auth vars and the `pb.test.223.im` custom-domain route. Before deploying an overlay, run `downstream/scripts/check-feishu-browser-origin.sh <overlay-wrangler.toml>`. Deploy uses `downstream/addons/feishu/wrangler.toml` as the binding contract and a production overlay for D1/queue resource IDs. The tracked contract sets `PLATFORM=feishu`; overlays may set `PLATFORM=lark` and must then supply `LARK_*` credentials, not Feishu values under `FEISHU_*` provider names. Set `FEISHU_INGRESS_DLQ_CONFIGURED=true` only after the consumer dead-letter queue is verified. Pastebin origin for the Add-on is `https://pb.223.im`. Internal Paste HTTP uses `[[services]]` binding `PASTEBIN_SERVICE` → `pastebin-prod`; the shipped adapter constructs a `Request` and calls `service.fetch(request)`. Public URLs remain `https://pb.223.im/<name>`. The contract keeps `compatibility_flags = ["global_fetch_strictly_public"]`. The contract also enables `[observability]` Workers Logs, invocation logs, and traces at `head_sampling_rate = 1` so existing `PASTE_CREATE_STAGE` and `PASTEBIN_SERVICE_STAGE` queue-handler `console.log` markers persist. Production overlays that replace the tracked Wrangler file MUST keep this flag, the `PASTEBIN_SERVICE` binding, and the observability block. Do not rename or modify `pastebin-prod` when deploying the Add-on.
+The OAuth callback origin MUST equal that public Add-on origin, and the callback path MUST be `/api/auth/callback`. Do not restore a workers.dev redirect URI. Session cookies stay host-only (`HttpOnly; Secure; SameSite=Lax; Path=/`; no `Domain`). Production overlays that replace the tracked Wrangler file MUST keep these browser-auth vars and the `pb.test.223.im` custom-domain route. Before deploying an overlay, run `downstream/scripts/check-feishu-browser-origin.sh <overlay-wrangler.toml>`. Deploy uses `downstream/addons/messaging/wrangler.toml` as the binding contract and a production overlay for D1/queue resource IDs. The tracked contract sets `PLATFORM=feishu`; overlays may set `PLATFORM=lark` and must then supply `LARK_*` credentials, not Feishu values under `FEISHU_*` provider names. Set `FEISHU_INGRESS_DLQ_CONFIGURED=true` only after the consumer dead-letter queue is verified. Pastebin origin for the Add-on is `https://pb.223.im`. Internal Paste HTTP uses `[[services]]` binding `PASTEBIN_SERVICE` → `pastebin-prod`; the shipped adapter constructs a `Request` and calls `service.fetch(request)`. Public URLs remain `https://pb.223.im/<name>`. The contract keeps `compatibility_flags = ["global_fetch_strictly_public"]`. The contract also enables `[observability]` Workers Logs, invocation logs, and traces at `head_sampling_rate = 1` so existing `PASTE_CREATE_STAGE` and `PASTEBIN_SERVICE_STAGE` queue-handler `console.log` markers persist. Production overlays that replace the tracked Wrangler file MUST keep this flag, the `PASTEBIN_SERVICE` binding, and the observability block. Do not rename or modify `pastebin-prod` when deploying the Add-on.
 
 ## 7. Recommended CI stages
 

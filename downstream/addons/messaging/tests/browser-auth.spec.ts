@@ -242,12 +242,12 @@ describe("Phase 6.0 browser trust boundary", () => {
     const lark = await createBrowserAuthHandler(larkConfig, store).fetch(
       new Request("https://addon.example/api/auth/session"),
     )
-    expect(await lark?.json()).toEqual({ code: "UNAUTHENTICATED", brand: "Lark", providers: ["lark"] })
+    expect(await lark?.json()).toEqual({ code: "UNAUTHENTICATED", brand: "Lark", providers: ["feishu", "lark"] })
     const missing = await createBrowserAuthHandler({ ...config, PLATFORM: "" }, store).fetch(
       new Request("https://addon.example/api/auth/login"),
     )
-    expect(missing?.status).toBe(503)
-    expect(await missing?.json()).toEqual({ code: "UNAVAILABLE" })
+    expect(missing?.status).toBe(302)
+    expect(missing?.headers.get("location") || "").toContain("accounts.feishu.cn")
     const crossed = await createBrowserAuthHandler({ ...config, PLATFORM: "lark" }, store).fetch(
       new Request("https://addon.example/api/auth/login"),
     )

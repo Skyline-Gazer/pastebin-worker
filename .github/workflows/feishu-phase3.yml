@@ -23,14 +23,14 @@ jobs:
       # Shared Cloudflare runtime declarations import the upstream Worker, whose
       # page modules require this generated SSR manifest during type checking.
       - run: pnpm build:frontend
-      - run: pnpm prettier -c downstream/addons/feishu docs/planning .github/workflows/feishu-phase3.yml .github/workflows/upstream-sync.yml
-      - run: pnpm exec eslint downstream/addons/feishu
-      - run: pnpm exec tsc --noEmit -p downstream/addons/feishu/tsconfig.json
-      - run: pnpm exec vitest run --config downstream/addons/feishu/vitest.config.js
-      - run: pnpm exec vite build --config downstream/addons/feishu/vite.config.js
-      - run: pnpm exec tsc --noEmit -p downstream/addons/feishu/frontend/tsconfig.json
-      - run: pnpm exec vitest run --config downstream/addons/feishu/frontend/vitest.config.ts
-      - run: pnpm exec vite build --config downstream/addons/feishu/frontend/vite.config.ts
+      - run: pnpm prettier -c downstream/addons/messaging docs/planning .github/workflows/feishu-phase3.yml .github/workflows/upstream-sync.yml
+      - run: pnpm exec eslint downstream/addons/messaging
+      - run: pnpm exec tsc --noEmit -p downstream/addons/messaging/tsconfig.json
+      - run: pnpm exec vitest run --config downstream/addons/messaging/vitest.config.js
+      - run: pnpm exec vite build --config downstream/addons/messaging/vite.config.js
+      - run: pnpm exec tsc --noEmit -p downstream/addons/messaging/frontend/tsconfig.json
+      - run: pnpm exec vitest run --config downstream/addons/messaging/frontend/vitest.config.ts
+      - run: pnpm exec vite build --config downstream/addons/messaging/frontend/vite.config.ts
       - run: downstream/tests/release-candidate.test.sh
       - run: downstream/tests/issue86-tip-vs-assembled.test.sh
       - run: downstream/tests/upstream-sync.test.sh

@@ -28,7 +28,7 @@ upstream-sync                  exact upstream commit
 
 1. **Upstream syncability is the highest maintenance priority.**
 2. Upstream-owned source MUST remain unchanged on `upstream-sync` and SHOULD remain unchanged on `downstream/main`.
-3. Before modifying upstream behavior, first determine whether the requirement can be implemented entirely in `downstream/addons/feishu`.
+3. Before modifying upstream behavior, first determine whether the requirement can be implemented entirely in `downstream/addons/messaging`.
 4. If upstream behavior truly must change, create the smallest possible **generic upstream patch**.
 5. Each independent upstream patch MUST be developed on its own `patch/<id>` topic branch.
 6. A patch branch is a development source, not a production build dependency. Once reviewed, export it with `git format-patch` into the ordered downstream patch series.
@@ -37,7 +37,7 @@ upstream-sync                  exact upstream commit
 9. The patch order MUST be explicit in `downstream/patches/series`; never infer order from branch names, directory enumeration, timestamps, or developer memory.
 10. A long-lived manually edited `deploy` or `build/integration` branch is forbidden. Integration trees are disposable build artifacts.
 11. Integration conflicts MUST be resolved in the responsible patch branch and re-exported. Never repair a generated integration tree by hand.
-12. Feishu frontend, webhook/Bot logic, bindings, lifecycle state, batch behavior, password handling, and Feishu-facing APIs belong to `downstream/addons/feishu`.
+12. Feishu frontend, webhook/Bot logic, bindings, lifecycle state, batch behavior, password handling, and Feishu-facing APIs belong to `downstream/addons/messaging`.
 13. Paste content remains authoritative in upstream KV/R2. The Add-on MUST NOT create a second authoritative copy of full Paste bodies.
 14. Paste management passwords are backend secrets and MUST NEVER be exposed to the browser, Feishu client, analytics, logs, public URLs, or client-visible state.
 15. All behavior changes require tests and documentation in the same change.
@@ -134,7 +134,7 @@ The long-lived downstream control branch.
 
 It owns:
 
-- `downstream/addons/feishu`;
+- `downstream/addons/messaging`;
 - reviewed/exported patch files;
 - `downstream/patches/series`;
 - release/build scripts and manifest template;
@@ -208,7 +208,7 @@ The downstream is actively curated, not a passive mirror. An upstream change is 
 7. Preserve original Git authorship when adopting commits. Do not rewrite third-party authorship as if the downstream maintainer wrote the original change.
 8. Once adopted, the downstream assumes maintenance responsibility for that change until removed, superseded, or upstreamed.
 9. Dependency changes affecting upstream-owned files that are not merged upstream MUST be represented as downstream patches (see §2 rule 18), never committed directly to `downstream/main`.
-10. Dependencies belonging only to downstream-owned code (`downstream/addons/feishu/` or downstream tooling) are normal downstream changes and MAY merge into `downstream/main`; they do NOT become upstream patches.
+10. Dependencies belonging only to downstream-owned code (`downstream/addons/messaging/` or downstream tooling) are normal downstream changes and MAY merge into `downstream/main`; they do NOT become upstream patches.
 11. Keep the patch stack curated: do not adopt a change downstream does not need, does not unblock, or whose maintenance burden is not justified, and do not keep a duplicate carried patch once official upstream includes an equivalent change.
 
 Dependabot maintenance targeting `downstream/main` may be evaluated and integrated into the maintained downstream distribution after full validation; `upstream-sync` remains official-upstream-only.
@@ -303,7 +303,7 @@ Conceptual form:
   },
   "patchSeries": "downstream/patches/series",
   "addon": {
-    "path": "downstream/addons/feishu"
+    "path": "downstream/addons/messaging"
   }
 }
 ```
@@ -347,7 +347,7 @@ Feishu Add-on is a separate build target from the pinned downstream release comm
 ```text
 downstream release commit/tag
       |
-      `-- downstream/addons/feishu
+      `-- downstream/addons/messaging
               |
               v
            test/build/deploy

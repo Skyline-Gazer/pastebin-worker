@@ -10,15 +10,10 @@ import { createReconciliationHandler } from "./reconcile"
 import { createEntriesListHandler } from "./entries"
 import { BatchLifecycleCoordinator, createBatchDispatch, createBatchHandler } from "./batch"
 import { derivePrincipalKey } from "./principal"
-import { parseBrowserAuthProviders, resolvePlatform } from "./platform"
-import {
-  consumeFeishuMessages,
-  createFeishuWebhookHandler,
-  createProviderWebhookHandler,
-  type FeishuWebhookEnvironment,
-} from "./webhook"
+import { consumeInboundMessages, createInboundWebhookDispatcher, type MessagingWebhookEnvironment } from "./webhook"
+import type { ProviderAdapter } from "./providers/types"
 
-export interface Phase4Environment extends FeishuWebhookEnvironment, BrowserAuthEnvironment {
+export interface MessagingRuntimeEnvironment extends MessagingWebhookEnvironment, BrowserAuthEnvironment {
   FEISHU_BINDINGS_DB: D1Database
   FEISHU_CREDENTIAL_KEY_ID: string
   FEISHU_CREDENTIAL_ENCRYPTION_KEY: string
@@ -28,12 +23,12 @@ export interface Phase4Environment extends FeishuWebhookEnvironment, BrowserAuth
   PASTEBIN_AUTHORIZATION?: string
 }
 
-export interface FeishuProductionEnvironment extends Phase4Environment {
+export interface MessagingProductionEnvironment extends MessagingRuntimeEnvironment {
   ASSETS?: Fetcher
 }
 
 /** Bind PasteClient to PASTEBIN_SERVICE without teaching it Cloudflare service-binding concepts. */
-export function createPasteClient(env: Phase4Environment): PasteClient {
+export function createPasteClient(env: MessagingRuntimeEnvironment): PasteClient {
   const service = env.PASTEBIN_SERVICE
   if (!service || typeof service.fetch !== "function") throw new Error("MISSING_PASTEBIN_SERVICE")
   const pastebinTransport: typeof fetch = async (input, init) => {
@@ -48,8 +43,13 @@ export function createPasteClient(env: Phase4Environment): PasteClient {
   return new PasteClient(env.PASTEBIN_ORIGIN, pastebinTransport, env.PASTEBIN_AUTHORIZATION)
 }
 
+function principalFor(env: MessagingRuntimeEnvironment, adapter: ProviderAdapter) {
+  return (appId: string, tenantKey: string, openId: string) =>
+    derivePrincipalKey(env.FEISHU_PRINCIPAL_KEY, appId, tenantKey, openId, adapter.id)
+}
+
 /** Constructs the only public adapter; it never accepts caller-selected Phase 3 identities. */
-export async function createPhase4Worker(env: Phase4Environment) {
+export async function createMessagingRuntime(env: MessagingRuntimeEnvironment) {
   const credentials = await Credentials.create(
     env.FEISHU_CREDENTIAL_KEY_ID,
     env.FEISHU_CREDENTIAL_ENCRYPTION_KEY,
@@ -59,20 +59,7 @@ export async function createPhase4Worker(env: Phase4Environment) {
   const client = createPasteClient(env)
   const service = new EntryService(bindings, credentials, client)
   const trustStore = new BrowserTrustStore(env.FEISHU_BINDINGS_DB)
-  const enabled = parseBrowserAuthProviders(env.BROWSER_AUTH_PROVIDERS)
-  const platform = resolvePlatform(env.PLATFORM).provider
-  const handler = enabled
-    ? createProviderWebhookHandler(env, "feishu", trustStore, (appId, tenantKey, openId) =>
-        derivePrincipalKey(env.FEISHU_PRINCIPAL_KEY, appId, tenantKey, openId, "feishu"),
-      )
-    : createFeishuWebhookHandler(env, trustStore, (appId, tenantKey, openId) =>
-        derivePrincipalKey(env.FEISHU_PRINCIPAL_KEY, appId, tenantKey, openId, platform),
-      )
-  const larkHandler = enabled?.includes("lark")
-    ? createProviderWebhookHandler(env, "lark", trustStore, (appId, tenantKey, openId) =>
-        derivePrincipalKey(env.FEISHU_PRINCIPAL_KEY, appId, tenantKey, openId, "lark"),
-      )
-    : null
+  const webhooks = createInboundWebhookDispatcher(env, trustStore, (adapter) => principalFor(env, adapter))
   const browser = createBrowserAuthHandler(env, trustStore)
   const completion = createCompletionHandler(env, trustStore, bindings, service)
   const restore = createRestoreHandler(env, trustStore, bindings, service)
@@ -88,24 +75,23 @@ export async function createPhase4Worker(env: Phase4Environment) {
       (await reconciliation.fetch(request)) ??
       (await batch.fetch(request)) ??
       (await entries.fetch(request)) ??
-      (new URL(request.url).pathname === "/api/lark/events" && larkHandler
-        ? larkHandler.fetch(request)
-        : handler.fetch(request)),
-    queue: (batch: Parameters<typeof consumeFeishuMessages>[0]) =>
-      consumeFeishuMessages(batch, service, undefined, env.FEISHU_INGRESS_DLQ_CONFIGURED === "true"),
+      (await webhooks.fetch(request)) ??
+      Response.json({ code: "NOT_FOUND" }, { status: 404 }),
+    queue: (batch: Parameters<typeof consumeInboundMessages>[0]) =>
+      consumeInboundMessages(batch, service, undefined, env.FEISHU_INGRESS_DLQ_CONFIGURED === "true"),
   }
 }
 
 /** Cloudflare module-worker entrypoint; construction remains fail-closed on every invocation. */
 export default {
-  fetch: async (request: Request, env: FeishuProductionEnvironment) => {
+  fetch: async (request: Request, env: MessagingProductionEnvironment) => {
     const path = new URL(request.url).pathname
-    if (path.startsWith("/api/")) return (await createPhase4Worker(env)).fetch(request)
+    if (path.startsWith("/api/")) return (await createMessagingRuntime(env)).fetch(request)
     if ((request.method === "GET" || request.method === "HEAD") && env.ASSETS) return env.ASSETS.fetch(request)
     return Response.json({ code: "NOT_FOUND" }, { status: 404 })
   },
-  queue: async (batch: Parameters<typeof consumeFeishuMessages>[0], env: Phase4Environment) =>
-    (await createPhase4Worker(env)).queue(batch),
+  queue: async (batch: Parameters<typeof consumeInboundMessages>[0], env: MessagingRuntimeEnvironment) =>
+    (await createMessagingRuntime(env)).queue(batch),
 }
 
 export { EntryService } from "./service"
@@ -124,11 +110,19 @@ export { derivePrincipalKey } from "./principal"
 export type { EntryContext, EntryResult, PublicEntry, PublicListEntry } from "../shared/entries"
 export type { BatchAction, BatchItemResult, BatchPublicEntryState, BatchRequest, BatchResult } from "../shared/batch"
 export {
+  consumeInboundMessages,
   consumeFeishuMessages,
   createFeishuWebhookHandler,
+  createInboundWebhookDispatcher,
   createProviderWebhookHandler,
   deriveMessageIdentity,
   normalizeAuthorizedEvent,
   verifyFeishuChallenge,
 } from "./webhook"
-export type { FeishuMessageCreateV1, FeishuWebhookEnvironment } from "./webhook"
+export type {
+  FeishuMessageCreateV1,
+  FeishuWebhookEnvironment,
+  InboundMessageV1,
+  MessagingWebhookEnvironment,
+} from "./webhook"
+export { providerRegistry, feishuAdapter, larkAdapter } from "./platform"

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import worker, { createPasteClient, createPhase4Worker } from "../worker/index"
+import worker, { createPasteClient, createMessagingRuntime } from "../worker/index"
 
 const hexA = "11".repeat(32)
 const hexB = "22".repeat(32)
@@ -62,7 +62,7 @@ describe("Feishu production entrypoint", () => {
 
   it("fails closed when required binding configuration is invalid", async () => {
     await expect(
-      createPhase4Worker(productionEnv({ FEISHU_CREDENTIAL_ENCRYPTION_KEY: "short" }) as never),
+      createMessagingRuntime(productionEnv({ FEISHU_CREDENTIAL_ENCRYPTION_KEY: "short" }) as never),
     ).rejects.toThrow("INVALID_SECRET_CONFIG")
   })
 
@@ -155,7 +155,7 @@ describe("Feishu production entrypoint", () => {
     expect(() => createPasteClient(productionEnv({ PASTEBIN_SERVICE: undefined }) as never)).toThrow(
       "MISSING_PASTEBIN_SERVICE",
     )
-    await expect(createPhase4Worker(productionEnv({ PASTEBIN_SERVICE: undefined }) as never)).rejects.toThrow(
+    await expect(createMessagingRuntime(productionEnv({ PASTEBIN_SERVICE: undefined }) as never)).rejects.toThrow(
       "MISSING_PASTEBIN_SERVICE",
     )
     expect(ambientFetch).not.toHaveBeenCalled()

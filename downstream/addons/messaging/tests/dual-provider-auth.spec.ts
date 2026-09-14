@@ -182,6 +182,27 @@ describe("dual Feishu+Lark browser auth", () => {
     expect(session.provider).toBe("feishu")
   })
 
+  it("rejects session provider/principal mismatch", async () => {
+    const now = new Date()
+    await store.createSession({
+      id: "poison-session",
+      principalKey: "feishu:v1:principal:x",
+      csrfToken: "csrf-poison",
+      createdAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 60_000).toISOString(),
+      provider: "lark",
+    })
+    await expect(
+      requireBrowserSession(
+        new Request("https://addon.example/api/future", {
+          headers: { cookie: "feishu_addon_session=poison-session" },
+        }),
+        dual,
+        store,
+      ),
+    ).rejects.toMatchObject({ code: "UNAUTHENTICATED", status: 401 })
+  })
+
   it("returns session brand from the stored provider, not global PLATFORM", async () => {
     const handler = createBrowserAuthHandler(dual, store)
     const now = new Date()

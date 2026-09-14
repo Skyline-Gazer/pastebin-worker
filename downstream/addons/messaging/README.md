@@ -36,18 +36,18 @@ From the repository root, after installing the existing locked dependencies unde
 
 ```sh
 pnpm build:frontend
-pnpm exec tsc --noEmit -p downstream/addons/feishu/tsconfig.json
-pnpm exec eslint downstream/addons/feishu
-pnpm exec vitest run --config downstream/addons/feishu/vitest.config.js
-pnpm exec vite build --config downstream/addons/feishu/vite.config.js
+pnpm exec tsc --noEmit -p downstream/addons/messaging/tsconfig.json
+pnpm exec eslint downstream/addons/messaging
+pnpm exec vitest run --config downstream/addons/messaging/vitest.config.js
+pnpm exec vite build --config downstream/addons/messaging/vite.config.js
 ```
 
 For the frontend-local checks, invoke the installed binaries from the repository root:
 
 ```sh
-node_modules/.bin/vitest run --config downstream/addons/feishu/frontend/vitest.config.ts
-node_modules/.bin/tsc --noEmit -p downstream/addons/feishu/frontend/tsconfig.json
-node_modules/.bin/vite build --config downstream/addons/feishu/frontend/vite.config.ts
+node_modules/.bin/vitest run --config downstream/addons/messaging/frontend/vitest.config.ts
+node_modules/.bin/tsc --noEmit -p downstream/addons/messaging/frontend/tsconfig.json
+node_modules/.bin/vite build --config downstream/addons/messaging/frontend/vite.config.ts
 ```
 
 The downstream-only `Feishu internal services` workflow runs these checks independently

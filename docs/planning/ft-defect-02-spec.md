@@ -85,14 +85,14 @@ shadcn/ui is the **primitive / design-system layer**. It MUST NOT become the pro
 
 Only add primitives that are actually used. Do not `shadcn add --all`. Do not import dashboard templates or third-party registries for appearance.
 
-Use the current supported shadcn **Vite + Tailwind v4** setup (`ui.shadcn.com` Vite install). `init` / `add` MUST run against the existing Add-on frontend (`--cwd downstream/addons/feishu/frontend`). Do not pass a new-app template. Do not `--force` overwrite `App.tsx` or `src/main.tsx`.
+Use the current supported shadcn **Vite + Tailwind v4** setup (`ui.shadcn.com` Vite install). `init` / `add` MUST run against the existing Add-on frontend (`--cwd downstream/addons/messaging/frontend`). Do not pass a new-app template. Do not `--force` overwrite `App.tsx` or `src/main.tsx`.
 
 ### File layout
 
 Equivalent structure (filenames may differ if a cleaner existing layout wins):
 
 ```text
-downstream/addons/feishu/frontend/
+downstream/addons/messaging/frontend/
 ├── components/
 │   ├── ui/                 # shadcn primitives only
 │   ├── entries/
@@ -112,7 +112,7 @@ Required split: `components/ui` = generic primitive; everything else listed belo
 - `components.json` lives under the Add-on frontend, not the repository root.
 - Style: **new-york** / current shadcn default. `rsc: false`. CSS variables: true. `baseColor`: **neutral**.
 - Tailwind v4: keep `@tailwindcss/vite`; import shadcn Tailwind v4 tokens into the existing CSS entry (`style.css` or successor). OKLCH theme variables. `@custom-variant dark` / `.dark` as current shadcn docs require.
-- Alias `@/` → Add-on frontend source root (`downstream/addons/feishu/frontend`). Configure Vite `resolve.alias`, TypeScript `paths`, and Vitest the same way. The implementation PR MUST prove Vite, TypeScript, Vitest, and Worker asset builds resolve `@/` correctly. Single React instance (no nested copy that breaks hooks).
+- Alias `@/` → Add-on frontend source root (`downstream/addons/messaging/frontend`). Configure Vite `resolve.alias`, TypeScript `paths`, and Vitest the same way. The implementation PR MUST prove Vite, TypeScript, Vitest, and Worker asset builds resolve `@/` correctly. Single React instance (no nested copy that breaks hooks).
 - Existing theme toggle is preserved: light/dark remains a user control. Map it onto shadcn’s `.dark` class on `document.documentElement`. `data-theme` may be removed once competing CSS is gone. Do not add `next-themes` unless the existing toggle cannot drive `.dark` (default: do not add it).
 - Do not replace the whole repository with a newly scaffolded Vite project.
 
@@ -314,7 +314,7 @@ Use official shadcn-supported dependencies only where needed. Typical later adds
 
 Do not add arbitrary registry/community component packages. Keep bundle/runtime complexity appropriate for a small Cloudflare-hosted Add-on.
 
-Chosen default for install location: `downstream/addons/feishu/package.json` (downstream-owned). If a workspace file is required so Vite/Worker builds share root React, add a **new** root `pnpm-workspace.yaml` listing the Add-on package; do not add Lucide/Sonner/Radix to upstream-owned `package.json`. Prove one React copy in the asset graph.
+Chosen default for install location: `downstream/addons/messaging/package.json` (downstream-owned). If a workspace file is required so Vite/Worker builds share root React, add a **new** root `pnpm-workspace.yaml` listing the Add-on package; do not add Lucide/Sonner/Radix to upstream-owned `package.json`. Prove one React copy in the asset graph.
 
 ## 3.6 User/API flows
 

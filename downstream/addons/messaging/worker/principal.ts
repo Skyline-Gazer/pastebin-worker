@@ -7,7 +7,7 @@ function base64url(bytes: ArrayBuffer) {
     .replace(/=+$/, "")
 }
 
-/** A stable, server-derived identifier; raw Feishu identifiers never leave this boundary. */
+/** A stable, server-derived identifier; raw provider identifiers never leave this boundary. */
 export async function derivePrincipalKey(
   key: string,
   appId: string,

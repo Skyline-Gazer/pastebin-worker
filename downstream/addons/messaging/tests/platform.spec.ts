@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { MissingProviderConfigError, resolvePlatform, resolveProviderConfig } from "../worker/platform"
+import {
+  MissingProviderConfigError,
+  enabledBrowserAuthProviders,
+  resolvePlatform,
+  resolveProviderConfig,
+} from "../worker/platform"
 
 const feishu = {
   FEISHU_APP_ID: "cli_feishu",
@@ -102,5 +107,19 @@ describe("resolveProviderConfig", () => {
     expect(() => resolveProviderConfig({ PLATFORM: "lark", ...lark, LARK_APP_ID: "" })).toThrow(
       MissingProviderConfigError,
     )
+  })
+})
+
+describe("enabledBrowserAuthProviders", () => {
+  it("lists OAuth-ready providers when BROWSER_AUTH_PROVIDERS is unset instead of PLATFORM-only mode", () => {
+    expect(enabledBrowserAuthProviders({ PLATFORM: "feishu", ...feishu })).toEqual(["feishu"])
+    expect(enabledBrowserAuthProviders({ PLATFORM: "feishu", ...feishu, ...lark })).toEqual(["feishu", "lark"])
+    expect(enabledBrowserAuthProviders({ PLATFORM: "lark", ...feishu })).toEqual(["feishu"])
+  })
+
+  it("uses BROWSER_AUTH_PROVIDERS only as an allowlist kill-switch", () => {
+    expect(
+      enabledBrowserAuthProviders({ PLATFORM: "feishu", ...feishu, ...lark, BROWSER_AUTH_PROVIDERS: "feishu" }),
+    ).toEqual(["feishu"])
   })
 })

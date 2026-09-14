@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { resolveProviderConfig } from "../worker/platform"
 import {
   createFeishuWebhookHandler,
+  createProviderWebhookHandler,
   consumeFeishuMessages,
   deriveMessageIdentity,
   normalizeAuthorizedEvent,
@@ -61,15 +62,21 @@ async function encrypted(value: unknown, keyText = secrets.FEISHU_ENCRYPT_KEY) {
   return btoa(String.fromCharCode(...iv, ...new Uint8Array(cipher)))
 }
 
-async function signedRequest(value: unknown, env: FeishuWebhookEnvironment, mutate?: (raw: string) => string) {
+async function signedRequest(
+  value: unknown,
+  env: FeishuWebhookEnvironment,
+  mutate?: (raw: string) => string,
+  path = "/api/feishu/events",
+  provider?: "feishu" | "lark",
+) {
   const raw = mutate?.(JSON.stringify(value)) ?? JSON.stringify(value)
   const timestamp = "1700000000"
   const nonce = "nonce-vector"
-  const encryptKey = resolveProviderConfig(env).encryptKey
+  const encryptKey = resolveProviderConfig(env, provider ?? (path.includes("/lark/") ? "lark" : "feishu")).encryptKey
   const signed = new Uint8Array(new TextEncoder().encode(timestamp + nonce + encryptKey + raw))
   const hash = await crypto.subtle.digest("SHA-256", signed)
   const signature = Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, "0")).join("")
-  return new Request("https://worker/api/feishu/events", {
+  return new Request(`https://worker${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -419,7 +426,10 @@ describe("Feishu webhook ingress", () => {
       },
     })
     const envelope = { encrypt: await encrypted(larkEvent, env.LARK_ENCRYPT_KEY) }
-    expect((await createFeishuWebhookHandler(env).fetch(await signedRequest(envelope, env))).status).toBe(200)
+    const handler = createProviderWebhookHandler(env, "lark")
+    expect(
+      (await handler.fetch(await signedRequest(envelope, env, undefined, "/api/lark/events", "lark"))).status,
+    ).toBe(200)
     expect(send).toHaveBeenCalledTimes(1)
     const leftover = {
       encrypt: await encrypted(
@@ -435,15 +445,18 @@ describe("Feishu webhook ingress", () => {
         env.LARK_ENCRYPT_KEY,
       ),
     }
-    expect((await createFeishuWebhookHandler(env).fetch(await signedRequest(leftover, env))).status).toBe(403)
+    expect(
+      (await handler.fetch(await signedRequest(leftover, env, undefined, "/api/lark/events", "lark"))).status,
+    ).toBe(403)
     expect(send).toHaveBeenCalledTimes(1)
   })
 
-  it("fails closed when PLATFORM=lark has only Feishu credentials", async () => {
+  it("fails closed when the Lark adapter has only Feishu credentials", async () => {
     await expect(
       verifyFeishuChallenge(
         { type: "url_verification", token: "verification-token", challenge: "x" },
         { ...secrets, PLATFORM: "lark" },
+        "lark",
       ),
     ).rejects.toMatchObject({ code: "UNAVAILABLE" })
   })

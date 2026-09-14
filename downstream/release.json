@@ -7,6 +7,6 @@
   },
   "patchSeries": "downstream/patches/series",
   "addon": {
-    "path": "downstream/addons/feishu"
+    "path": "downstream/addons/messaging"
   }
 }

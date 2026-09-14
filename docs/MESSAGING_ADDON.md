@@ -1,9 +1,9 @@
-# Feishu Add-on
+# Messaging Add-on
 
 ## 1. Add-on is one complete downstream unit
 
 ```text
-downstream/addons/feishu/
+downstream/addons/messaging/
 |- frontend/
 |- worker/
 |- shared/
@@ -111,17 +111,28 @@ Pastebin Worker / Feishu
 
 Do not use a separate "Feishu enterprise app" visual shell unless explicitly requested later.
 
-## 9. Feishu / Lark platform endpoints
+## 9. Provider registry (Feishu / Lark)
 
-Runtime `PLATFORM` is exactly `feishu` or `lark`. Production must set it explicitly; the tracked Worker contract defaults to `feishu`. Any other value, including missing, fails closed.
+Feishu and Lark are independent adapters in a provider registry. They are not architectural modes. There is no single/dual/triple switch.
 
-Optional `BROWSER_AUTH_PROVIDERS` (`feishu`, `lark`, or `feishu,lark`) enables simultaneous browser login and inbound webhooks. Leave it unset in production until Lark credentials and console URLs are provisioned; unset keeps single-provider `PLATFORM` behavior.
+`PLATFORM` is a legacy default-provider alias for `GET /api/auth/login` only. Unset or invalid `PLATFORM` defaults that alias to Feishu. Provider-specific routes do not depend on it.
 
-Selected-provider credentials are separated:
+Optional `BROWSER_AUTH_PROVIDERS` is an emergency OAuth allowlist/kill-switch, not provider discovery. Absence does not imply “only PLATFORM exists”. Webhook readiness and OAuth readiness are independent: a Lark URL challenge can succeed with only Lark webhook secrets.
 
-- Feishu → `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, `FEISHU_ENCRYPT_KEY`, `FEISHU_VERIFICATION_TOKEN`, `FEISHU_ALLOWED_TENANT_KEYS`, `FEISHU_OAUTH_REDIRECT_URI`, `FEISHU_ALLOWED_ORIGINS`
-- Lark → the matching `LARK_*` names
+Always-mounted compatibility routes:
 
-Do not put Lark credentials in `FEISHU_*` variables. There is no cross-provider credential fallback. Product-owned bindings (`FEISHU_BINDINGS_DB`, `FEISHU_INGRESS_QUEUE`, `FEISHU_PRINCIPAL_KEY`) stay as they are.
+- `POST /api/feishu/events`
+- `POST /api/lark/events`
+- `GET /api/auth/login/feishu`
+- `GET /api/auth/login/lark`
 
-Outbound OAuth/OpenAPI hosts come from a static map (`worker/platform.ts`). Single-provider inbound webhook remains `/api/feishu/events`. Dual-provider mode adds `/api/lark/events` and login routes `/api/auth/login/feishu` and `/api/auth/login/lark` while keeping the canonical callback `GET /api/auth/callback`. Feishu principals stay `feishu:v1:*`; Lark principals use `lark:v1:*`. Apply migration `0008_dual_provider_auth.sql` before enabling dual providers.
+Incomplete webhook or OAuth config for that provider returns provider-local `503 UNAVAILABLE`. `/api/lark/events` never falls through into the Feishu handler.
+
+Provider credentials stay separated:
+
+- Feishu → `FEISHU_*`
+- Lark → `LARK_*`
+
+No cross-provider credential fallback. Product-owned bindings (`FEISHU_BINDINGS_DB`, `FEISHU_INGRESS_QUEUE`, `FEISHU_PRINCIPAL_KEY`) stay as they are (legacy names).
+
+Feishu principals stay `feishu:v1:*`; Lark principals use `lark:v1:*`. Apply migration `0008_dual_provider_auth.sql` for the additive `provider` column (already in production).

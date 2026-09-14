@@ -39,5 +39,5 @@ export default defineConfig({
       },
     }),
   ],
-  test: { include: ["downstream/addons/feishu/tests/**/*.spec.ts"] },
+  test: { include: ["downstream/addons/messaging/tests/**/*.spec.ts"] },
 })

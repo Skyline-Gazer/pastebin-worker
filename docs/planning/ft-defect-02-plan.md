@@ -49,7 +49,7 @@ Dependencies (do not collapse):
 - Listing currently always includes `content` and `managedTask`: verify Worker projection. File cards MUST NOT fabricate filename/MIME; SPEC defines when those fields may be added from upstream metadata (`/m/<name>` via PasteClient), not from guessing.
 - GFM task rendering is a locked product requirement (`AGENTS.md` §12, `docs/FRONTEND.md`): keep a real GFM parser; fenced code stays literal. Do **not** replace Markdown with a shadcn component.
 - Batch Mode already has a separate `BatchSelector`: verify `App.tsx`. Lifecycle actions already exist in Chinese (永久归档 / 限期归档 / 删除 / 恢复).
-- Add-on frontend already uses React 19, Vite, TypeScript, Tailwind v4 (`@tailwindcss/vite`) and Worker `[assets]`. Verify `downstream/addons/feishu/frontend/vite.config.ts` and `style.css`. Configure shadcn **into this existing project**; do not scaffold a new Vite app.
+- Add-on frontend already uses React 19, Vite, TypeScript, Tailwind v4 (`@tailwindcss/vite`) and Worker `[assets]`. Verify `downstream/addons/messaging/frontend/vite.config.ts` and `style.css`. Configure shadcn **into this existing project**; do not scaffold a new Vite app.
 - Root `package.json` is upstream-owned. shadcn/Lucide/Sonner/Radix dependencies belong in an Add-on-owned manifest, not a root/upstream patch.
 - ego-lite does not inherit the owner's Chrome cookie jar: visual PASS may require owner acceptance if automation cannot see the authenticated real-data page.
 
@@ -91,7 +91,7 @@ Dependencies (do not collapse):
 
 ## Candidate files/components (candidates only)
 
-Under `downstream/addons/feishu/frontend/` (names may differ if a cleaner existing layout wins; primitive vs product split is required):
+Under `downstream/addons/messaging/frontend/` (names may differ if a cleaner existing layout wins; primitive vs product split is required):
 
 - `components/ui/*` — generated shadcn primitives only
 - `components/auth/ProviderLogin.tsx`, `ProviderBadge.tsx`

@@ -36,7 +36,7 @@ with open(sys.argv[1], 'r', encoding='utf-8') as f:
     d = json.load(f)
 print(d['upstream']['commit'])
 print(d.get('patchSeries', 'downstream/patches/series'))
-print(d.get('addon', {}).get('path', 'downstream/addons/feishu'))
+print(d.get('addon', {}).get('path', 'downstream/addons/messaging'))
 PY
 )
 BASE="${manifest[0]}"

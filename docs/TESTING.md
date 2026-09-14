@@ -196,7 +196,7 @@ Required release checks:
 - Feishu `wrangler.toml` enables Workers Logs, invocation logs, and traces at full sample without changing `PASTEBIN_SERVICE`, `PASTEBIN_ORIGIN`, or `global_fetch_strictly_public`.
 - Feishu `wrangler.toml` pins `FEISHU_OAUTH_REDIRECT_URI=https://pb.test.223.im/api/auth/callback`, `FEISHU_ALLOWED_ORIGINS=https://pb.test.223.im`, and the `pb.test.223.im` custom-domain route. `downstream/scripts/check-feishu-browser-origin.sh` rejects a workers.dev OAuth callback (`downstream/tests/feishu-browser-origin.test.sh`).
 - `createPasteClient` calls `PASTEBIN_SERVICE.fetch` with one `Request` argument (`https://pb.223.im/`, POST, FormData, timeout signal, `redirect: "manual"`). Missing binding still fails closed. Adapter stage markers contain no secrets.
-- A Miniflare/workerd Service Binding stub (`pastebin-stub` in `downstream/addons/feishu/vitest.config.js`) proves the Request-object path reaches a child Worker without using ambient `fetch`.
+- A Miniflare/workerd Service Binding stub (`pastebin-stub` in `downstream/addons/messaging/vitest.config.js`) proves the Request-object path reaches a child Worker without using ambient `fetch`.
 
 ## 13. Integration tests
 

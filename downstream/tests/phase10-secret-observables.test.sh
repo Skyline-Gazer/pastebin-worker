@@ -11,14 +11,14 @@ trap 'rm -rf "$FIXTURE" "$OUTPUT"' EXIT
 git init -q "$FIXTURE"
 git -C "$FIXTURE" config user.name fixture
 git -C "$FIXTURE" config user.email fixture@example.invalid
-mkdir -p "$FIXTURE/downstream/patches" "$FIXTURE/downstream/addons/feishu" "$FIXTURE/downstream/scripts"
+mkdir -p "$FIXTURE/downstream/patches" "$FIXTURE/downstream/addons/messaging" "$FIXTURE/downstream/scripts"
 cp "$SCRIPT" "$FIXTURE/downstream/scripts/release-candidate.sh"
 printf 'base\n' > "$FIXTURE/file"
 git -C "$FIXTURE" add .
 git -C "$FIXTURE" commit -qm base
 BASE="$(git -C "$FIXTURE" rev-parse HEAD)"
 printf '\n' > "$FIXTURE/downstream/patches/series"
-printf '{"schemaVersion":1,"upstream":{"commit":"%s"},"patchSeries":"downstream/patches/series","addon":{"path":"downstream/addons/feishu"}}\n' "$BASE" > "$FIXTURE/downstream/release.json"
+printf '{"schemaVersion":1,"upstream":{"commit":"%s"},"patchSeries":"downstream/patches/series","addon":{"path":"downstream/addons/messaging"}}\n' "$BASE" > "$FIXTURE/downstream/release.json"
 git -C "$FIXTURE" add .
 git -C "$FIXTURE" commit -qm fixture
 

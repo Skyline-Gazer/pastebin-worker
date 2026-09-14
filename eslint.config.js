@@ -16,7 +16,7 @@ export default defineConfig(
       },
     },
   },
-  globalIgnores(["dist/**", ".wrangler/**", "coverage/**", "scripts/**", "worker-configuration.d.ts"]),
+  globalIgnores(["dist/**", "**/dist/**", ".wrangler/**", "coverage/**", "scripts/**", "worker-configuration.d.ts"]),
   {
     rules: {
       "no-unused-vars": "off",

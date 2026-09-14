@@ -13,7 +13,7 @@ Use:
 - Sonner
 - Cloudflare Worker Assets
 
-Add-on-only UI libraries live in `downstream/addons/feishu/package.json`, not the upstream-owned root `package.json`. Alias `@/` points at `downstream/addons/feishu/frontend`.
+Add-on-only UI libraries live in `downstream/addons/messaging/package.json`, not the upstream-owned root `package.json`. Alias `@/` points at `downstream/addons/messaging/frontend`.
 
 Align with upstream dependency/tooling choices where practical. Do not migrate to Next.js, Remix, Ant, Arco, Semi, or MUI.
 

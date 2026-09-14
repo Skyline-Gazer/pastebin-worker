@@ -13,7 +13,7 @@ trap 'rm -rf "$FIXTURE" "$OUTPUT" "$PROVENANCE_FILE"' EXIT
 git init -q "$FIXTURE"
 git -C "$FIXTURE" config user.name fixture
 git -C "$FIXTURE" config user.email fixture@example.invalid
-mkdir -p "$FIXTURE/downstream/patches/one" "$FIXTURE/downstream/addons/feishu" "$FIXTURE/downstream/scripts"
+mkdir -p "$FIXTURE/downstream/patches/one" "$FIXTURE/downstream/addons/messaging" "$FIXTURE/downstream/scripts"
 cp "$ROOT/downstream/scripts/release-candidate.sh" "$FIXTURE/downstream/scripts/release-candidate.sh"
 printf 'base\n' > "$FIXTURE/file"
 git -C "$FIXTURE" add .
@@ -25,7 +25,7 @@ git -C "$FIXTURE" commit -am patch -q
 git -C "$FIXTURE" format-patch -1 --stdout > "$FIXTURE/downstream/patches/one/one.patch"
 git -C "$FIXTURE" checkout -q master
 printf '%s\n' 'one/one.patch' > "$FIXTURE/downstream/patches/series"
-printf '{"schemaVersion":1,"upstream":{"commit":"%s"},"patchSeries":"downstream/patches/series","addon":{"path":"downstream/addons/feishu"}}\n' "$BASE" > "$FIXTURE/downstream/release.json"
+printf '{"schemaVersion":1,"upstream":{"commit":"%s"},"patchSeries":"downstream/patches/series","addon":{"path":"downstream/addons/messaging"}}\n' "$BASE" > "$FIXTURE/downstream/release.json"
 git -C "$FIXTURE" add .
 git -C "$FIXTURE" commit -qm fixture
 DOWNSTREAM="$(git -C "$FIXTURE" rev-parse HEAD)"

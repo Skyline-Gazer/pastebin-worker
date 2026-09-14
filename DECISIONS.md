@@ -8,7 +8,7 @@ The project is based on `SharzyL/pastebin-worker`. Upstream remains a Pastebin a
 
 ## D-002 — Feishu is an independent Add-on
 
-Feishu frontend, webhook/Bot backend, bindings, password management, archive/retention decisions, batch operations, and Feishu-facing APIs live under `downstream/addons/feishu`.
+Feishu frontend, webhook/Bot backend, bindings, password management, archive/retention decisions, batch operations, and Feishu-facing APIs live under `downstream/addons/messaging`.
 
 ## D-003 — Upstream syncability is primary
 
@@ -116,7 +116,7 @@ Independent patches should branch directly from the target upstream baseline. If
 
 ## D-025 — Patched Pastebin and Feishu Add-on are separate build targets
 
-The patched Pastebin is `pinned upstream + ordered generic patches`. The Feishu Add-on is built from `downstream/addons/feishu` at the pinned downstream release revision. The Add-on is not copied into upstream frontend/worker merely to create one artifact.
+The patched Pastebin is `pinned upstream + ordered generic patches`. The Feishu Add-on is built from `downstream/addons/messaging` at the pinned downstream release revision. The Add-on is not copied into upstream frontend/worker merely to create one artifact.
 
 ## D-026 — `downstream/main` is the downstream control branch
 

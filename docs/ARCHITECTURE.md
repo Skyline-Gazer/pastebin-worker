@@ -13,7 +13,7 @@ Responsibilities:
 - preserve upstream website and rendering behavior;
 - implement generic expiration semantics.
 
-### Feishu Add-on
+### Messaging Add-on
 
 Responsibilities:
 

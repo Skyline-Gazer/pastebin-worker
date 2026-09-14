@@ -1,12 +1,7 @@
 import type { EntryResult } from "../shared/entries"
-import {
-  InvalidPlatformError,
-  MissingProviderConfigError,
-  resolveProviderConfig,
-  type Platform,
-  type ProviderConfig,
-  type ProviderCredentialEnvironment,
-} from "./platform"
+import { type Platform, type ProviderCredentialEnvironment, providerRegistry } from "./platform"
+import { boundedIdentity } from "./providers/open-platform"
+import type { ProviderAdapter, ProviderWebhookConfig } from "./providers/types"
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder("utf-8", { fatal: true })
@@ -14,8 +9,11 @@ const RAW_LIMIT = 256_000
 const TEXT_LIMIT = 100_000
 const QUEUE_LIMIT = 120_000
 
-export interface FeishuMessageCreateV1 {
-  schema: "feishu.message-create.v1"
+/** Wire schema literal is LEGACY_COMPATIBILITY. Do not rename without a versioned migration. */
+export const INBOUND_MESSAGE_WIRE_SCHEMA = "feishu.message-create.v1" as const
+
+export interface InboundMessageV1 {
+  schema: typeof INBOUND_MESSAGE_WIRE_SCHEMA
   provider?: Platform
   scopeId: string
   recordKey: string
@@ -25,16 +23,25 @@ export interface FeishuMessageCreateV1 {
   correlationId: string
 }
 
-export interface AuthorizedFeishuEvent extends Omit<FeishuMessageCreateV1, "schema" | "correlationId"> {
+/** @deprecated Use InboundMessageV1 */
+export type FeishuMessageCreateV1 = InboundMessageV1
+
+export interface AuthorizedInboundEvent extends Omit<InboundMessageV1, "schema" | "correlationId"> {
   /** Internal only: keyed identity used to establish browser authorization metadata. */
   principalKey: string
 }
 
-export interface FeishuWebhookEnvironment extends ProviderCredentialEnvironment {
-  FEISHU_INGRESS_QUEUE: { send(message: FeishuMessageCreateV1): Promise<void> }
+/** @deprecated Use AuthorizedInboundEvent */
+export type AuthorizedFeishuEvent = AuthorizedInboundEvent
+
+export interface MessagingWebhookEnvironment extends ProviderCredentialEnvironment {
+  FEISHU_INGRESS_QUEUE: { send(message: InboundMessageV1): Promise<void> }
   /** Deployment validation marker: a consumer must have a configured DLQ. */
   FEISHU_INGRESS_DLQ_CONFIGURED: string
 }
+
+/** @deprecated Use MessagingWebhookEnvironment */
+export type FeishuWebhookEnvironment = MessagingWebhookEnvironment
 
 export interface EntryCreator {
   createEntry(
@@ -97,39 +104,21 @@ class WebhookError extends Error {
   }
 }
 
-function boundedIdentity(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    Array.from(value).length >= 1 &&
-    Array.from(value).length <= 256 &&
-    Array.from(value).every((character) => {
-      const point = character.codePointAt(0)!
-      return point > 31 && (point < 127 || point > 159)
-    })
-  )
+function webhookConfig(
+  env: ProviderCredentialEnvironment,
+  adapter: ProviderAdapter,
+): ProviderWebhookConfig & {
+  tenants: Set<string>
+} {
+  const readiness = adapter.webhookReadiness(env)
+  if (!readiness.ready) throw new WebhookError("UNAVAILABLE", 503)
+  return { ...readiness.config, tenants: new Set(readiness.config.allowedTenantKeys.split(",")) }
 }
-function providerOrUnavailable(env: ProviderCredentialEnvironment, provider?: Platform): ProviderConfig {
-  try {
-    return resolveProviderConfig(env, provider)
-  } catch (error) {
-    if (error instanceof InvalidPlatformError || error instanceof MissingProviderConfigError)
-      throw new WebhookError("UNAVAILABLE", 503)
-    throw error
-  }
-}
-function config(env: ProviderCredentialEnvironment, provider?: Platform) {
-  const resolved = providerOrUnavailable(env, provider)
-  const tenants = resolved.allowedTenantKeys.split(",")
-  if (
-    !boundedIdentity(resolved.encryptKey) ||
-    !boundedIdentity(resolved.verificationToken) ||
-    !boundedIdentity(resolved.appId) ||
-    !tenants.length ||
-    tenants.some((tenant) => !boundedIdentity(tenant)) ||
-    new Set(tenants).size !== tenants.length
-  )
-    throw new WebhookError("UNAVAILABLE", 503)
-  return { ...resolved, tenants: new Set(tenants) }
+
+function adapterFor(provider?: Platform): ProviderAdapter {
+  const adapter = providerRegistry.require(provider ?? "feishu")
+  if (!adapter) throw new WebhookError("UNAVAILABLE", 503)
+  return adapter
 }
 function bytes(value: string) {
   return encoder.encode(value)
@@ -197,7 +186,7 @@ export async function verifyFeishuChallenge(
   env: ProviderCredentialEnvironment,
   provider?: Platform,
 ): Promise<string> {
-  const checked = config(env, provider)
+  const checked = webhookConfig(env, adapterFor(provider))
   const clear =
     value && typeof value === "object" && typeof (value as { encrypt?: unknown }).encrypt === "string"
       ? await decrypt((value as { encrypt: string }).encrypt, checked.encryptKey)
@@ -235,8 +224,8 @@ export async function normalizeAuthorizedEvent(
   env: ProviderCredentialEnvironment,
   principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
   provider?: Platform,
-): Promise<AuthorizedFeishuEvent | null> {
-  const checked = config(env, provider)
+): Promise<AuthorizedInboundEvent | null> {
+  const checked = webhookConfig(env, adapterFor(provider))
   if (!value || typeof value !== "object") throw new WebhookError("MALFORMED", 400)
   const root = object(value)
   const header = object(root?.header)
@@ -271,7 +260,7 @@ export async function normalizeAuthorizedEvent(
     bytes(content.text).byteLength > TEXT_LIMIT
   )
     throw new WebhookError("UNSUPPORTED", 400)
-  // A supported P2P event establishes browser authorization only when Feishu supplied
+  // A supported P2P event establishes browser authorization only when the provider supplied
   // a sender open_id. Missing identity is deliberately fail-closed, never queued.
   if (!boundedIdentity(senderId?.open_id)) throw new WebhookError("MALFORMED", 400)
   const principalKey = principal ? await principal(checked.appId, header.tenant_key, senderId.open_id) : ""
@@ -316,12 +305,13 @@ function response(code: string, correlationId: string, status: number) {
 }
 
 function createWebhookHandler(
-  env: FeishuWebhookEnvironment,
-  pathname: string,
-  providerOverride: Platform | undefined,
+  env: MessagingWebhookEnvironment,
+  adapter: ProviderAdapter,
   recorder?: PrincipalScopeRecorder,
   principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
 ) {
+  const pathname = adapter.webhookPath
+  const providerOverride = adapter.id
   return {
     async fetch(request: Request): Promise<Response> {
       const correlationId = crypto.randomUUID()
@@ -332,7 +322,7 @@ function createWebhookHandler(
       try {
         if (!env.FEISHU_INGRESS_QUEUE || env.FEISHU_INGRESS_DLQ_CONFIGURED !== "true")
           throw new WebhookError("UNAVAILABLE", 503)
-        const provider = config(env, providerOverride)
+        const provider = webhookConfig(env, adapter)
         const raw = await readBounded(request)
         const envelope = json(decoder.decode(raw))
         if (envelope && typeof envelope === "object" && (envelope as { type?: unknown }).type === "url_verification")
@@ -378,7 +368,7 @@ function createWebhookHandler(
           await recorder.upsertPrincipalScope(normalized.principalKey, normalized.scopeId)
         }
         const { principalKey: _principalKey, ...queueSafe } = normalized
-        const item: FeishuMessageCreateV1 = { schema: "feishu.message-create.v1", correlationId, ...queueSafe }
+        const item: InboundMessageV1 = { schema: INBOUND_MESSAGE_WIRE_SCHEMA, correlationId, ...queueSafe }
         if (bytes(JSON.stringify(item)).byteLength > QUEUE_LIMIT) throw new WebhookError("TOO_LARGE", 413)
         try {
           await env.FEISHU_INGRESS_QUEUE.send(item)
@@ -394,27 +384,42 @@ function createWebhookHandler(
   }
 }
 
-export function createFeishuWebhookHandler(
-  env: FeishuWebhookEnvironment,
+export function createProviderWebhookHandler(
+  env: MessagingWebhookEnvironment,
+  provider: Platform | ProviderAdapter,
   recorder?: PrincipalScopeRecorder,
   principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
 ) {
-  return createWebhookHandler(env, "/api/feishu/events", undefined, recorder, principal)
+  const adapter = typeof provider === "string" ? adapterFor(provider) : provider
+  return createWebhookHandler(env, adapter, recorder, principal)
 }
 
-export function createProviderWebhookHandler(
-  env: FeishuWebhookEnvironment,
-  provider: Platform,
+export function createFeishuWebhookHandler(
+  env: MessagingWebhookEnvironment,
   recorder?: PrincipalScopeRecorder,
   principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
 ) {
-  return createWebhookHandler(
-    env,
-    provider === "lark" ? "/api/lark/events" : "/api/feishu/events",
-    provider,
-    recorder,
-    principal,
+  return createProviderWebhookHandler(env, "feishu", recorder, principal)
+}
+
+export function createInboundWebhookDispatcher(
+  env: MessagingWebhookEnvironment,
+  recorder?: PrincipalScopeRecorder,
+  principalFor?: (adapter: ProviderAdapter) => (appId: string, tenantKey: string, openId: string) => Promise<string>,
+) {
+  const handlers = new Map(
+    providerRegistry.adapters.map((adapter) => [
+      adapter.webhookPath,
+      createWebhookHandler(env, adapter, recorder, principalFor?.(adapter)),
+    ]),
   )
+  return {
+    async fetch(request: Request): Promise<Response | null> {
+      const handler = handlers.get(new URL(request.url).pathname)
+      if (!handler) return null
+      return handler.fetch(request)
+    },
+  }
 }
 async function digestBytes(value: Uint8Array) {
   return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", value as Uint8Array<ArrayBuffer>)), (byte) =>
@@ -422,10 +427,10 @@ async function digestBytes(value: Uint8Array) {
   ).join("")
 }
 
-function queueItem(value: unknown): value is FeishuMessageCreateV1 {
-  if (!value || typeof value !== "object" || (value as FeishuMessageCreateV1).schema !== "feishu.message-create.v1")
+function queueItem(value: unknown): value is InboundMessageV1 {
+  if (!value || typeof value !== "object" || (value as InboundMessageV1).schema !== INBOUND_MESSAGE_WIRE_SCHEMA)
     return false
-  const item = value as FeishuMessageCreateV1
+  const item = value as InboundMessageV1
   if (item.provider !== undefined && item.provider !== "feishu" && item.provider !== "lark") return false
   return (
     [item.scopeId, item.recordKey, item.requestId, item.sourceMessageId, item.correlationId].every(boundedIdentity) &&
@@ -436,12 +441,12 @@ function queueItem(value: unknown): value is FeishuMessageCreateV1 {
   )
 }
 
-function providerScopePoison(item: FeishuMessageCreateV1): boolean {
+function providerScopePoison(item: InboundMessageV1): boolean {
   if (item.provider === "lark") return !item.scopeId.startsWith("lark:v1:")
   return item.scopeId.startsWith("lark:v1:")
 }
 
-export async function consumeFeishuMessages(
+export async function consumeInboundMessages(
   batch: QueueBatchLike<unknown>,
   service: EntryCreator,
   report: DispositionReporter | undefined,
@@ -481,3 +486,6 @@ export async function consumeFeishuMessages(
     else message.retry()
   }
 }
+
+/** @deprecated Use consumeInboundMessages */
+export const consumeFeishuMessages = consumeInboundMessages

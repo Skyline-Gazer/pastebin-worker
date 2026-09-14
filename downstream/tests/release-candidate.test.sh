@@ -3,13 +3,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; SCRIPT="$ROOT/downstream/scripts/release-candidate.sh"; FIXTURE="$(mktemp -d)"; OUTPUT="$(mktemp)"
 trap 'rm -rf "$FIXTURE" "$OUTPUT"' EXIT
 git init -q "$FIXTURE"; git -C "$FIXTURE" config user.name fixture; git -C "$FIXTURE" config user.email fixture@example.invalid
-mkdir -p "$FIXTURE/downstream/patches/one" "$FIXTURE/downstream/addons/feishu" "$FIXTURE/downstream/scripts"
+mkdir -p "$FIXTURE/downstream/patches/one" "$FIXTURE/downstream/addons/messaging" "$FIXTURE/downstream/scripts"
 cp "$SCRIPT" "$FIXTURE/downstream/scripts/release-candidate.sh"
 printf 'base\n' > "$FIXTURE/file"; git -C "$FIXTURE" add .; git -C "$FIXTURE" commit -qm base; BASE="$(git -C "$FIXTURE" rev-parse HEAD)"
 git -C "$FIXTURE" checkout -qb patch; printf 'patched\n' > "$FIXTURE/file"; git -C "$FIXTURE" commit -am patch-one -q; git -C "$FIXTURE" format-patch -1 --stdout > "$FIXTURE/downstream/patches/one/one.patch"
 printf 'patched twice\n' > "$FIXTURE/file"; git -C "$FIXTURE" commit -am patch-two -q; git -C "$FIXTURE" format-patch -1 --stdout > "$FIXTURE/downstream/patches/one/two.patch"; git -C "$FIXTURE" checkout -q master
 printf 'unlisted\n' > "$FIXTURE/downstream/patches/one/unlisted.patch"; printf '%s\n' '# comment' '' 'one/one.patch' 'one/two.patch' > "$FIXTURE/downstream/patches/series"
-printf '{"schemaVersion":1,"upstream":{"commit":"%s"},"patchSeries":"downstream/patches/series","addon":{"path":"downstream/addons/feishu"}}\n' "$BASE" > "$FIXTURE/downstream/release.json"
+printf '{"schemaVersion":1,"upstream":{"commit":"%s"},"patchSeries":"downstream/patches/series","addon":{"path":"downstream/addons/messaging"}}\n' "$BASE" > "$FIXTURE/downstream/release.json"
 git -C "$FIXTURE" add .; git -C "$FIXTURE" commit -qm fixture
 run() { RELEASE_ROOT="$FIXTURE" PASTEBIN_CHECK_COMMAND=true ADDON_CHECK_COMMAND=true "$FIXTURE/downstream/scripts/release-candidate.sh" 2>&1; }
 pass() { run >"$OUTPUT"; cat "$OUTPUT"; grep -q 'CANDIDATE_STATUS=passed' "$OUTPUT"; }

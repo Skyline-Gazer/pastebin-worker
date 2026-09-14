@@ -33,10 +33,10 @@ commit() {
 seed_downstream_files() {
   local dir="$1"
   local base_sha="$2"
-  mkdir -p "$dir/downstream/patches/one" "$dir/downstream/addons/feishu" "$dir/downstream/scripts"
+  mkdir -p "$dir/downstream/patches/one" "$dir/downstream/addons/messaging" "$dir/downstream/scripts"
   cp "$CHECK_PATCHES" "$dir/downstream/scripts/check-patches.sh"
   printf '%s\n' 'one/one.patch' >"$dir/downstream/patches/series"
-  printf '{"schemaVersion":1,"upstream":{"remote":"upstream","branch":"goshujin","commit":"%s"},"patchSeries":"downstream/patches/series","addon":{"path":"downstream/addons/feishu"}}\n' "$base_sha" >"$dir/downstream/release.json"
+  printf '{"schemaVersion":1,"upstream":{"remote":"upstream","branch":"goshujin","commit":"%s"},"patchSeries":"downstream/patches/series","addon":{"path":"downstream/addons/messaging"}}\n' "$base_sha" >"$dir/downstream/release.json"
 }
 
 make_patch_from() {
@@ -78,7 +78,7 @@ setup_linear_world() {
   make_patch_from "$work" "$FIXTURE/one.patch"
   git -C "$work" checkout -q -B main "$A"
   seed_downstream_files "$work" "$A"
-  printf 'addon\n' >"$work/downstream/addons/feishu/README.md"
+  printf 'addon\n' >"$work/downstream/addons/messaging/README.md"
   cp "$FIXTURE/one.patch" "$work/downstream/patches/one/one.patch"
   commit "$work" downstream-export
 

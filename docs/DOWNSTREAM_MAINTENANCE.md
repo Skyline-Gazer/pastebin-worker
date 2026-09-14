@@ -6,7 +6,7 @@ The upstream application remains a Pastebin. Feishu is an independent Add-on/cli
 
 ### Maintenance policy
 
-The downstream MUST NOT depend on the official upstream maintainer merging PRs. Useful changes that official upstream has not merged — open or closed-but-unmerged PRs, third-party fixes, upstream Dependabot PRs, security/compatibility fixes — MAY be adopted independently after review, testing, and provenance recording, and MUST be carried as explicit downstream patches. `upstream-sync` remains a clean official upstream reference and never receives adopted content. Dependency updates to upstream-owned files that are not merged upstream are downstream patches; dependencies inside downstream-owned code (`downstream/addons/feishu/`, tooling) merge normally into `downstream/main`. Full policy: `AGENTS.md` §4.7, `DECISIONS.md` D-027, `docs/PATCH_AND_UPSTREAM.md` §3, `docs/REPO_AND_GIT.md` §7.
+The downstream MUST NOT depend on the official upstream maintainer merging PRs. Useful changes that official upstream has not merged — open or closed-but-unmerged PRs, third-party fixes, upstream Dependabot PRs, security/compatibility fixes — MAY be adopted independently after review, testing, and provenance recording, and MUST be carried as explicit downstream patches. `upstream-sync` remains a clean official upstream reference and never receives adopted content. Dependency updates to upstream-owned files that are not merged upstream are downstream patches; dependencies inside downstream-owned code (`downstream/addons/messaging/`, tooling) merge normally into `downstream/main`. Full policy: `AGENTS.md` §4.7, `DECISIONS.md` D-027, `docs/PATCH_AND_UPSTREAM.md` §3, `docs/REPO_AND_GIT.md` §7.
 
 The maintenance/release model is:
 
@@ -31,7 +31,7 @@ The Feishu Add-on is built separately from the exact downstream release commit/t
 3. `docs/INDEX.md` — documentation map and operational scaffold.
 4. `docs/DESIGN.md` — product interaction, Archive and Batch Mode behavior.
 5. `docs/ARCHITECTURE.md` — upstream/downstream/runtime boundaries.
-6. `docs/FEISHU_ADDON.md` — Add-on responsibilities.
+6. `docs/MESSAGING_ADDON.md` — Add-on responsibilities.
 7. `docs/FRONTEND.md` — React UI implementation and upstream-style constraints.
 8. `docs/RETENTION_LIFECYCLE.md` — Active/Archive/Delete state machine.
 9. `docs/API_CONTRACT.md` — single and batch API contracts.

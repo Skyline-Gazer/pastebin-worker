@@ -28,7 +28,7 @@ The Add-on OAuth client hard-coded Feishu China hosts. The same Worker should ru
 
 ## Constraints
 
-- Do not rename `downstream/addons/feishu`, D1/queue/bindings, or historical `FEISHU_*` product bindings.
+- Do not rename `downstream/addons/messaging`, D1/queue/bindings, or historical `FEISHU_*` product bindings.
 - Do not fork webhook handlers.
 - Do not log client_secret, authorization code, or tokens.
 - Do not commit App ID/Secret/token/key values.

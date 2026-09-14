@@ -18,7 +18,7 @@ State-changing browser requests require the authenticated opaque Add-on session,
 
 `GET /api/entries` is the production boot list. It requires the opaque session cookie and ignores caller-supplied scope/tenant query parameters. CSRF/Origin are not authority for this GET. The Worker lists at most 50 ready bindings for server-mapped scopes, inspects Paste metadata via `GET /m/<name>`, reads UTF-8 text bodies via `PasteClient`, and returns `{ entries }` with public fields plus `kind`, optional honest `filename` / `mimeType` / `sizeBytes`, `content` for text, and `managedTask`. File kind omits binary `content`. It never returns credential, password, tenant, open_id, principal, OAuth, or fingerprint fields.
 
-Unauthenticated `GET /api/auth/session` returns `{ "code": "UNAUTHENTICATED", "brand": "Feishu" | "Lark", "providers": ["feishu"] | ["lark"] | ["feishu", "lark"] }`. Authenticated session JSON includes secret-free `brand` plus the same `providers` enablement list. `PLATFORM` is never returned as a raw config value. When `BROWSER_AUTH_PROVIDERS` is unset, `providers` is the single PLATFORM provider.
+Unauthenticated `GET /api/auth/session` returns `{ "code": "UNAUTHENTICATED", "brand": "Feishu" | "Lark", "providers": ["feishu"] | ["lark"] | ["feishu", "lark"] }`. Authenticated session JSON includes secret-free `brand` plus the same `providers` list. `PLATFORM` is never returned as a raw config value. `providers` is the OAuth-ready set, optionally filtered by `BROWSER_AUTH_PROVIDERS` as an emergency allowlist. Unset `BROWSER_AUTH_PROVIDERS` does not mean “only PLATFORM exists”.
 
 ## 2. Entry shape returned to frontend
 

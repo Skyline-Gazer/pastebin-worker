@@ -1,5 +1,5 @@
 {
-  "name": "@pastebin/feishu-addon",
+  "name": "@pastebin/messaging-addon",
   "private": true,
   "type": "module",
   "dependencies": {

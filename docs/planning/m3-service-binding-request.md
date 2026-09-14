@@ -14,7 +14,7 @@ Owner instruction dated 2026-09-12 was the authorizing PLAN, SPEC, PHASE, and TO
 - **Non-goals:** No deploy, P2P, D1/DLQ mutation, `pastebin-prod` change, observability/config change, or revival of same-zone/global-fetch or detached-receiver hypotheses without new evidence.
 - **Risks:** `new Request(input, init)` must preserve FormData, Authorization, redirect, and 15s AbortSignal. Unit mocks cannot by themselves prove production workerd Fetcher arity.
 - **Approach:** Smallest adapter change in `createPasteClient`. Keep `PasteClient` ignorant of Service Bindings. Construct `new Request(input, { ...init, redirect: "manual" })` because workerd `Request` rejects `redirect: "error"`, then `service.fetch(request)`. Log only `PASTEBIN_SERVICE_STAGE=request_ready|fetch_enter|fetch_response`. Do not treat the local workerd redirect constraint as a proven production root cause.
-- **Files:** `downstream/addons/feishu/worker/index.ts`, `downstream/addons/feishu/tests/production-entrypoint.spec.ts`, optional Miniflare stub via existing `vitest.config.js`, docs under `docs/` and `docs/planning/`.
+- **Files:** `downstream/addons/messaging/worker/index.ts`, `downstream/addons/messaging/tests/production-entrypoint.spec.ts`, optional Miniflare stub via existing `vitest.config.js`, docs under `docs/` and `docs/planning/`.
 - **Validation:** Feishu Vitest, typecheck, eslint, prettier; CI `feishu-phase3`; review gate. No production commands.
 
 ```text
@@ -97,7 +97,7 @@ If `new Request` throws, `request_ready` is absent. If `service.fetch` throws, `
 
 ### 3.12 Test specification
 
-Unit tests on `createPasteClient` cover the acceptance criteria. Existing `@cloudflare/vitest-pool-workers` hosts a `pastebin-stub` Worker via `serviceBindings` in `downstream/addons/feishu/vitest.config.js` so the Request-object path is exercised in workerd without new dependencies or production resource changes.
+Unit tests on `createPasteClient` cover the acceptance criteria. Existing `@cloudflare/vitest-pool-workers` hosts a `pastebin-stub` Worker via `serviceBindings` in `downstream/addons/messaging/vitest.config.js` so the Request-object path is exercised in workerd without new dependencies or production resource changes.
 
 ### 3.13 Open questions
 
@@ -135,7 +135,7 @@ Implementation may start.
 ```text
 RED:
 - production-entrypoint Request arity / PASTEBIN_SERVICE_STAGE tests
-- pnpm exec vitest run --config downstream/addons/feishu/vitest.config.js downstream/addons/feishu/tests/production-entrypoint.spec.ts
+- pnpm exec vitest run --config downstream/addons/messaging/vitest.config.js downstream/addons/messaging/tests/production-entrypoint.spec.ts
 - expected: fetch still received (string, init); no PASTEBIN_SERVICE_STAGE logs
 - observed: call length 2; PASTEBIN_SERVICE_STAGE logs []
 
@@ -148,6 +148,6 @@ REFACTOR:
 - production-entrypoint.spec.ts 9 passed
 
 REGRESSION:
-- pnpm exec vitest run --config downstream/addons/feishu/vitest.config.js → 14 files, 109 passed
+- pnpm exec vitest run --config downstream/addons/messaging/vitest.config.js → 14 files, 109 passed
 - frontend vitest → 3 files, 42 passed
 ```

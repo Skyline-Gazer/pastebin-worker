@@ -4,7 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CONFIG="${1:-$ROOT/downstream/addons/feishu/wrangler.toml}"
+CONFIG="${1:-$ROOT/downstream/addons/messaging/wrangler.toml}"
 CANONICAL_ORIGIN="https://pb.test.223.im"
 CANONICAL_CALLBACK="$CANONICAL_ORIGIN/api/auth/callback"
 CANONICAL_HOST="pb.test.223.im"

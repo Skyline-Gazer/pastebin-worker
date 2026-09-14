@@ -3,15 +3,16 @@ import { type BrowserSession } from "./browser-store"
 import {
   InvalidBrowserAuthProvidersError,
   InvalidPlatformError,
-  MissingProviderConfigError,
   enabledBrowserAuthProviders,
+  oauthConfig,
   parseBrowserAuthProviders,
-  resolveProviderConfig,
+  providerRegistry,
+  resolvePlatform,
   type Platform,
-  type ProviderConfig,
   type ProviderCredentialEnvironment,
 } from "./platform"
 import { derivePrincipalKey } from "./principal"
+import type { ProviderOAuthConfig } from "./providers/types"
 
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000
 const STATE_TTL_MS = 10 * 60 * 1000
@@ -32,28 +33,22 @@ function random() {
   return crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "")
 }
 function configError(error: unknown): boolean {
-  return (
-    error instanceof InvalidPlatformError ||
-    error instanceof MissingProviderConfigError ||
-    error instanceof InvalidBrowserAuthProvidersError
-  )
+  return error instanceof InvalidPlatformError || error instanceof InvalidBrowserAuthProvidersError
 }
-function requireProvider(env: BrowserAuthEnvironment, provider?: Platform): ProviderConfig {
+
+function requireOAuth(env: BrowserAuthEnvironment, provider: Platform): ProviderOAuthConfig {
   if (!env.FEISHU_PRINCIPAL_KEY) throw new BrowserAuthError("UNAVAILABLE", 503)
   try {
     parseBrowserAuthProviders(env.BROWSER_AUTH_PROVIDERS)
-    return resolveProviderConfig(env, provider)
   } catch (error) {
     if (configError(error)) throw new BrowserAuthError("UNAVAILABLE", 503)
     throw error
   }
+  const config = oauthConfig(env, provider)
+  if (!config) throw new BrowserAuthError("UNAVAILABLE", 503)
+  return config
 }
 
-function accessToken(value: Record<string, unknown> | null): string | null {
-  if (typeof value?.access_token === "string") return value.access_token
-  const nested = record(value?.data)
-  return typeof nested?.access_token === "string" ? nested.access_token : null
-}
 export function sessionCookieName(env: BrowserAuthEnvironment) {
   return env.FEISHU_SESSION_COOKIE_NAME || "feishu_addon_session"
 }
@@ -79,9 +74,6 @@ function same(a: string, b: string) {
   for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i]
   return d === 0
 }
-function record(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null
-}
 
 function sessionProvider(session: BrowserSession): Platform {
   return session.provider === "lark" ? "lark" : "feishu"
@@ -95,23 +87,15 @@ function rejectProviderMismatch(session: BrowserSession) {
     throw new BrowserAuthError("UNAUTHENTICATED", 401)
 }
 
-function loginProvider(env: BrowserAuthEnvironment, requested: Platform | undefined): ProviderConfig {
-  let enabled: Platform[] | undefined
+function loginProvider(env: BrowserAuthEnvironment, requested: Platform | undefined): ProviderOAuthConfig {
   try {
-    enabled = parseBrowserAuthProviders(env.BROWSER_AUTH_PROVIDERS)
+    const chosen = requested ?? resolvePlatform(env.PLATFORM).provider
+    return requireOAuth(env, chosen)
   } catch (error) {
+    if (error instanceof BrowserAuthError) throw error
     if (configError(error)) throw new BrowserAuthError("UNAVAILABLE", 503)
     throw error
   }
-  if (enabled) {
-    const chosen = requested ?? "feishu"
-    if (!enabled.includes(chosen) || (!requested && !enabled.includes("feishu")))
-      throw new BrowserAuthError("UNAVAILABLE", 404)
-    return requireProvider(env, chosen)
-  }
-  const config = requireProvider(env)
-  if (requested && requested !== config.provider) throw new BrowserAuthError("UNAVAILABLE", 404)
-  return config
 }
 
 export async function requireBrowserSession(
@@ -119,7 +103,13 @@ export async function requireBrowserSession(
   env: BrowserAuthEnvironment,
   store: BrowserTrustStore,
 ): Promise<BrowserSession> {
-  requireProvider(env)
+  if (!env.FEISHU_PRINCIPAL_KEY) throw new BrowserAuthError("UNAVAILABLE", 503)
+  try {
+    parseBrowserAuthProviders(env.BROWSER_AUTH_PROVIDERS)
+  } catch (error) {
+    if (configError(error)) throw new BrowserAuthError("UNAVAILABLE", 503)
+    throw error
+  }
   const id = cookie(request, sessionCookieName(env))
   if (!id) throw new BrowserAuthError("UNAUTHENTICATED", 401)
   const session = await store.getSession(id, new Date().toISOString())
@@ -143,7 +133,7 @@ export function requireBrowserRequestProtection(
   env: BrowserAuthEnvironment,
   session: BrowserSession,
 ) {
-  const origins = requireProvider(env, sessionProvider(session))
+  const origins = requireOAuth(env, sessionProvider(session))
     .allowedOrigins.split(",")
     .map((v) => v.trim())
     .filter(Boolean)
@@ -154,9 +144,11 @@ export function requireBrowserRequestProtection(
 
 function unauthenticatedBrand(env: BrowserAuthEnvironment): string | undefined {
   try {
-    return requireProvider(env).brand
+    return requireOAuth(env, resolvePlatform(env.PLATFORM).provider).brand
   } catch {
-    return undefined
+    const ready = enabledBrowserAuthProviders(env)
+    const first = ready[0]
+    return first ? providerRegistry.adapter(first)?.brand : undefined
   }
 }
 
@@ -168,54 +160,36 @@ export function createBrowserAuthHandler(env: BrowserAuthEnvironment, store: Bro
         const loginMatch = /^\/api\/auth\/login(?:\/(feishu|lark))?$/.exec(url.pathname)
         if (loginMatch && request.method === "GET") {
           const config = loginProvider(env, loginMatch[1] as Platform | undefined)
+          const adapter = providerRegistry.require(config.provider)
+          if (!adapter) throw new BrowserAuthError("UNAVAILABLE", 503)
           const state = random()
           await store.saveOAuthState(state, new Date(Date.now() + STATE_TTL_MS).toISOString(), config.provider)
-          const target = new URL(config.authorizeUrl)
-          target.search = new URLSearchParams({
-            client_id: config.appId,
-            response_type: "code",
-            redirect_uri: config.oauthRedirectUri,
-            state,
-          }).toString()
-          return Response.redirect(target, 302)
+          return Response.redirect(adapter.buildAuthorizeUrl(config, state), 302)
         }
         if (url.pathname === "/api/auth/callback" && request.method === "GET") {
           const state = url.searchParams.get("state")
           const code = url.searchParams.get("code")
           const consumed = state ? await store.consumeOAuthState(state, new Date().toISOString()) : null
           if (!state || !code || !consumed) throw new BrowserAuthError("OAUTH_DENIED", 401)
-          const enabled = parseBrowserAuthProviders(env.BROWSER_AUTH_PROVIDERS)
-          const config = enabled ? requireProvider(env, consumed.provider) : requireProvider(env)
-          const tokenResponse = await fetch(config.tokenUrl, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              grant_type: "authorization_code",
-              client_id: config.appId,
-              client_secret: config.appSecret,
-              code,
-              redirect_uri: config.oauthRedirectUri,
-            }),
-          })
-          const token = record(await tokenResponse.json())
-          const bearer = accessToken(token)
-          if (!tokenResponse.ok || !bearer) throw new BrowserAuthError("OAUTH_FAILED", 401)
-          const identityResponse = await fetch(config.userInfoUrl, {
-            headers: { authorization: `Bearer ${bearer}` },
-          })
-          const identity = record(await identityResponse.json())
-          const nested = record(identity?.data)
-          const raw = nested || identity
-          if (!identityResponse.ok || typeof raw?.open_id !== "string" || typeof raw.tenant_key !== "string")
+          const adapter = providerRegistry.require(consumed.provider)
+          if (!adapter) throw new BrowserAuthError("UNAVAILABLE", 503)
+          const config = requireOAuth(env, adapter.id)
+          let bearer: string
+          let identity: { openId: string; tenantKey: string }
+          try {
+            bearer = await adapter.exchangeAuthorizationCode(config, code)
+            identity = await adapter.resolveUserIdentity(config, bearer)
+          } catch {
             throw new BrowserAuthError("OAUTH_FAILED", 401)
+          }
           const now = new Date()
           const session = {
             id: random(),
             principalKey: await derivePrincipalKey(
               env.FEISHU_PRINCIPAL_KEY,
               config.appId,
-              raw.tenant_key,
-              raw.open_id,
+              identity.tenantKey,
+              identity.openId,
               config.provider,
             ),
             csrfToken: random(),

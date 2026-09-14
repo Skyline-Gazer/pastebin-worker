@@ -209,7 +209,7 @@ Do NOT directly commit such upstream dependency changes into `downstream/main`.
 For dependencies inside:
 
 ```text
-downstream/addons/feishu/
+downstream/addons/messaging/
 ```
 
 or other downstream-owned tooling, normal downstream PRs MAY merge into:

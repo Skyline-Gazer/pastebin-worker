@@ -115,7 +115,7 @@ importers:
         specifier: ^4.125.0
         version: 4.129.0
 
-  downstream/addons/feishu:
+  downstream/addons/messaging:
     dependencies:
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.23

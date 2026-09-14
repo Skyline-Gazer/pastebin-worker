@@ -4,7 +4,7 @@
 - [`../DECISIONS.md`](../DECISIONS.md) — locked project decisions.
 - [`DESIGN.md`](DESIGN.md) — product UX, single completion, Archive, Batch Mode.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — runtime/data boundaries.
-- [`FEISHU_ADDON.md`](FEISHU_ADDON.md) — complete Add-on responsibilities.
+- [`MESSAGING_ADDON.md`](MESSAGING_ADDON.md) — complete messaging add-on responsibilities (Feishu/Lark providers).
 - [`FRONTEND.md`](FRONTEND.md) — React/Tailwind implementation and upstream-style UI rules.
 - [`RETENTION_LIFECYCLE.md`](RETENTION_LIFECYCLE.md) — Active/Archive/Delete transitions and countdown.
 - [`API_CONTRACT.md`](API_CONTRACT.md) — browser/Add-on/upstream single and batch contracts.
@@ -20,7 +20,7 @@
 - [`planning/ft-defect-remediation.md`](planning/ft-defect-remediation.md) — Umbrella: FT remediation before lifecycle function testing ([#132](https://github.com/Skyline-Gazer/pastebin-worker/issues/132)).
 - [`planning/ft-defect-01-plan.md`](planning/ft-defect-01-plan.md) / [`ft-defect-01-spec.md`](planning/ft-defect-01-spec.md) — FT-DEFECT-01 Pastebin upload/download path ([#133](https://github.com/Skyline-Gazer/pastebin-worker/issues/133)).
 - [`planning/ft-defect-03-plan.md`](planning/ft-defect-03-plan.md) / [`ft-defect-03-spec.md`](planning/ft-defect-03-spec.md) — FT-DEFECT-03 simultaneous Feishu + Lark identity/auth ([#134](https://github.com/Skyline-Gazer/pastebin-worker/issues/134)).
-- [`planning/ft-defect-02-plan.md`](planning/ft-defect-02-plan.md) / [`ft-defect-02-spec.md`](planning/ft-defect-02-spec.md) — FT-DEFECT-02 Add-on Web IA (after 01+03) ([#135](https://github.com/Skyline-Gazer/pastebin-worker/issues/135)).
+- [`planning/provider-neutral-messaging-plan.md`](planning/provider-neutral-messaging-plan.md) / [`provider-neutral-messaging-spec.md`](planning/provider-neutral-messaging-spec.md) / [`provider-neutral-messaging-todo.md`](planning/provider-neutral-messaging-todo.md) — provider-neutral messaging architecture ([#146](https://github.com/Skyline-Gazer/pastebin-worker/issues/146)).
 
 ## Operational scaffold
 

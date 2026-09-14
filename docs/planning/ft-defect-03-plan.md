@@ -1,8 +1,8 @@
 # FT-DEFECT-03 PLAN — Simultaneous Feishu + Lark browser auth and ingestion
 
-Status: PLAN READY FOR OWNER REVIEW
+Status: PAUSED_PENDING_PROVIDER_ARCHITECTURE ([#146](https://github.com/Skyline-Gazer/pastebin-worker/issues/146))
 
-Implementation has NOT started.
+Implementation of dual-provider identity landed in #137. Production Lark enablement is paused until the provider-neutral architecture is merged and deployed.
 
 Parent umbrella: [ft-defect-remediation.md](ft-defect-remediation.md) — [#132](https://github.com/Skyline-Gazer/pastebin-worker/issues/132)
 
@@ -79,13 +79,13 @@ Target product: one host, two login buttons, isolated principals/scopes.
 
 ## Candidate files/components (candidates only)
 
-Under `downstream/addons/feishu`:
+Under `downstream/addons/messaging`:
 
 - `worker/platform.ts`, `worker/browser-auth.ts`, `worker/browser-store.ts`, `worker/principal.ts`, `worker/webhook.ts`
 - `migrations/0008_*` (next free) for oauth state + session provider
 - `wrangler.toml` / overlay docs for `BROWSER_AUTH_PROVIDERS`
 - tests: `browser-auth.spec.ts`, `platform.spec.ts`, `webhook.spec.ts`, wrangler contract, origin/CSRF tests
-- docs: `docs/SECURITY.md`, `docs/API_CONTRACT.md`, `docs/FEISHU_ADDON.md`, `docs/planning/m3-platform-endpoints.md` (historical note + pointer)
+- docs: `docs/SECURITY.md`, `docs/API_CONTRACT.md`, `docs/MESSAGING_ADDON.md`, `docs/planning/m3-platform-endpoints.md` (historical note + pointer)
 
 ## Validation strategy
 

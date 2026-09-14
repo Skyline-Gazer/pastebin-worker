@@ -255,3 +255,77 @@ describe("Pastebin multi-file ZIP", () => {
     expect(tooltip.querySelector("img")?.getAttribute("src")).toBe(expectedQrSrc("https://example.com/abcd?a"))
   })
 })
+
+describe("Pastebin uploaded sourceKind snapshot", () => {
+  it("keeps a File-tab result as FILE after switching to Text without another upload", async () => {
+    render(<PasteBin config={__WRANGLER_CONFIG__} />)
+    await userEvent.click(screen.getByRole("button", { name: "File" }))
+    await userEvent.upload(screen.getByLabelText("Select files"), [
+      new File([new Uint8Array([0xff, 0xfe])], "foo.bin", { type: "application/octet-stream" }),
+    ])
+    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
+    await vi.waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
+    })
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit" }))
+    expect(screen.getByRole("textbox", { name: "Paste editor" })).toBeInTheDocument()
+    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
+    expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue("https://example.com/d/abcd")
+    await userEvent.hover(screen.getByRole("button", { name: "QR code" }))
+    const tooltip = await screen.findByRole("tooltip")
+    expect(tooltip.querySelector("img")?.getAttribute("src")).toBe(expectedQrSrc("https://example.com/abcd?a"))
+  })
+
+  it("keeps a text-editor result as TEXT after switching to File without another upload", async () => {
+    render(<PasteBin config={__WRANGLER_CONFIG__} />)
+    await userEvent.type(screen.getByRole("textbox", { name: "Paste editor" }), "hello text")
+    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
+    await vi.waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue("https://example.com/d/abcd")
+    })
+    expect(screen.queryByRole("textbox", { name: "Download URL" })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: "File" }))
+    expect(screen.getByRole("button", { name: "Select file" })).toBeInTheDocument()
+    expect(screen.queryByRole("textbox", { name: "Download URL" })).not.toBeInTheDocument()
+    expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue("https://example.com/d/abcd")
+    await userEvent.hover(screen.getByRole("button", { name: "QR code" }))
+    const tooltip = await screen.findByRole("tooltip")
+    expect(tooltip.querySelector("img")?.getAttribute("src")).toBe(expectedQrSrc("https://example.com/d/abcd"))
+  })
+
+  it("classifies an in-flight File upload as FILE even if the editor switches to Text before resolve", async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    server.use(
+      http.post(`${__WRANGLER_CONFIG__.DEPLOY_URL}/`, async () => {
+        await gate
+        return HttpResponse.json(mockedPasteUpload)
+      }),
+    )
+
+    render(<PasteBin config={__WRANGLER_CONFIG__} />)
+    await userEvent.click(screen.getByRole("button", { name: "File" }))
+    await userEvent.upload(screen.getByLabelText("Select files"), [
+      new File([new Uint8Array([0xff, 0xfe])], "foo.bin", { type: "application/octet-stream" }),
+    ])
+    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
+    expect(await screen.findByRole("button", { name: "Cancel" })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit" }))
+    expect(screen.getByRole("textbox", { name: "Paste editor" })).toBeInTheDocument()
+    expect(screen.queryByRole("textbox", { name: "Download URL" })).not.toBeInTheDocument()
+
+    release()
+    await vi.waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
+    })
+    expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue("https://example.com/d/abcd")
+    await userEvent.hover(screen.getByRole("button", { name: "QR code" }))
+    const tooltip = await screen.findByRole("tooltip")
+    expect(tooltip.querySelector("img")?.getAttribute("src")).toBe(expectedQrSrc("https://example.com/abcd?a"))
+  })
+})

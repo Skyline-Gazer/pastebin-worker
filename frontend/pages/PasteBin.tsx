@@ -25,6 +25,7 @@ import { verifyMaxReads, verifyName, verifyPassword, isLegalUrl } from "../../sh
 import { useNameAvailability } from "../utils/useNameAvailability.js"
 import type { UploadProgress } from "../utils/uploader.js"
 import { uploadPaste } from "../utils/uploader.js"
+import type { PasteSourceKind } from "../utils/pasteShare.js"
 import { tst } from "../utils/overrides.js"
 import { loadLocalUploads, recordLocalUpload, removeLocalUpload, type LocalUpload } from "../utils/localUploads.js"
 
@@ -53,6 +54,7 @@ export function PasteBin({ config }: { config: Env }) {
 
   const [pasteResponse, setPasteResponse] = useState<PasteResponse | undefined>(undefined)
   const [uploadedEncryptionKey, setUploadedEncryptionKey] = useState<string | undefined>(undefined)
+  const [uploadedSourceKind, setUploadedSourceKind] = useState<PasteSourceKind | undefined>(undefined)
   const [recentUploads, setRecentUploads] = useState<LocalUpload[]>([])
 
   const [isUploadPending, startUpload] = useTransition()
@@ -142,9 +144,11 @@ export function PasteBin({ config }: { config: Env }) {
   function onStartUpload() {
     const controller = new AbortController()
     uploadAbortRef.current = controller
+    const sourceKind: PasteSourceKind = editorState.editKind === "file" ? "file" : "text"
     // Clear any previous result so a failed/cancelled retry doesn't show stale URLs.
     setPasteResponse(undefined)
     setUploadedEncryptionKey(undefined)
+    setUploadedSourceKind(sourceKind)
     startUpload(async () => {
       try {
         const uploaded = await uploadPaste(
@@ -162,6 +166,7 @@ export function PasteBin({ config }: { config: Env }) {
         if ((e as Error).name !== "AbortError") {
           handleError("Error on Uploading Paste", e as Error)
         }
+        setUploadedSourceKind(undefined)
       } finally {
         if (uploadAbortRef.current === controller) uploadAbortRef.current = null
       }
@@ -179,6 +184,7 @@ export function PasteBin({ config }: { config: Env }) {
         if (resp.ok) {
           showModal("Deleted Successfully", "It may takes 60 seconds for the deletion to propagate to the world")
           setPasteResponse(undefined)
+          setUploadedSourceKind(undefined)
           setRecentUploads(removeLocalUpload(pasteSetting.manageUrl))
           setPasteSetting({ ...pasteSetting, uploadKind: "short", manageUrl: "" })
         } else {
@@ -316,13 +322,13 @@ export function PasteBin({ config }: { config: Env }) {
             nameAvailability={nameAvailability}
             footer={submitter}
           />
-          {(pasteResponse || isUploadPending) && (
+          {(pasteResponse || isUploadPending) && uploadedSourceKind && (
             <UploadedPanel
               isLoading={isUploadPending}
               loadingProgress={loadingProgress}
               onCancel={onCancelUpload}
               pasteResponse={pasteResponse}
-              sourceKind={editorState.editKind === "file" ? "file" : "text"}
+              sourceKind={uploadedSourceKind}
               encryptionKey={uploadedEncryptionKey}
               highlightLang={editorState.editKind === "edit" ? editorState.editHighlightLang : undefined}
               isUrlPaste={

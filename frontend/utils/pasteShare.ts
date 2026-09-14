@@ -1,16 +1,12 @@
 export type PasteShareClass = "text" | "unencrypted-file" | "encrypted-file"
 
-const TEXTISH_MIME = /^(text\/|application\/(json|xml|javascript|xhtml\+xml|x-javascript))/i
+export type PasteSourceKind = "text" | "file"
 
-export function isBinaryMimeType(mimeType?: string): boolean {
-  const type = mimeType?.split(";")[0]?.trim()
-  if (!type) return false
-  return !TEXTISH_MIME.test(type)
-}
-
-export function classifyPasteShare(input: { encryptionKey?: string; mimeType?: string }): PasteShareClass {
-  if (input.encryptionKey) return isBinaryMimeType(input.mimeType) ? "encrypted-file" : "text"
-  return isBinaryMimeType(input.mimeType) ? "unencrypted-file" : "text"
+export function classifyPasteShare(input: { sourceKind: PasteSourceKind; encryptionKey?: string }): PasteShareClass {
+  if (input.sourceKind === "file") {
+    return input.encryptionKey ? "encrypted-file" : "unencrypted-file"
+  }
+  return "text"
 }
 
 export function withPathPrefix(url: string, prefix: string): string {

@@ -1,6 +1,16 @@
 import { describe, it, vi, expect, beforeAll, afterEach, afterAll } from "vitest"
 import { cleanup, render, screen } from "@testing-library/react"
+import { generate } from "lean-qr"
+import { toSvgDataURL } from "lean-qr/extras/svg"
 import { PasteBin } from "../pages/PasteBin.js"
+
+function expectedQrSrc(url: string): string {
+  return toSvgDataURL(generate(url), {
+    pad: 2,
+    on: "#000000",
+    off: "#ffffff",
+  })
+}
 
 export const mockedPasteUpload: PasteResponse = {
   url: "https://example.com/abcd",
@@ -143,7 +153,7 @@ describe("Pastebin", () => {
     const tooltip = await screen.findByRole("tooltip")
     const qrImage = tooltip.querySelector("img")
     expect(qrImage).not.toBeNull()
-    expect(qrImage?.getAttribute("src")).toMatch(/^data:image\/svg/)
+    expect(qrImage?.getAttribute("src")).toBe(expectedQrSrc("https://example.com/d/abcd"))
 
     expect(screen.getByRole("textbox", { name: "Manage URL" })).toBeInTheDocument()
     expect(screen.getByRole("textbox", { name: "Raw URL" })).toBeInTheDocument()
@@ -219,6 +229,7 @@ describe("Pastebin multi-file ZIP", () => {
     await vi.waitFor(() => {
       expect(screen.getByRole("textbox", { name: "Raw URL" })).toHaveValue(mockedPasteUpload.url)
     })
+    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
 
     await userEvent.click(screen.getByLabelText("Remove file"))
     expect(screen.queryByText(/2 files/)).not.toBeInTheDocument()
@@ -238,5 +249,9 @@ describe("Pastebin multi-file ZIP", () => {
     await vi.waitFor(() => {
       expect(screen.getByRole("textbox", { name: "Raw URL" })).toHaveValue(mockedPasteUpload.url)
     })
+    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
+    await userEvent.hover(screen.getByRole("button", { name: "QR code" }))
+    const tooltip = await screen.findByRole("tooltip")
+    expect(tooltip.querySelector("img")?.getAttribute("src")).toBe(expectedQrSrc("https://example.com/abcd?a"))
   })
 })

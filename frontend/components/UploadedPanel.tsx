@@ -18,7 +18,13 @@ import {
 
 import type { PasteResponse } from "../../shared/interfaces.js"
 import { tst } from "../utils/overrides.js"
-import { classifyPasteShare, makeDecryptionUrl, primaryShareUrl, withPathPrefix } from "../utils/pasteShare.js"
+import {
+  classifyPasteShare,
+  makeDecryptionUrl,
+  primaryShareUrl,
+  withPathPrefix,
+  type PasteSourceKind,
+} from "../utils/pasteShare.js"
 import type { UploadProgress } from "../utils/uploader.js"
 import { formatSize } from "../utils/utils.js"
 import { CopyWidget } from "./CopyWidget.js"
@@ -29,6 +35,7 @@ interface UploadedPanelProps extends CardProps {
   loadingProgress?: UploadProgress
   onCancel?: () => void
   pasteResponse?: PasteResponse
+  sourceKind: PasteSourceKind
   encryptionKey?: string
   highlightLang?: string
   isUrlPaste?: boolean
@@ -117,6 +124,7 @@ export function UploadedPanel({
   onCancel,
   pasteResponse,
   className,
+  sourceKind,
   encryptionKey,
   highlightLang,
   isUrlPaste,
@@ -131,7 +139,7 @@ export function UploadedPanel({
 
   const isEncrypted = Boolean(encryptionKey)
   const isMarkdown = highlightLang === "markdown"
-  const shareClass = classifyPasteShare({ encryptionKey, mimeType: pasteResponse?.mimeType })
+  const shareClass = classifyPasteShare({ sourceKind, encryptionKey })
   const displayUrl = pasteResponse ? makeDecryptionUrl(pasteResponse.url, encryptionKey) : ""
   const fileDownloadUrl =
     pasteResponse && shareClass === "unencrypted-file" ? primaryShareUrl(pasteResponse.url, shareClass) : ""

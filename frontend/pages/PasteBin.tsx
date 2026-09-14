@@ -322,6 +322,7 @@ export function PasteBin({ config }: { config: Env }) {
               loadingProgress={loadingProgress}
               onCancel={onCancelUpload}
               pasteResponse={pasteResponse}
+              sourceKind={editorState.editKind === "file" ? "file" : "text"}
               encryptionKey={uploadedEncryptionKey}
               highlightLang={editorState.editKind === "edit" ? editorState.editHighlightLang : undefined}
               isUrlPaste={

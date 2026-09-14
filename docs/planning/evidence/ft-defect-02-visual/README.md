@@ -1,8 +1,15 @@
 # FT-DEFECT-02 visual preview evidence
 
-Status: **PREVIEW ONLY**. These screenshots are fixture renders from local Vite
-`?preview=1`. They are not owner visual PASS and must not be treated as production
-acceptance.
+Owner visual Round 2 of real production data at `https://pb.test.223.im` is
+**PASS** (Worker `198226d8-898d-405c-ae88-3b1d33d0b796`). These files remain
+**PREVIEW ONLY** fixture renders from local Vite `?preview=1` and are not the
+acceptance evidence.
+
+Round 1 FAIL of Worker `de88a419-7435-4f05-96a1-f5cfba22073c` is retained on
+[#135](https://github.com/Skyline-Gazer/pastebin-worker/issues/135).
+
+`NON_BLOCKING_POLISH`: very long titles on narrow mobile may later use visible
+ellipsis or a two-line clamp instead of hard clipping. Not an acceptance defect.
 
 Source: `fix/feishu-web-visual-density` against `downstream/main` @ `778a4fd`.
 Preview URL used: `http://127.0.0.1:4179/?preview=1`.
@@ -31,6 +38,4 @@ Horizontal overflow (`documentElement.scrollWidth === clientWidth`):
 | `mobile-375-dark.png`         | 375px width check                                                           |
 | `mobile-430-dark.png`         | 430px width check                                                           |
 
-Final PASS still requires owner review of real production data on
-`https://pb.test.223.im` after a separately authorized `pastebin-feishu-prod`
-deploy.
+Owner production PASS is recorded on [#135](https://github.com/Skyline-Gazer/pastebin-worker/issues/135). These screenshots stay preview-only.

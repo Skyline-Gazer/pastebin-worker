@@ -1,14 +1,16 @@
 # FT-DEFECT-02 SPEC — Add-on Web product / information architecture
 
-Status: OWNER_VISUAL_ACCEPTANCE_FAILED — remediating composition/density on `fix/feishu-web-visual-density`
+Status: **PASS** — owner visual Round 2 of authenticated production `https://pb.test.223.im` (Worker `198226d8-898d-405c-ae88-3b1d33d0b796`, source `f772a952b78471a2710c6b92a8e4ff3a7d0d89c9`, PR #141). [#135](https://github.com/Skyline-Gazer/pastebin-worker/issues/135) closed.
 
-Preview evidence (fixtures only): [evidence/ft-defect-02-visual/README.md](evidence/ft-defect-02-visual/README.md). Final PASS still requires owner review of production data.
+History retained: Round 1 FAIL of Worker `de88a419-7435-4f05-96a1-f5cfba22073c` / `778a4fd` (PR #140). Fixture previews in [evidence/ft-defect-02-visual/README.md](evidence/ft-defect-02-visual/README.md) are not the PASS evidence.
+
+`NON_BLOCKING_POLISH`: long mobile titles may later ellipsize or two-line clamp. Do not reopen this defect.
 
 Parent: [ft-defect-02-plan.md](ft-defect-02-plan.md) — [#135](https://github.com/Skyline-Gazer/pastebin-worker/issues/135)
 
-Owner visual review of `https://pb.test.223.im` rejected the #140 composition (Worker `de88a419-7435-4f05-96a1-f5cfba22073c`). Architecture is retained. Function Test remains PAUSED. Do not mark PASS from fixtures.
+Function Test remains PAUSED beyond FT-03. This PASS does not complete umbrella [#132](https://github.com/Skyline-Gazer/pastebin-worker/issues/132).
 
-Later deploy: `pastebin-feishu-prod`. Depends on FT-DEFECT-03 merge and FT-DEFECT-01 file semantics (stable contract, not the same PR).
+Deployed: `pastebin-feishu-prod` Worker `198226d8-898d-405c-ae88-3b1d33d0b796`. File URL contract remains Workstream A (`?a`); dual-provider production enablement remains a separate FT-DEFECT-03 gate.
 
 ## 3.1 Problem statement
 

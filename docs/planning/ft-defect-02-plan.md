@@ -1,14 +1,18 @@
 # FT-DEFECT-02 PLAN — Add-on Web product / information architecture remediation
 
-Status: OWNER_VISUAL_ACCEPTANCE_FAILED — remediating composition/density on `fix/feishu-web-visual-density`
+Status: **PASS** (owner visual Round 2 of production `https://pb.test.223.im`). Tracking [#135](https://github.com/Skyline-Gazer/pastebin-worker/issues/135) is closed.
 
-Owner visual review rejected the deployed #140 UI. Frontend-only remediation; no Lark, FT-04, P2P, or `pastebin-prod` deploy.
+History retained: Round 1 `OWNER_VISUAL_ACCEPTANCE_FAILED` of Worker `de88a419-7435-4f05-96a1-f5cfba22073c` / `778a4fd` (PR #140). Remediation PR #141 merged as `f772a952b78471a2710c6b92a8e4ff3a7d0d89c9`. Accepted Worker `198226d8-898d-405c-ae88-3b1d33d0b796`.
+
+`NON_BLOCKING_POLISH`: long titles on narrow mobile may later use ellipsis or a two-line clamp. Do not reopen this defect for that.
+
+Umbrella [#132](https://github.com/Skyline-Gazer/pastebin-worker/issues/132) remains open: FT-DEFECT-01 is `IMPLEMENTED_NOT_DEPLOYED`; FT-DEFECT-03 is Feishu-only in production. FT-04 stays blocked.
 
 Parent umbrella: [ft-defect-remediation.md](ft-defect-remediation.md) — [#132](https://github.com/Skyline-Gazer/pastebin-worker/issues/132)
 
 Tracking issue: [#135](https://github.com/Skyline-Gazer/pastebin-worker/issues/135)
 
-Function Test remains PAUSED. `FT-03_DATA_PATH: PASS` does **not** mean Web UX is accepted. `FT-04+` is not started.
+Function Test remains PAUSED beyond FT-03. `FT-04+` is not started. This PASS does not authorize Lark, `pastebin-prod`, or FT-04.
 
 ## Objective
 

@@ -1,8 +1,14 @@
 # FT remediation before lifecycle function testing
 
-Status: **PLANNING ARTIFACTS READY FOR OWNER REVIEW**. Implementation has NOT started.
+Status: **IN PROGRESS**. FT-DEFECT-02 owner visual PASS does **not** complete this umbrella.
 
-Function Test remains PAUSED:
+```text
+FT-DEFECT-01=IMPLEMENTED_NOT_DEPLOYED
+FT-DEFECT-02=PASS
+FT-DEFECT-03=DEPLOYED_CODE_FEISHU_ONLY_LARK_DISABLED
+```
+
+Remaining production gates before FT-04: Patch 140 on `pastebin-prod`; Lark production enablement and provider-isolation validation. Function Test remains PAUSED beyond FT-03:
 
 ```text
 FT-01 PASS

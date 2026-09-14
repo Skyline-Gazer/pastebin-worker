@@ -1,8 +1,8 @@
 # FT-DEFECT-02 PLAN — Add-on Web product / information architecture remediation
 
-Status: IMPLEMENTING
+Status: OWNER_VISUAL_ACCEPTANCE_FAILED — remediating composition/density on `fix/feishu-web-visual-density`
 
-Implementation is on `feat/feishu-web-ia`.
+Owner visual review rejected the deployed #140 UI. Frontend-only remediation; no Lark, FT-04, P2P, or `pastebin-prod` deploy.
 
 Parent umbrella: [ft-defect-remediation.md](ft-defect-remediation.md) — [#132](https://github.com/Skyline-Gazer/pastebin-worker/issues/132)
 

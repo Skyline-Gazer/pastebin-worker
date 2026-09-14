@@ -9,8 +9,23 @@ if (!root) {
   throw new Error("Feishu frontend root is unavailable")
 }
 
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+const mountRoot = root
+
+async function mount() {
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "1") {
+    const { visualPreviewEntries } = await import("../visual-preview-fixtures")
+    createRoot(mountRoot).render(
+      <StrictMode>
+        <App initialEntries={visualPreviewEntries} />
+      </StrictMode>,
+    )
+    return
+  }
+  createRoot(mountRoot).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+}
+
+void mount()

@@ -1,10 +1,12 @@
 # FT-DEFECT-02 SPEC — Add-on Web product / information architecture
 
-Status: IMPLEMENTING
+Status: OWNER_VISUAL_ACCEPTANCE_FAILED — remediating composition/density on `fix/feishu-web-visual-density`
+
+Preview evidence (fixtures only): [evidence/ft-defect-02-visual/README.md](evidence/ft-defect-02-visual/README.md). Final PASS still requires owner review of production data.
 
 Parent: [ft-defect-02-plan.md](ft-defect-02-plan.md) — [#135](https://github.com/Skyline-Gazer/pastebin-worker/issues/135)
 
-Implementation is in `feat/feishu-web-ia`. Function Test remains PAUSED. Visual PASS requires owner review of authenticated `https://pb.test.223.im` after later deploy authorization. No production mutation. No P2P. No Paste deletion.
+Owner visual review of `https://pb.test.223.im` rejected the #140 composition (Worker `de88a419-7435-4f05-96a1-f5cfba22073c`). Architecture is retained. Function Test remains PAUSED. Do not mark PASS from fixtures.
 
 Later deploy: `pastebin-feishu-prod`. Depends on FT-DEFECT-03 merge and FT-DEFECT-01 file semantics (stable contract, not the same PR).
 

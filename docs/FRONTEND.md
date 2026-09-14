@@ -45,15 +45,14 @@ Forbidden by default:
 
 ```text
 App
-|- AppHeader              # product name, session ProviderBadge, theme, logout
+|- AppHeader              # Pastebin + session ProviderBadge, icon theme, 退出
 |- ProviderLogin          # Continue with Feishu / Continue with Lark
-|- Tabs                   # 进行中 / 归档
-|- BatchToolbar           # Batch Mode only
-|- EntryCard
-|  |- TextEntryCard       # first-line title, Open / Copy URL, GFM body
+|- Tabs + BatchToolbar    # 进行中/归档 counts and 批量管理 on one row
+|- EntryList              # one shared bordered surface, compact rows
+|  |- TextEntryCard       # first-line title, omit duplicate single-line body
 |  |  |- MarkdownContent  # existing GFM parser, not a shadcn Markdown kit
 |  `- FileEntryCard       # honest filename/MIME/size only; Download uses ?a
-|- LifecycleMenu          # 永久归档 / 限期归档 / 删除 — not a checkbox
+|- LifecycleMenu          # 永久归档 / 限期归档 / 删除 — overflow 更多
 |- ArchiveStatus          # authoritative expiresAt countdown
 |- EmptyState / ErrorState
 ```
@@ -62,9 +61,9 @@ Names are suggestions, semantics are required.
 
 Logged-out chrome shows `Continue with Feishu` → `/api/auth/login/feishu` and `Continue with Lark` → `/api/auth/login/lark` when the session advertises both providers. Hidden providers stay hidden. Provider badge after login comes from session `brand`, never hostname or localStorage.
 
-Text titles are the first non-empty content line (80 characters, otherwise `Untitled`). `pasteName` is secondary metadata. Open uses Display `/d/<name>`; Copy uses `publicUrl`; file Download uses `/<name>?a` and is omitted unless listing metadata honestly identifies a file.
+Text titles are the first non-empty content line (80 characters, otherwise `Untitled`). `pasteName` is secondary metadata. A single-line Paste is not rendered again as Markdown body; first-line GFM tasks keep the full source so checkboxes stay interactive. Open uses Display `/d/<name>` (`打开`); Copy uses `publicUrl` (`复制链接`); file Download uses `/<name>?a` (`下载`) and is omitted unless listing metadata honestly identifies a file.
 
-There is no generic ManagedTaskCheckbox. Markdown task checkboxes stay content semantics. Batch checkboxes appear only in Batch Mode. Lifecycle uses the menu plus Dialog / AlertDialog.
+Authenticated chrome uses Chinese operational labels (`打开`, `复制链接`, `更多`, `批量管理`, `完成`, `全选`, `清除`, `退出`, lifecycle verbs). Provider brands stay `Feishu` / `Lark`. Logged-out chooser keeps `Continue with Feishu` / `Continue with Lark`. The theme control is icon-only with an accessible name. There is no generic ManagedTaskCheckbox and no `BatchModeToggle` / `Batch select` copy. Markdown task checkboxes stay content semantics. Batch checkboxes appear only in Batch Mode as the leading control. Entries render as compact list rows inside one shared surface, not independent dashboard cards. Content width is bounded to `max-w-[64rem]`.
 
 Production boot loads entries from the Add-on session and `GET /api/entries`. Typed fixtures are test-only via explicit `initialEntries`; the production page must not render them by default.
 

@@ -1,6 +1,7 @@
 import { Moon, Sun } from "lucide-react"
 import { ProviderBadge } from "@/components/auth/ProviderBadge"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 export function AppHeader({
   brand,
@@ -15,24 +16,27 @@ export function AppHeader({
   onToggleTheme: () => void
   onLogout?: () => void
 }) {
-  const nextTheme = theme === "light" ? "dark" : "light"
+  const themeLabel = theme === "light" ? "切换到深色主题" : "切换到浅色主题"
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-      <div>
-        <p className="text-sm text-muted-foreground">Feishu / Lark Add-on</p>
-        <h1 id="page-title" className="text-lg font-semibold">
+    <header className="flex h-12 items-center justify-between gap-3 border-b border-border">
+      <div className="flex min-w-0 items-center gap-2">
+        <h1 id="page-title" className="text-sm font-semibold">
           Pastebin
         </h1>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
         {authenticated && brand ? <ProviderBadge brand={brand} /> : null}
-        <Button type="button" variant="outline" size="sm" onClick={onToggleTheme}>
-          {theme === "light" ? <Moon /> : <Sun />}
-          Switch to {nextTheme} theme
-        </Button>
+      </div>
+      <div className="flex items-center gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button type="button" variant="ghost" size="icon" aria-label={themeLabel} onClick={onToggleTheme}>
+              {theme === "light" ? <Moon /> : <Sun />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{themeLabel}</TooltipContent>
+        </Tooltip>
         {authenticated ? (
           <Button type="button" variant="ghost" size="sm" onClick={onLogout}>
-            Log out
+            退出
           </Button>
         ) : null}
       </div>

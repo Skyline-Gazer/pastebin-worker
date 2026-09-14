@@ -102,6 +102,22 @@
   overflow-wrap: anywhere;
   word-break: break-word;
   max-width: 100%;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.markdown-content > :first-child {
+  margin-top: 0.35rem;
+}
+
+.markdown-content > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content p,
+.markdown-content ul,
+.markdown-content ol {
+  margin: 0.25rem 0;
 }
 
 .markdown-content pre,

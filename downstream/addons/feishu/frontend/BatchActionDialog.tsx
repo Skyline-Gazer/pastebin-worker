@@ -41,18 +41,14 @@ export function BatchActionDialog({
       role="dialog"
       tabIndex={-1}
     >
-      <h2 id="batch-action-title">{isDelete ? "Confirm batch delete" : "Confirm expiring archive"}</h2>
-      <p>
-        {isDelete
-          ? `This permanently deletes ${count} 项. This cannot be undone.`
-          : `Archive ${count} 项 with the deployment retention period.`}
-      </p>
+      <h2 id="batch-action-title">{isDelete ? "确认批量删除" : "确认限期归档"}</h2>
+      <p>{isDelete ? `将永久删除 ${count} 项，此操作无法撤销。` : `将把 ${count} 项转为限期归档。`}</p>
       <div className="completion-actions">
         <button onClick={onCancel} type="button">
-          Cancel
+          取消
         </button>
         <button onClick={onConfirm} type="button">
-          Confirm batch action
+          确认
         </button>
       </div>
     </div>

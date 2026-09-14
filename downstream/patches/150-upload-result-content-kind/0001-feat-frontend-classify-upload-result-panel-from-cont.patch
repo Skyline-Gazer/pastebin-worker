@@ -1,0 +1,448 @@
+From 5bcaf753dfceb0b8c4bc64fb8652e70e7956d30d Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Mon, 14 Sep 2026 11:38:34 +0800
+Subject: [PATCH 1/2] feat(frontend): classify upload result panel from content
+ kind
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Context:
+Production Patch 140 smoke PiEB on pastebin-prod
+ab149c40-912c-4603-b7dc-eaa86a449813 persisted ft-defect-01-smoke.bin
+and served exact bytes on raw/?a, but the result panel treated it as
+text (Display /d/PiEB primary, QR → Display). storedMimeTypeForUpload()
+intentionally omits metadata.mimeType when the filename already maps to
+a MIME type. The frontend incorrectly used that omitted mimeType as
+TEXT vs FILE.
+
+Expected behavior:
+- sourceKind comes from editorState.editKind (edit → text, file → file).
+- Unencrypted File-tab uploads, including notes.txt and omitted mimeType,
+  show Download /<name>?a as primary; QR encodes ?a.
+- Text-editor uploads stay Display-primary even with a .txt filename.
+- Encrypted File-tab share remains /d/<name>#<key>; never ?key=.
+- Known filename extensions may still omit stored mimeType while raw
+  Content-Type is derived from the filename.
+
+Acceptance criteria:
+- File-tab .bin/.png/.pdf/.txt/unknown/ZIP with absent or text MIME → ?a
+- Text editor → Display primary, no synthetic Download URL
+- Encrypted file → fragment key only
+- QR tests compare the rendered SVG to the expected URL encoding
+- Worker product-code delta: none
+
+Constraints:
+- Generic Pastebin patch 150; do not rewrite Patch 140.
+- Do not change storedMimeTypeForUpload() or PasteResponse schema.
+- Do not merge into upstream-sync.
+- Do not deploy pastebin-prod.
+
+Validation:
+- RED: 10 failing File-tab / sourceKind tests on 6ac36888 (22 targeted: 10 fail / 12 pass)
+- GREEN: pnpm exec vitest run — 33 files / 259 tests PASS
+- pnpm lint PASS
+- pnpm typecheck PASS (after pnpm build:frontend)
+- pnpm build:frontend PASS
+- wrangler deploy --dry-run PASS
+- TDD: RED → GREEN recorded
+
+Docs:
+- #143
+- docs/planning/ft-defect-01-followup-plan.md
+- docs/planning/ft-defect-01-followup-spec.md
+
+Refs:
+- #132 #133 #143
+- Patch ID: 150-upload-result-content-kind
+- Upstream base: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+- Assembled 010–140 tip: 6ac36888beddef4d39a81e14130cd76d2c2824aa
+- Dependencies: 140-upload-download-path
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ frontend/components/UploadedPanel.tsx         |  12 +-
+ frontend/pages/PasteBin.tsx                   |   1 +
+ frontend/test/index.spec.tsx                  |  17 ++-
+ frontend/test/pasteShare.spec.ts              |  18 +--
+ frontend/test/uploadedPanelShare.spec.tsx     | 105 +++++++++++++++---
+ frontend/utils/pasteShare.ts                  |  16 +--
+ worker/test/nonUtf8FileClassification.spec.ts |  16 +++
+ 7 files changed, 151 insertions(+), 34 deletions(-)
+
+diff --git a/frontend/components/UploadedPanel.tsx b/frontend/components/UploadedPanel.tsx
+index 293b6415063296326c65bfbacc4ab65b54d1c983..4b397cec1fc0011a0041d1ff2efeb2ff9becfce2 100644
+--- a/frontend/components/UploadedPanel.tsx
++++ b/frontend/components/UploadedPanel.tsx
+@@ -18,7 +18,13 @@ import {
+ 
+ import type { PasteResponse } from "../../shared/interfaces.js"
+ import { tst } from "../utils/overrides.js"
+-import { classifyPasteShare, makeDecryptionUrl, primaryShareUrl, withPathPrefix } from "../utils/pasteShare.js"
++import {
++  classifyPasteShare,
++  makeDecryptionUrl,
++  primaryShareUrl,
++  withPathPrefix,
++  type PasteSourceKind,
++} from "../utils/pasteShare.js"
+ import type { UploadProgress } from "../utils/uploader.js"
+ import { formatSize } from "../utils/utils.js"
+ import { CopyWidget } from "./CopyWidget.js"
+@@ -29,6 +35,7 @@ interface UploadedPanelProps extends CardProps {
+   loadingProgress?: UploadProgress
+   onCancel?: () => void
+   pasteResponse?: PasteResponse
++  sourceKind: PasteSourceKind
+   encryptionKey?: string
+   highlightLang?: string
+   isUrlPaste?: boolean
+@@ -117,6 +124,7 @@ export function UploadedPanel({
+   onCancel,
+   pasteResponse,
+   className,
++  sourceKind,
+   encryptionKey,
+   highlightLang,
+   isUrlPaste,
+@@ -131,7 +139,7 @@ export function UploadedPanel({
+ 
+   const isEncrypted = Boolean(encryptionKey)
+   const isMarkdown = highlightLang === "markdown"
+-  const shareClass = classifyPasteShare({ encryptionKey, mimeType: pasteResponse?.mimeType })
++  const shareClass = classifyPasteShare({ sourceKind, encryptionKey })
+   const displayUrl = pasteResponse ? makeDecryptionUrl(pasteResponse.url, encryptionKey) : ""
+   const fileDownloadUrl =
+     pasteResponse && shareClass === "unencrypted-file" ? primaryShareUrl(pasteResponse.url, shareClass) : ""
+diff --git a/frontend/pages/PasteBin.tsx b/frontend/pages/PasteBin.tsx
+index bc1d941a5e9c6fdb823283a66735b598c97a5627..188c4169e61376c748a3986edf2ab7216d1d434d 100644
+--- a/frontend/pages/PasteBin.tsx
++++ b/frontend/pages/PasteBin.tsx
+@@ -322,6 +322,7 @@ export function PasteBin({ config }: { config: Env }) {
+               loadingProgress={loadingProgress}
+               onCancel={onCancelUpload}
+               pasteResponse={pasteResponse}
++              sourceKind={editorState.editKind === "file" ? "file" : "text"}
+               encryptionKey={uploadedEncryptionKey}
+               highlightLang={editorState.editKind === "edit" ? editorState.editHighlightLang : undefined}
+               isUrlPaste={
+diff --git a/frontend/test/index.spec.tsx b/frontend/test/index.spec.tsx
+index 2fc72b19ef727d57216e2623a5f0ae32defc3cb4..9fd757ab83391567b82ac3e3ff762d73b9114757 100644
+--- a/frontend/test/index.spec.tsx
++++ b/frontend/test/index.spec.tsx
+@@ -1,7 +1,17 @@
+ import { describe, it, vi, expect, beforeAll, afterEach, afterAll } from "vitest"
+ import { cleanup, render, screen } from "@testing-library/react"
++import { generate } from "lean-qr"
++import { toSvgDataURL } from "lean-qr/extras/svg"
+ import { PasteBin } from "../pages/PasteBin.js"
+ 
++function expectedQrSrc(url: string): string {
++  return toSvgDataURL(generate(url), {
++    pad: 2,
++    on: "#000000",
++    off: "#ffffff",
++  })
++}
++
+ export const mockedPasteUpload: PasteResponse = {
+   url: "https://example.com/abcd",
+   manageUrl: "https://example.com/abcd:aaaaaaaaaaaaaaaaaa",
+@@ -143,7 +153,7 @@ describe("Pastebin", () => {
+     const tooltip = await screen.findByRole("tooltip")
+     const qrImage = tooltip.querySelector("img")
+     expect(qrImage).not.toBeNull()
+-    expect(qrImage?.getAttribute("src")).toMatch(/^data:image\/svg/)
++    expect(qrImage?.getAttribute("src")).toBe(expectedQrSrc("https://example.com/d/abcd"))
+ 
+     expect(screen.getByRole("textbox", { name: "Manage URL" })).toBeInTheDocument()
+     expect(screen.getByRole("textbox", { name: "Raw URL" })).toBeInTheDocument()
+@@ -219,6 +229,7 @@ describe("Pastebin multi-file ZIP", () => {
+     await vi.waitFor(() => {
+       expect(screen.getByRole("textbox", { name: "Raw URL" })).toHaveValue(mockedPasteUpload.url)
+     })
++    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
+ 
+     await userEvent.click(screen.getByLabelText("Remove file"))
+     expect(screen.queryByText(/2 files/)).not.toBeInTheDocument()
+@@ -238,5 +249,9 @@ describe("Pastebin multi-file ZIP", () => {
+     await vi.waitFor(() => {
+       expect(screen.getByRole("textbox", { name: "Raw URL" })).toHaveValue(mockedPasteUpload.url)
+     })
++    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
++    await userEvent.hover(screen.getByRole("button", { name: "QR code" }))
++    const tooltip = await screen.findByRole("tooltip")
++    expect(tooltip.querySelector("img")?.getAttribute("src")).toBe(expectedQrSrc("https://example.com/abcd?a"))
+   })
+ })
+diff --git a/frontend/test/pasteShare.spec.ts b/frontend/test/pasteShare.spec.ts
+index 3911c283761baeb6f9e6d4d9bf972bba5c596601..3f18485e7f12aaf008f1a0f77145dc7f9826540b 100644
+--- a/frontend/test/pasteShare.spec.ts
++++ b/frontend/test/pasteShare.spec.ts
+@@ -2,20 +2,22 @@ import { describe, expect, it } from "vitest"
+ import { classifyPasteShare, primaryShareUrl } from "../utils/pasteShare.js"
+ 
+ describe("paste share classification", () => {
+-  it("classifies UTF-8/text pastes as text with Display primary URL", () => {
+-    expect(classifyPasteShare({})).toBe("text")
+-    expect(classifyPasteShare({ mimeType: "text/plain" })).toBe("text")
++  it("classifies text-editor uploads as text with Display primary URL", () => {
++    expect(classifyPasteShare({ sourceKind: "text" })).toBe("text")
++    expect(classifyPasteShare({ sourceKind: "text", encryptionKey: "secret-key" })).toBe("text")
+     expect(primaryShareUrl("https://example.com/abcd", "text")).toBe("https://example.com/d/abcd")
++    expect(primaryShareUrl("https://example.com/abcd", "text", "secret-key")).toBe(
++      "https://example.com/d/abcd#secret-key",
++    )
+   })
+ 
+-  it("classifies binary mime as unencrypted file with ?a primary URL", () => {
+-    expect(classifyPasteShare({ mimeType: "image/png" })).toBe("unencrypted-file")
+-    expect(classifyPasteShare({ mimeType: "application/octet-stream" })).toBe("unencrypted-file")
++  it("classifies File-tab uploads as unencrypted files with ?a regardless of MIME metadata", () => {
++    expect(classifyPasteShare({ sourceKind: "file" })).toBe("unencrypted-file")
+     expect(primaryShareUrl("https://example.com/abcd", "unencrypted-file")).toBe("https://example.com/abcd?a")
+   })
+ 
+-  it("classifies encryption key as encrypted share on Display fragment, never query key", () => {
+-    expect(classifyPasteShare({ encryptionKey: "secret-key", mimeType: "image/png" })).toBe("encrypted-file")
++  it("classifies encrypted File-tab uploads as encrypted-file on Display fragment, never query key", () => {
++    expect(classifyPasteShare({ sourceKind: "file", encryptionKey: "secret-key" })).toBe("encrypted-file")
+     const url = primaryShareUrl("https://example.com/abcd", "encrypted-file", "secret-key")
+     expect(url).toBe("https://example.com/d/abcd#secret-key")
+     expect(url).not.toMatch(/[?&]key=/)
+diff --git a/frontend/test/uploadedPanelShare.spec.tsx b/frontend/test/uploadedPanelShare.spec.tsx
+index 0076021f792b3a39128138c1c42263ed5e7eebb2..1cda60b1de8a7307bbaa46492873e06d459ad90e 100644
+--- a/frontend/test/uploadedPanelShare.spec.tsx
++++ b/frontend/test/uploadedPanelShare.spec.tsx
+@@ -1,6 +1,8 @@
+ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
+ import { cleanup, render, screen } from "@testing-library/react"
+ import { userEvent } from "@testing-library/user-event"
++import { generate } from "lean-qr"
++import { toSvgDataURL } from "lean-qr/extras/svg"
+ import { UploadedPanel } from "../components/UploadedPanel.js"
+ import type { PasteResponse } from "../../shared/interfaces.js"
+ import { stubBrowerFunctions, unStubBrowerFunctions } from "./testUtils.js"
+@@ -17,6 +19,20 @@ const paste: PasteResponse = {
+   location: "KV",
+ }
+ 
++function expectedQrSrc(url: string): string {
++  return toSvgDataURL(generate(url), {
++    pad: 2,
++    on: "#000000",
++    off: "#ffffff",
++  })
++}
++
++async function renderedQrSrc(): Promise<string | null> {
++  await userEvent.hover(screen.getByRole("button", { name: "QR code" }))
++  const tooltip = await screen.findByRole("tooltip")
++  return tooltip.querySelector("img")?.getAttribute("src") ?? null
++}
++
+ beforeAll(() => {
+   stubBrowerFunctions()
+ })
+@@ -30,29 +46,91 @@ afterAll(() => {
+ })
+ 
+ describe("UploadedPanel share URLs", () => {
+-  it("keeps Display URL primary for text pastes and QR on Display", () => {
+-    render(<UploadedPanel isLoading={false} pasteResponse={paste} />)
++  it("keeps Display URL primary for text-editor pastes and QR on Display", async () => {
++    render(<UploadedPanel sourceKind="text" isLoading={false} pasteResponse={paste} />)
+     expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue("https://example.com/d/abcd")
+-    expect(screen.getByRole("button", { name: "QR code" })).toBeInTheDocument()
+     expect(screen.queryByRole("textbox", { name: "Download URL" })).not.toBeInTheDocument()
++    expect(await renderedQrSrc()).toBe(expectedQrSrc("https://example.com/d/abcd"))
+   })
+ 
+-  it("makes unencrypted file download URL primary with ?a and QR on that URL", async () => {
+-    render(<UploadedPanel isLoading={false} pasteResponse={{ ...paste, mimeType: "image/png", filename: "cat.png" }} />)
+-    const download = screen.getByRole("textbox", { name: "Download URL" })
+-    expect(download).toHaveValue("https://example.com/abcd?a")
++  it("keeps text-editor pastes as TEXT even with a text-like filename and MIME", async () => {
++    render(
++      <UploadedPanel
++        sourceKind="text"
++        isLoading={false}
++        pasteResponse={{ ...paste, filename: "notes.txt", mimeType: "text/plain" }}
++      />,
++    )
++    expect(screen.queryByRole("textbox", { name: "Download URL" })).not.toBeInTheDocument()
+     expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue("https://example.com/d/abcd")
+-    expect(screen.getAllByRole("button", { name: "QR code" })).toHaveLength(1)
+-    await userEvent.hover(screen.getByRole("button", { name: "QR code" }))
+-    const tooltip = await screen.findByRole("tooltip")
+-    expect(tooltip.querySelector("img")).not.toBeNull()
++    expect(await renderedQrSrc()).toBe(expectedQrSrc("https://example.com/d/abcd"))
++  })
++
++  it("uses Download ?a for File-tab .bin when response mimeType is absent (PiEB)", async () => {
++    render(
++      <UploadedPanel
++        sourceKind="file"
++        isLoading={false}
++        pasteResponse={{ ...paste, filename: "ft-defect-01-smoke.bin" }}
++      />,
++    )
++    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
++    expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue("https://example.com/d/abcd")
++    expect(await renderedQrSrc()).toBe(expectedQrSrc("https://example.com/abcd?a"))
++  })
++
++  it("uses Download ?a for File-tab .png when response mimeType is absent", () => {
++    render(<UploadedPanel sourceKind="file" isLoading={false} pasteResponse={{ ...paste, filename: "cat.png" }} />)
++    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
++  })
++
++  it("uses Download ?a for File-tab .pdf when response mimeType is absent", () => {
++    render(<UploadedPanel sourceKind="file" isLoading={false} pasteResponse={{ ...paste, filename: "doc.pdf" }} />)
++    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
++  })
++
++  it("uses FILE Download ?a for File-tab notes.txt even when MIME is text/plain or omitted", async () => {
++    render(
++      <UploadedPanel
++        sourceKind="file"
++        isLoading={false}
++        pasteResponse={{ ...paste, filename: "notes.txt", mimeType: "text/plain" }}
++      />,
++    )
++    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
++    expect(await renderedQrSrc()).toBe(expectedQrSrc("https://example.com/abcd?a"))
++    cleanup()
++    render(<UploadedPanel sourceKind="file" isLoading={false} pasteResponse={{ ...paste, filename: "notes.txt" }} />)
++    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
++  })
++
++  it("uses FILE semantics for unknown extensions regardless of MIME metadata", () => {
++    render(<UploadedPanel sourceKind="file" isLoading={false} pasteResponse={{ ...paste, filename: "blob.xyz" }} />)
++    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
++  })
++
++  it("uses FILE semantics for multi-file ZIP results", () => {
++    render(
++      <UploadedPanel
++        sourceKind="file"
++        isLoading={false}
++        pasteResponse={{ ...paste, filename: "upload.zip", mimeType: "application/zip" }}
++      />,
++    )
++    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
++  })
++
++  it("uses FILE semantics for folder ZIP results even if mimeType is omitted", () => {
++    render(<UploadedPanel sourceKind="file" isLoading={false} pasteResponse={{ ...paste, filename: "folder.zip" }} />)
++    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
+   })
+ 
+-  it("keeps encrypted file share on Display fragment and never puts the key in a query", () => {
++  it("keeps encrypted file share on Display fragment and never puts the key in a query", async () => {
+     render(
+       <UploadedPanel
++        sourceKind="file"
+         isLoading={false}
+-        pasteResponse={{ ...paste, mimeType: "image/png", filename: "cat.png" }}
++        pasteResponse={{ ...paste, filename: "cat.png" }}
+         encryptionKey="secret-key"
+       />,
+     )
+@@ -61,5 +139,6 @@ describe("UploadedPanel share URLs", () => {
+     expect((display as HTMLInputElement).value).not.toMatch(/[?&]key=/)
+     expect(screen.queryByRole("textbox", { name: "Download URL" })).not.toBeInTheDocument()
+     expect(screen.getByRole("textbox", { name: "Raw URL" })).toHaveValue("https://example.com/abcd")
++    expect(await renderedQrSrc()).toBe(expectedQrSrc("https://example.com/d/abcd#secret-key"))
+   })
+ })
+diff --git a/frontend/utils/pasteShare.ts b/frontend/utils/pasteShare.ts
+index 9acc49fcc85d496492acf1bb41c269f99345034e..44ab9755cf96188fb4333b67eed397bd4f56442e 100644
+--- a/frontend/utils/pasteShare.ts
++++ b/frontend/utils/pasteShare.ts
+@@ -1,16 +1,12 @@
+ export type PasteShareClass = "text" | "unencrypted-file" | "encrypted-file"
+ 
+-const TEXTISH_MIME = /^(text\/|application\/(json|xml|javascript|xhtml\+xml|x-javascript))/i
++export type PasteSourceKind = "text" | "file"
+ 
+-export function isBinaryMimeType(mimeType?: string): boolean {
+-  const type = mimeType?.split(";")[0]?.trim()
+-  if (!type) return false
+-  return !TEXTISH_MIME.test(type)
+-}
+-
+-export function classifyPasteShare(input: { encryptionKey?: string; mimeType?: string }): PasteShareClass {
+-  if (input.encryptionKey) return isBinaryMimeType(input.mimeType) ? "encrypted-file" : "text"
+-  return isBinaryMimeType(input.mimeType) ? "unencrypted-file" : "text"
++export function classifyPasteShare(input: { sourceKind: PasteSourceKind; encryptionKey?: string }): PasteShareClass {
++  if (input.sourceKind === "file") {
++    return input.encryptionKey ? "encrypted-file" : "unencrypted-file"
++  }
++  return "text"
+ }
+ 
+ export function withPathPrefix(url: string, prefix: string): string {
+diff --git a/worker/test/nonUtf8FileClassification.spec.ts b/worker/test/nonUtf8FileClassification.spec.ts
+index 96ef3cf12044cacb59ca6f42be6bf14a18a0922b..8cea4706b2280a6505c31e9484cf497e1631e6df 100644
+--- a/worker/test/nonUtf8FileClassification.spec.ts
++++ b/worker/test/nonUtf8FileClassification.spec.ts
+@@ -2,6 +2,22 @@ import { createExecutionContext } from "cloudflare:test"
+ import { expect, test } from "vitest"
+ import { upload, workerFetch } from "./testUtils.js"
+ 
++test("known filename extension may omit stored mimeType while HTTP Content-Type still uses the filename", async () => {
++  const ctx = createExecutionContext()
++  const binary = new Blob([new Uint8Array([0xff, 0xfe, 0xfd, 0xfc, 0x00, 0x11, 0x22, 0x33])])
++  const uploaded = await upload(ctx, { c: { content: binary, filename: "ft-defect-01-smoke.bin" } })
++  expect(uploaded.filename).toStrictEqual("ft-defect-01-smoke.bin")
++  expect(uploaded.mimeType).toBeUndefined()
++
++  const raw = await workerFetch(ctx, uploaded.url)
++  expect(raw.headers.get("Content-Type")).toStrictEqual("application/octet-stream")
++  expect(raw.headers.get("Content-Disposition")).toMatch(/ft-defect-01-smoke\.bin/)
++
++  const attachment = await workerFetch(ctx, `${uploaded.url}?a`)
++  expect(attachment.headers.get("Content-Disposition")).toMatch(/^attachment;/)
++  expect(attachment.headers.get("Content-Type")).toStrictEqual("application/octet-stream")
++})
++
+ test("unrecognized non-UTF-8 body is stored as a file, not text/plain", async () => {
+   const ctx = createExecutionContext()
+   const binary = new Blob([new Uint8Array([0xff, 0xfe, 0xfd, 0xfc, 0x00, 0x11, 0x22, 0x33])])
+
+base-commit: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+prerequisite-patch-id: 6e6f1a1b3b822a7f6055757439f06a3a2956b89a
+prerequisite-patch-id: bb8280cc63d877f55dabba700c59f2d9ce0d6307
+prerequisite-patch-id: 292fa63936f41c768c09dedce9c0b951924707f3
+prerequisite-patch-id: a18edec9995be81e122eb2ca0fc03fe3bfd7712d
+prerequisite-patch-id: 7fb6594968364a928abd12177313831c752d65e2
+prerequisite-patch-id: d9b8fd398a206be4b4b283398a4697914c5c82e1
+prerequisite-patch-id: f2ebf4e613c40007615eec143b83069eeb24c791
+prerequisite-patch-id: 6ad43923c9ad3ed939663717809fa4661e96f6ab
+prerequisite-patch-id: 1c8a98c04997a1641ac1cc9df45e69f95dcaef15
+prerequisite-patch-id: c233d552de04f8104c3dfde89f89423feab89385
+prerequisite-patch-id: 6ac78d342fc593d80301fff4344bb005463223a0
+prerequisite-patch-id: 7c636f5c8826bcf7c64729128f8a057c6a97c59f
+prerequisite-patch-id: 30bb2ff317dc3ebebe8be3b176e7e24c0844a032
+prerequisite-patch-id: 25696ff912a94f7b2dad737e1cfe422a167c1a5d
+prerequisite-patch-id: 70595ee35b43fe7306ef36c5ffea4f1249b8c912
+prerequisite-patch-id: 4ba60b0e344bc823c5181af8c8a1379d50a8645b
+prerequisite-patch-id: 7af0827b075af64e354f1131aae72cbfd9a6f509
+prerequisite-patch-id: c2ce21a9f0373e1f9303860f6145f9d8b5ea088e
+prerequisite-patch-id: a128861995f39dbd676052826465b3bec1da7c3c
+prerequisite-patch-id: 317d38b2389df13ce09e899c96916601381962d0
+prerequisite-patch-id: fdc4e79bc0a1f9df3ce8690c5ee71fc5d7b06e70
+prerequisite-patch-id: c34b24303bd216f7b517595635049556ca252c00
+prerequisite-patch-id: 09d1dd390a03007452d6584f050d859f04cd1ed9
+prerequisite-patch-id: 17b18a35aaa2766b942290e3c91ccccb7829ad70
+prerequisite-patch-id: e72b7426d0b07052e9f0878f0af0ca6a448e6bfb
+prerequisite-patch-id: 986d9cec733c7c707bcb5348f26c3944cb91bcc4
+prerequisite-patch-id: 6d86662087a73376cc1e1006915f9c7b956d814a
+prerequisite-patch-id: 9f889e0f1c371231cd5ed35e8c595b74af2863e7
+prerequisite-patch-id: 2c06369c51be1e2950ffad3c8aa302ffaffdf317
+prerequisite-patch-id: d6d72660aae2b7362e94a298a8e7e962987455a7
+prerequisite-patch-id: 882ce61001d7da207058682c9874a017518fa9bc
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,219 @@
+From 62d12574ebb5bfda560bb5175a47991618efad14 Mon Sep 17 00:00:00 2001
+From: Ian <219239532+markd3ng@users.noreply.github.com>
+Date: Mon, 14 Sep 2026 11:53:25 +0800
+Subject: [PATCH 2/2] fix(frontend): snapshot upload sourceKind for result
+ panel
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Context:
+Owner source review of PR #144 HEAD 5bcaf753 found a blocking
+state-semantics defect: UploadedPanel received live
+editorState.editKind as sourceKind. pasteResponse persists after
+upload, so switching Edit/File without a second upload could
+reclassify the displayed result (File ?a → Text /d/<name>, or the
+inverse). An in-flight tab change before the upload promise
+resolved had the same race.
+
+Expected behavior:
+- Capture sourceKind once at upload start from the editor tab that
+  initiated the upload.
+- Bind UploadedPanel to uploadedSourceKind, not live editKind.
+- pasteResponse, uploadedSourceKind, and uploadedEncryptionKey
+  describe the same completed upload.
+- Clear uploadedSourceKind when the displayed result is cleared
+  (upload failure/abort or successful delete).
+
+Acceptance criteria:
+- File-tab foo.bin result keeps Download ?a and QR → ?a after
+  switching to Text without another upload.
+- Text-editor result stays Display-primary after switching to File
+  without another upload.
+- In-flight File upload still classifies as FILE if the editor
+  switches to Text before the deferred POST resolves.
+- Existing sourceKind contracts unchanged (MIME classification
+  remains unused).
+
+Constraints:
+- Do not change storedMimeTypeForUpload() or PasteResponse schema.
+- Do not change worker/storage product code.
+- Do not revert to MIME classification.
+- Do not export Patch 150 or merge into upstream-sync.
+
+Validation:
+- RED: three snapshot tests failed against live-editor derivation
+- GREEN: pnpm exec vitest run frontend/test/index.spec.tsx -t
+  "sourceKind snapshot" — 3 passed
+- pnpm exec vitest run — 33 files / 262 tests PASS
+- pnpm exec eslint frontend/pages/PasteBin.tsx
+  frontend/test/index.spec.tsx PASS
+- pnpm lint PASS
+- TDD: RED → GREEN recorded
+
+Docs:
+- N/A (behavior already specified; product-code snapshot only)
+
+Refs:
+- #132 #133 #143 #144
+- Patch ID: 150-upload-result-content-kind
+- Owner source review finding on HEAD 5bcaf753dfceb0b8c4bc64fb8652e70e7956d30d
+- Upstream base: 0835cac4ab8f974035d31845f5c2b93b0c85b5c6
+- Assembled 010–140 tip: 6ac36888beddef4d39a81e14130cd76d2c2824aa
+- Dependencies: 140-upload-download-path
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+---
+ frontend/pages/PasteBin.tsx  | 10 ++++-
+ frontend/test/index.spec.tsx | 74 ++++++++++++++++++++++++++++++++++++
+ 2 files changed, 82 insertions(+), 2 deletions(-)
+
+diff --git a/frontend/pages/PasteBin.tsx b/frontend/pages/PasteBin.tsx
+index 188c4169e61376c748a3986edf2ab7216d1d434d..969f8e9ebf05f163b5ec411d75072138a6558488 100644
+--- a/frontend/pages/PasteBin.tsx
++++ b/frontend/pages/PasteBin.tsx
+@@ -25,6 +25,7 @@ import { verifyMaxReads, verifyName, verifyPassword, isLegalUrl } from "../../sh
+ import { useNameAvailability } from "../utils/useNameAvailability.js"
+ import type { UploadProgress } from "../utils/uploader.js"
+ import { uploadPaste } from "../utils/uploader.js"
++import type { PasteSourceKind } from "../utils/pasteShare.js"
+ import { tst } from "../utils/overrides.js"
+ import { loadLocalUploads, recordLocalUpload, removeLocalUpload, type LocalUpload } from "../utils/localUploads.js"
+ 
+@@ -53,6 +54,7 @@ export function PasteBin({ config }: { config: Env }) {
+ 
+   const [pasteResponse, setPasteResponse] = useState<PasteResponse | undefined>(undefined)
+   const [uploadedEncryptionKey, setUploadedEncryptionKey] = useState<string | undefined>(undefined)
++  const [uploadedSourceKind, setUploadedSourceKind] = useState<PasteSourceKind | undefined>(undefined)
+   const [recentUploads, setRecentUploads] = useState<LocalUpload[]>([])
+ 
+   const [isUploadPending, startUpload] = useTransition()
+@@ -142,9 +144,11 @@ export function PasteBin({ config }: { config: Env }) {
+   function onStartUpload() {
+     const controller = new AbortController()
+     uploadAbortRef.current = controller
++    const sourceKind: PasteSourceKind = editorState.editKind === "file" ? "file" : "text"
+     // Clear any previous result so a failed/cancelled retry doesn't show stale URLs.
+     setPasteResponse(undefined)
+     setUploadedEncryptionKey(undefined)
++    setUploadedSourceKind(sourceKind)
+     startUpload(async () => {
+       try {
+         const uploaded = await uploadPaste(
+@@ -162,6 +166,7 @@ export function PasteBin({ config }: { config: Env }) {
+         if ((e as Error).name !== "AbortError") {
+           handleError("Error on Uploading Paste", e as Error)
+         }
++        setUploadedSourceKind(undefined)
+       } finally {
+         if (uploadAbortRef.current === controller) uploadAbortRef.current = null
+       }
+@@ -179,6 +184,7 @@ export function PasteBin({ config }: { config: Env }) {
+         if (resp.ok) {
+           showModal("Deleted Successfully", "It may takes 60 seconds for the deletion to propagate to the world")
+           setPasteResponse(undefined)
++          setUploadedSourceKind(undefined)
+           setRecentUploads(removeLocalUpload(pasteSetting.manageUrl))
+           setPasteSetting({ ...pasteSetting, uploadKind: "short", manageUrl: "" })
+         } else {
+@@ -316,13 +322,13 @@ export function PasteBin({ config }: { config: Env }) {
+             nameAvailability={nameAvailability}
+             footer={submitter}
+           />
+-          {(pasteResponse || isUploadPending) && (
++          {(pasteResponse || isUploadPending) && uploadedSourceKind && (
+             <UploadedPanel
+               isLoading={isUploadPending}
+               loadingProgress={loadingProgress}
+               onCancel={onCancelUpload}
+               pasteResponse={pasteResponse}
+-              sourceKind={editorState.editKind === "file" ? "file" : "text"}
++              sourceKind={uploadedSourceKind}
+               encryptionKey={uploadedEncryptionKey}
+               highlightLang={editorState.editKind === "edit" ? editorState.editHighlightLang : undefined}
+               isUrlPaste={
+diff --git a/frontend/test/index.spec.tsx b/frontend/test/index.spec.tsx
+index 9fd757ab83391567b82ac3e3ff762d73b9114757..80218b367560defec902f5c5fe87b5b7e71bec43 100644
+--- a/frontend/test/index.spec.tsx
++++ b/frontend/test/index.spec.tsx
+@@ -255,3 +255,77 @@ describe("Pastebin multi-file ZIP", () => {
+     expect(tooltip.querySelector("img")?.getAttribute("src")).toBe(expectedQrSrc("https://example.com/abcd?a"))
+   })
+ })
++
++describe("Pastebin uploaded sourceKind snapshot", () => {
++  it("keeps a File-tab result as FILE after switching to Text without another upload", async () => {
++    render(<PasteBin config={__WRANGLER_CONFIG__} />)
++    await userEvent.click(screen.getByRole("button", { name: "File" }))
++    await userEvent.upload(screen.getByLabelText("Select files"), [
++      new File([new Uint8Array([0xff, 0xfe])], "foo.bin", { type: "application/octet-stream" }),
++    ])
++    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
++    await vi.waitFor(() => {
++      expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
++    })
++
++    await userEvent.click(screen.getByRole("button", { name: "Edit" }))
++    expect(screen.getByRole("textbox", { name: "Paste editor" })).toBeInTheDocument()
++    expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
++    expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue("https://example.com/d/abcd")
++    await userEvent.hover(screen.getByRole("button", { name: "QR code" }))
++    const tooltip = await screen.findByRole("tooltip")
++    expect(tooltip.querySelector("img")?.getAttribute("src")).toBe(expectedQrSrc("https://example.com/abcd?a"))
++  })
++
++  it("keeps a text-editor result as TEXT after switching to File without another upload", async () => {
++    render(<PasteBin config={__WRANGLER_CONFIG__} />)
++    await userEvent.type(screen.getByRole("textbox", { name: "Paste editor" }), "hello text")
++    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
++    await vi.waitFor(() => {
++      expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue("https://example.com/d/abcd")
++    })
++    expect(screen.queryByRole("textbox", { name: "Download URL" })).not.toBeInTheDocument()
++
++    await userEvent.click(screen.getByRole("button", { name: "File" }))
++    expect(screen.getByRole("button", { name: "Select file" })).toBeInTheDocument()
++    expect(screen.queryByRole("textbox", { name: "Download URL" })).not.toBeInTheDocument()
++    expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue("https://example.com/d/abcd")
++    await userEvent.hover(screen.getByRole("button", { name: "QR code" }))
++    const tooltip = await screen.findByRole("tooltip")
++    expect(tooltip.querySelector("img")?.getAttribute("src")).toBe(expectedQrSrc("https://example.com/d/abcd"))
++  })
++
++  it("classifies an in-flight File upload as FILE even if the editor switches to Text before resolve", async () => {
++    let release!: () => void
++    const gate = new Promise<void>((resolve) => {
++      release = resolve
++    })
++    server.use(
++      http.post(`${__WRANGLER_CONFIG__.DEPLOY_URL}/`, async () => {
++        await gate
++        return HttpResponse.json(mockedPasteUpload)
++      }),
++    )
++
++    render(<PasteBin config={__WRANGLER_CONFIG__} />)
++    await userEvent.click(screen.getByRole("button", { name: "File" }))
++    await userEvent.upload(screen.getByLabelText("Select files"), [
++      new File([new Uint8Array([0xff, 0xfe])], "foo.bin", { type: "application/octet-stream" }),
++    ])
++    await userEvent.click(screen.getByRole("button", { name: "Upload" }))
++    expect(await screen.findByRole("button", { name: "Cancel" })).toBeInTheDocument()
++
++    await userEvent.click(screen.getByRole("button", { name: "Edit" }))
++    expect(screen.getByRole("textbox", { name: "Paste editor" })).toBeInTheDocument()
++    expect(screen.queryByRole("textbox", { name: "Download URL" })).not.toBeInTheDocument()
++
++    release()
++    await vi.waitFor(() => {
++      expect(screen.getByRole("textbox", { name: "Download URL" })).toHaveValue("https://example.com/abcd?a")
++    })
++    expect(screen.getByRole("textbox", { name: "Display URL" })).toHaveValue("https://example.com/d/abcd")
++    await userEvent.hover(screen.getByRole("button", { name: "QR code" }))
++    const tooltip = await screen.findByRole("tooltip")
++    expect(tooltip.querySelector("img")?.getAttribute("src")).toBe(expectedQrSrc("https://example.com/abcd?a"))
++  })
++})
+-- 
+2.50.1 (Apple Git-155)
+

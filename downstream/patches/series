@@ -33,3 +33,5 @@
 130-max-reads-consume/0001-feat-paste-consume-max-reads-before-returning-the-bo.patch
 130-max-reads-consume/0002-fix-write-keep-maxReads-on-createPaste-after-MIME-he.patch
 140-upload-download-path/0001-feat-frontend-classify-paste-share-URLs-and-fix-file.patch
+150-upload-result-content-kind/0001-feat-frontend-classify-upload-result-panel-from-cont.patch
+150-upload-result-content-kind/0002-fix-frontend-snapshot-upload-sourceKind-for-result-p.patch

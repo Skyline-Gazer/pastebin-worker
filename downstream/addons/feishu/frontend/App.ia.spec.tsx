@@ -44,7 +44,7 @@ describe("FT-DEFECT-02 information architecture", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ entries: [] })))
     render(<App />)
     await waitFor(() => expect(screen.getByText("Lark")).toBeVisible())
-    expect(screen.getByRole("button", { name: "Log out" })).toBeVisible()
+    expect(screen.getByRole("button", { name: "退出" })).toBeVisible()
     expect(screen.queryByText("Feishu")).not.toBeInTheDocument()
   })
 
@@ -80,11 +80,11 @@ describe("FT-DEFECT-02 information architecture", () => {
   it("renders Open and Copy URL from publicUrl and never uses pasteName as the heading", () => {
     render(<App initialEntries={fixtureEntries} />)
     const card = screen.getByRole("article", { name: /first Markdown task/i })
-    expect(within(card).getByRole("link", { name: "Open" })).toHaveAttribute(
+    expect(within(card).getByRole("link", { name: "打开" })).toHaveAttribute(
       "href",
       "https://example.invalid/d/active-fixture",
     )
-    expect(within(card).getByRole("button", { name: "Copy URL" })).toBeVisible()
+    expect(within(card).getByRole("button", { name: "复制链接" })).toBeVisible()
     expect(within(card).getByText("Active fixture")).toBeVisible()
     expect(screen.queryByRole("heading", { name: "Active fixture" })).not.toBeInTheDocument()
   })
@@ -110,11 +110,8 @@ describe("FT-DEFECT-02 information architecture", () => {
     )
     expect(screen.getByText("cat.png")).toBeVisible()
     expect(screen.getByText("image/png")).toBeVisible()
-    expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute(
-      "href",
-      "https://example.invalid/filepaste?a",
-    )
-    expect(screen.queryByRole("link", { name: "Download" })?.getAttribute("href")).not.toContain("/d/")
+    expect(screen.getByRole("link", { name: "下载" })).toHaveAttribute("href", "https://example.invalid/filepaste?a")
+    expect(screen.queryByRole("link", { name: "下载" })?.getAttribute("href")).not.toContain("/d/")
     expect(screen.queryByRole("checkbox", { name: "Complete managed entry" })).not.toBeInTheDocument()
     expect(screen.queryByRole("checkbox", { name: "Markdown task" })).not.toBeInTheDocument()
   })
@@ -132,7 +129,7 @@ describe("FT-DEFECT-02 information architecture", () => {
       />,
     )
     expect(screen.getByRole("heading", { name: "Plain note without a task" })).toBeVisible()
-    expect(screen.queryByRole("link", { name: "Download" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "下载" })).not.toBeInTheDocument()
     expect(screen.queryByRole("checkbox", { name: "Complete managed entry" })).not.toBeInTheDocument()
     expect(screen.queryByRole("checkbox", { name: "Markdown task" })).not.toBeInTheDocument()
     expect(screen.queryByRole("checkbox", { name: /Select .* for batch action/ })).not.toBeInTheDocument()
@@ -145,8 +142,8 @@ describe("FT-DEFECT-02 information architecture", () => {
     const task = screen.getAllByRole("checkbox", { name: "Markdown task" })[0]
     await user.click(task)
     expect(task).not.toBeChecked()
-    expect(screen.getByRole("dialog", { name: "Choose completion action" })).toBeVisible()
-    await user.click(screen.getByRole("button", { name: "Cancel" }))
+    expect(screen.getByRole("dialog", { name: "选择完成操作" })).toBeVisible()
+    await user.click(screen.getByRole("button", { name: "取消" }))
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     expect(task).not.toBeChecked()
     expect(fetchMock).not.toHaveBeenCalled()
@@ -155,20 +152,20 @@ describe("FT-DEFECT-02 information architecture", () => {
   it("shows batch selectors only in Batch Mode and delete uses an alert dialog", async () => {
     const user = userEvent.setup()
     render(<App initialEntries={fixtureEntries} />)
-    expect(screen.queryByRole("checkbox", { name: "Select Active fixture for batch action" })).not.toBeInTheDocument()
-    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
-    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeVisible()
-    await user.click(screen.getByRole("button", { name: "Exit Batch Mode" }))
-    const menu = screen.getByRole("button", { name: "Lifecycle actions" })
+    expect(screen.queryByRole("checkbox", { name: "选择 - [ ] first Markdown task" })).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "批量管理" }))
+    expect(screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" })).toBeVisible()
+    await user.click(screen.getByRole("button", { name: "完成" }))
+    const menu = screen.getByRole("button", { name: "更多" })
     await user.click(menu)
     await user.click(screen.getByRole("menuitem", { name: "删除" }))
-    expect(screen.getByRole("alertdialog", { name: "Confirm delete" })).toBeVisible()
+    expect(screen.getByRole("alertdialog", { name: "确认删除" })).toBeVisible()
   })
 
   it("shows loading, empty, and error states without fixture chrome", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise(() => undefined))
     const { unmount } = render(<App />)
-    expect(screen.getByText(/Loading/i)).toBeVisible()
+    expect(screen.getByText(/加载中/)).toBeVisible()
     unmount()
     vi.restoreAllMocks()
     vi.spyOn(globalThis, "fetch")
@@ -201,7 +198,7 @@ describe("FT-DEFECT-02 information architecture", () => {
     const user = userEvent.setup()
     render(<App initialEntries={fixtureEntries} />)
     expect(document.documentElement).toHaveClass("light")
-    await user.click(screen.getByRole("button", { name: "Switch to dark theme" }))
+    await user.click(screen.getByRole("button", { name: "切换到深色主题" }))
     expect(document.documentElement).toHaveClass("dark")
     expect(document.documentElement).not.toHaveAttribute("data-theme")
   })

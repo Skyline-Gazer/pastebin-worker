@@ -10,19 +10,19 @@ describe("Feishu fixture rendering", () => {
     const user = userEvent.setup()
     render(<App initialEntries={fixtureEntries} />)
 
-    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
-    expect(screen.queryByRole("toolbar", { name: "Batch actions" })).not.toBeInTheDocument()
-    await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
+    await user.click(screen.getByRole("button", { name: "批量管理" }))
+    const actionBar = screen.getByRole("toolbar", { name: "批量管理" })
+    expect(actionBar).toHaveTextContent("已选择 0 / 1")
+    await user.click(screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" }))
 
-    const actionBar = screen.getByRole("toolbar", { name: "Batch actions" })
-    expect(actionBar).toHaveTextContent("已选择 1 项")
-    expect(within(actionBar).getAllByRole("button")).toHaveLength(3)
+    expect(actionBar).toHaveTextContent("已选择 1 / 1")
     expect(within(actionBar).getByRole("button", { name: "永久归档" })).toBeEnabled()
     expect(within(actionBar).getByRole("button", { name: "限期归档" })).toBeEnabled()
     expect(within(actionBar).getByRole("button", { name: "删除" })).toBeEnabled()
 
-    await user.click(screen.getByRole("button", { name: "清空" }))
-    expect(screen.queryByRole("toolbar", { name: "Batch actions" })).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "清除" }))
+    expect(actionBar).toHaveTextContent("已选择 0 / 1")
+    expect(within(actionBar).getByRole("button", { name: "永久归档" })).toBeDisabled()
   })
 
   it("confirms one protected batch request from the intent and disables duplicate actions in flight", async () => {
@@ -37,24 +37,24 @@ describe("Feishu fixture rendering", () => {
       .mockReturnValueOnce(pendingBatch)
     render(<App initialEntries={fixtureEntries} />)
 
-    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
-    await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
+    await user.click(screen.getByRole("button", { name: "批量管理" }))
+    await user.click(screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" }))
     const expiring = screen.getByRole("button", { name: "限期归档" })
     expiring.focus()
     await user.click(expiring)
 
-    const dialog = screen.getByRole("dialog", { name: "Confirm expiring archive" })
+    const dialog = screen.getByRole("dialog", { name: "确认限期归档" })
     expect(dialog).toHaveTextContent("1 项")
     expect(dialog).toContainElement(document.activeElement as HTMLElement | null)
     await user.keyboard("{Tab}")
     expect(dialog).toContainElement(document.activeElement as HTMLElement | null)
-    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+    await user.click(within(dialog).getByRole("button", { name: "取消" }))
     expect(expiring).toHaveFocus()
-    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" })).toBeChecked()
     expect(fetchMock).not.toHaveBeenCalled()
 
     await user.click(expiring)
-    await user.click(screen.getByRole("button", { name: "Confirm batch action" }))
+    await user.click(screen.getByRole("button", { name: "确认" }))
     expect(screen.getByRole("button", { name: "永久归档" })).toBeDisabled()
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls[1]).toMatchObject([
@@ -85,7 +85,7 @@ describe("Feishu fixture rendering", () => {
     )
     expect(await screen.findByRole("status")).toHaveTextContent("已处理 0 项，1 项失败")
     expect(screen.getByText("Active fixture")).toBeVisible()
-    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" })).toBeChecked()
     fetchMock.mockRestore()
   })
 
@@ -125,19 +125,19 @@ describe("Feishu fixture rendering", () => {
     const entry = { ...fixtureEntries[0], id: "safe-entry-id", pasteName: "Safe fixture" }
     render(<App initialEntries={[fixtureEntries[0], entry]} />)
 
-    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    await user.click(screen.getByRole("button", { name: "批量管理" }))
     await user.click(screen.getByRole("button", { name: "全选" }))
     await user.click(screen.getByRole("button", { name: "删除" }))
-    const dialog = screen.getByRole("dialog", { name: "Confirm batch delete" })
+    const dialog = screen.getByRole("dialog", { name: "确认批量删除" })
     expect(dialog).toHaveTextContent("2 项")
-    expect(dialog).toHaveTextContent("permanently")
+    expect(dialog).toHaveTextContent("永久删除")
     expect(screen.getAllByRole("dialog")).toHaveLength(1)
-    await user.click(within(dialog).getByRole("button", { name: "Confirm batch action" }))
+    await user.click(within(dialog).getByRole("button", { name: "确认" }))
     expect(await screen.findByRole("status")).toHaveTextContent("已处理 1 项，1 项失败")
     expect(screen.queryByText("Active fixture")).not.toBeInTheDocument()
     expect(screen.getByText("Safe fixture")).toBeVisible()
-    expect(screen.getByRole("toolbar", { name: "Batch actions" })).toHaveTextContent("已选择 1 项")
-    await user.click(screen.getByRole("button", { name: "Retry failed items" }))
+    expect(screen.getByRole("toolbar", { name: "批量管理" })).toHaveTextContent("已选择 1 / 1")
+    await user.click(screen.getByRole("button", { name: "重试失败项" }))
     expect(fetchMock.mock.calls[3][1]).toMatchObject({
       body: JSON.stringify({ action: "delete", ids: ["safe-entry-id"] }),
     })
@@ -155,12 +155,12 @@ describe("Feishu fixture rendering", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ requested: 1, succeeded: 1, failed: 0, results: [] })))
     render(<App initialEntries={fixtureEntries} />)
-    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
-    await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
+    await user.click(screen.getByRole("button", { name: "批量管理" }))
+    await user.click(screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" }))
     await user.click(screen.getByRole("button", { name: "永久归档" }))
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to update entry. Please try again.")
     expect(screen.getByText("Active fixture")).toBeVisible()
-    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" })).toBeChecked()
     fetchMock.mockRestore()
   })
 
@@ -171,13 +171,13 @@ describe("Feishu fixture rendering", () => {
     const user = userEvent.setup()
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementationOnce(response)
     render(<App initialEntries={fixtureEntries} />)
-    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
-    await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
+    await user.click(screen.getByRole("button", { name: "批量管理" }))
+    await user.click(screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" }))
     await user.click(screen.getByRole("button", { name: "永久归档" }))
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to update entry. Please try again.")
     expect(screen.queryByRole("status")).not.toBeInTheDocument()
     expect(screen.getByText("Active fixture")).toBeVisible()
-    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeChecked()
+    expect(screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" })).toBeChecked()
     fetchMock.mockRestore()
   })
 
@@ -190,22 +190,20 @@ describe("Feishu fixture rendering", () => {
     }
     render(<App initialEntries={[fixtureEntries[0], visibleActive, fixtureEntries[1]]} />)
 
-    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    await user.click(screen.getByRole("button", { name: "批量管理" }))
     await user.click(screen.getByRole("button", { name: "全选" }))
-    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeChecked()
-    expect(screen.getByRole("checkbox", { name: "Select Second active fixture for batch action" })).toBeChecked()
-    expect(
-      screen.queryByRole("checkbox", { name: "Select Permanent archive fixture for batch action" }),
-    ).not.toBeInTheDocument()
+    const selected = screen.getAllByRole("checkbox", { name: "选择 - [ ] first Markdown task" })
+    expect(selected).toHaveLength(2)
+    for (const box of selected) expect(box).toBeChecked()
+    expect(screen.queryByRole("checkbox", { name: "选择 Permanent archive fixture" })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole("button", { name: "清空" }))
-    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).not.toBeChecked()
-    expect(screen.getByRole("checkbox", { name: "Select Second active fixture for batch action" })).not.toBeChecked()
+    await user.click(screen.getByRole("button", { name: "清除" }))
+    for (const box of selected) expect(box).not.toBeChecked()
 
-    await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
-    await user.click(screen.getByRole("button", { name: "Exit Batch Mode" }))
-    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
-    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).not.toBeChecked()
+    await user.click(selected[0])
+    await user.click(screen.getByRole("button", { name: "完成" }))
+    await user.click(screen.getByRole("button", { name: "批量管理" }))
+    expect(screen.getAllByRole("checkbox", { name: "选择 - [ ] first Markdown task" })[0]).not.toBeChecked()
   })
 
   it("prunes filtered, stale, unloaded, and archived IDs before future batch use", () => {
@@ -226,7 +224,7 @@ describe("Feishu fixture rendering", () => {
     render(<App initialEntries={fixtureEntries} />)
     const markdownTask = screen.getAllByRole("checkbox", { name: "Markdown task" })[0]
 
-    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    await user.click(screen.getByRole("button", { name: "批量管理" }))
     expect(markdownTask).toBeDisabled()
     await user.click(markdownTask)
     markdownTask.focus()
@@ -234,10 +232,10 @@ describe("Feishu fixture rendering", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole("button", { name: "Exit Batch Mode" }))
+    await user.click(screen.getByRole("button", { name: "完成" }))
     expect(markdownTask).not.toBeDisabled()
     await user.click(markdownTask)
-    expect(screen.getByRole("dialog", { name: "Choose completion action" })).toBeVisible()
+    expect(screen.getByRole("dialog", { name: "选择完成操作" })).toBeVisible()
     fetchMock.mockRestore()
   })
 
@@ -245,27 +243,27 @@ describe("Feishu fixture rendering", () => {
     const user = userEvent.setup()
     render(<App initialEntries={fixtureEntries} />)
 
-    expect(screen.queryByRole("checkbox", { name: "Select Active fixture for batch action" })).not.toBeInTheDocument()
-    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
-    expect(screen.getByRole("button", { name: "Exit Batch Mode" })).toBeVisible()
-    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).not.toBeChecked()
+    expect(screen.queryByRole("checkbox", { name: "选择 - [ ] first Markdown task" })).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "批量管理" }))
+    expect(screen.getByRole("button", { name: "完成" })).toBeVisible()
+    expect(screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" })).not.toBeChecked()
 
-    await user.click(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" }))
-    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).toBeChecked()
-    await user.click(screen.getByRole("button", { name: "Exit Batch Mode" }))
-    expect(screen.queryByRole("checkbox", { name: "Select Active fixture for batch action" })).not.toBeInTheDocument()
+    await user.click(screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" }))
+    expect(screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" })).toBeChecked()
+    await user.click(screen.getByRole("button", { name: "完成" }))
+    expect(screen.queryByRole("checkbox", { name: "选择 - [ ] first Markdown task" })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
-    expect(screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })).not.toBeChecked()
+    await user.click(screen.getByRole("button", { name: "批量管理" }))
+    expect(screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" })).not.toBeChecked()
   })
 
   it("keeps BatchSelector markup, accessibility, and handlers separate from Markdown tasks", async () => {
     const user = userEvent.setup()
     const fetchMock = vi.spyOn(globalThis, "fetch")
     render(<App initialEntries={fixtureEntries} />)
-    await user.click(screen.getByRole("button", { name: "Enter Batch Mode" }))
+    await user.click(screen.getByRole("button", { name: "批量管理" }))
 
-    const selector = screen.getByRole("checkbox", { name: "Select Active fixture for batch action" })
+    const selector = screen.getByRole("checkbox", { name: "选择 - [ ] first Markdown task" })
     const markdownTask = screen.getAllByRole("checkbox", { name: "Markdown task" })[0]
     expect(selector).toHaveClass("batch-selector")
     expect(markdownTask).not.toHaveClass("batch-selector")
@@ -290,7 +288,7 @@ describe("Feishu fixture rendering", () => {
   it("renders only typed local Active fixtures without a browser request", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
     render(<App initialEntries={fixtureEntries} />)
-    expect(screen.getByRole("tab", { name: "进行中" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.getByRole("tab", { name: /进行中/ })).toHaveAttribute("aria-selected", "true")
     expect(screen.getByText("Active fixture")).toBeVisible()
     expect(screen.queryByText("Timed archive fixture")).not.toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
@@ -301,8 +299,8 @@ describe("Feishu fixture rendering", () => {
     const user = userEvent.setup()
     const fetchMock = vi.spyOn(globalThis, "fetch")
     render(<App initialEntries={fixtureEntries} />)
-    await user.click(screen.getByRole("tab", { name: "归档" }))
-    expect(screen.getByRole("tab", { name: "归档" })).toHaveAttribute("aria-selected", "true")
+    await user.click(screen.getByRole("tab", { name: /归档/ }))
+    expect(screen.getByRole("tab", { name: /归档/ })).toHaveAttribute("aria-selected", "true")
     expect(screen.getByText("Permanent archive fixture")).toBeVisible()
     expect(screen.getByText("Timed archive fixture")).toBeVisible()
     expect(screen.queryByText("Active fixture")).not.toBeInTheDocument()
@@ -336,11 +334,11 @@ describe("Feishu fixture rendering", () => {
   it("shows Restore for both permanent and timed Archive entries", async () => {
     const user = userEvent.setup()
     render(<App initialEntries={fixtureEntries} />)
-    await user.click(screen.getByRole("tab", { name: "归档" }))
+    await user.click(screen.getByRole("tab", { name: /归档/ }))
     expect(screen.getByText("永久归档")).toBeVisible()
     expect(screen.getByRole("status", { name: /限期归档，剩余/ })).toBeVisible()
-    expect(screen.getAllByRole("button", { name: "恢复为进行中" })[0]).toBeVisible()
-    expect(screen.getAllByRole("button", { name: "恢复为进行中" })).toHaveLength(2)
+    expect(screen.getAllByRole("button", { name: "恢复" })[0]).toBeVisible()
+    expect(screen.getAllByRole("button", { name: "恢复" })).toHaveLength(2)
   })
 
   it("keeps a timed Archive row and its countdown while restore is pending or fails", async () => {
@@ -354,8 +352,8 @@ describe("Feishu fixture rendering", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
       .mockReturnValueOnce(pendingRestore)
     render(<App initialEntries={fixtureEntries} />)
-    await user.click(screen.getByRole("tab", { name: "归档" }))
-    const restore = screen.getAllByRole("button", { name: "恢复为进行中" })[1]
+    await user.click(screen.getByRole("tab", { name: /归档/ }))
+    const restore = screen.getAllByRole("button", { name: "恢复" })[1]
     await user.click(restore)
     expect(restore).toBeDisabled()
     expect(screen.getByText("Timed archive fixture")).toBeVisible()
@@ -375,8 +373,8 @@ describe("Feishu fixture rendering", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
     render(<App initialEntries={fixtureEntries} />)
-    await user.click(screen.getByRole("tab", { name: "归档" }))
-    await user.click(screen.getByRole("button", { name: "Reconcile archive" }))
+    await user.click(screen.getByRole("tab", { name: /归档/ }))
+    await user.click(screen.getByRole("button", { name: "核对" }))
     expect(screen.queryByText("Timed archive fixture")).not.toBeInTheDocument()
     expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "POST", credentials: "include" })
     expect((fetchMock.mock.calls[1][1]?.headers as Record<string, string>)["X-CSRF-Token"]).toBe("csrf-test")
@@ -395,8 +393,8 @@ describe("Feishu fixture rendering", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ csrfToken: "csrf-test" })))
       .mockReturnValueOnce(restoreResponse)
     render(<App initialEntries={fixtureEntries} />)
-    await user.click(screen.getByRole("tab", { name: "归档" }))
-    const restore = screen.getAllByRole("button", { name: "恢复为进行中" })[0]
+    await user.click(screen.getByRole("tab", { name: /归档/ }))
+    const restore = screen.getAllByRole("button", { name: "恢复" })[0]
     await user.click(restore)
     expect(restore).toBeDisabled()
     expect(screen.getByText("Permanent archive fixture")).toBeVisible()
@@ -416,7 +414,7 @@ describe("Feishu fixture rendering", () => {
       ),
     )
     await waitFor(() => expect(screen.queryByText("Permanent archive fixture")).not.toBeInTheDocument())
-    await user.click(screen.getByRole("tab", { name: "进行中" }))
+    await user.click(screen.getByRole("tab", { name: /进行中/ }))
     expect(screen.getByText("Restored fixture")).toBeVisible()
     const restoreRequest = fetchMock.mock.calls[1][1]
     expect(restoreRequest).toMatchObject({ method: "POST" })
@@ -433,8 +431,8 @@ describe("Feishu fixture rendering", () => {
         new Response(JSON.stringify({ code: "RECONCILIATION_REQUIRED", secret: "do-not-display" }), { status: 503 }),
       )
     render(<App initialEntries={fixtureEntries} />)
-    await user.click(screen.getByRole("tab", { name: "归档" }))
-    await user.click(screen.getAllByRole("button", { name: "恢复为进行中" })[0])
+    await user.click(screen.getByRole("tab", { name: /归档/ }))
+    await user.click(screen.getAllByRole("button", { name: "恢复" })[0])
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to update entry. Please try again.")
     expect(screen.getByText("Permanent archive fixture")).toBeVisible()
     expect(screen.queryByText("do-not-display")).not.toBeInTheDocument()
@@ -449,9 +447,9 @@ describe("Feishu fixture rendering", () => {
     expect(managedTask).not.toBeChecked()
     await user.click(managedTask)
     expect(managedTask).not.toBeChecked()
-    expect(screen.getByRole("dialog", { name: "Choose completion action" })).toBeVisible()
-    await user.click(screen.getByRole("button", { name: "Cancel" }))
-    expect(screen.getByRole("tab", { name: "进行中" })).toHaveAttribute("aria-selected", "true")
+    expect(screen.getByRole("dialog", { name: "选择完成操作" })).toBeVisible()
+    await user.click(screen.getByRole("button", { name: "取消" }))
+    expect(screen.getByRole("tab", { name: /进行中/ })).toHaveAttribute("aria-selected", "true")
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
     fetchMock.mockRestore()
@@ -463,8 +461,8 @@ describe("Feishu fixture rendering", () => {
     render(<App initialEntries={fixtureEntries} />)
     await user.click(screen.getAllByRole("checkbox", { name: "Markdown task" })[0])
     await user.click(screen.getByRole("button", { name: "删除" }))
-    expect(screen.getByRole("alertdialog", { name: "Confirm delete" })).toBeVisible()
-    await user.click(screen.getByRole("button", { name: "Cancel" }))
+    expect(screen.getByRole("alertdialog", { name: "确认删除" })).toBeVisible()
+    await user.click(screen.getByRole("button", { name: "取消" }))
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
     expect(screen.getByText("Active fixture")).toBeVisible()
@@ -484,7 +482,7 @@ describe("Feishu fixture rendering", () => {
     render(<App initialEntries={fixtureEntries} />)
     await user.click(screen.getAllByRole("checkbox", { name: "Markdown task" })[0])
     await user.click(screen.getByRole("button", { name: "限期归档" }))
-    const submit = screen.getByRole("button", { name: "Confirm archive" })
+    const submit = screen.getByRole("button", { name: "确认归档" })
     await user.click(submit)
     expect(submit).toBeDisabled()
     expect(screen.getByText("Active fixture")).toBeVisible()
@@ -524,7 +522,7 @@ describe("Feishu fixture rendering", () => {
     expect(JSON.parse(completionRequest.body)).toEqual({
       action: "archive_expiring",
     })
-    await user.click(screen.getByRole("tab", { name: "归档" }))
+    await user.click(screen.getByRole("tab", { name: /归档/ }))
     expect(screen.getByText("Authoritative archive")).toBeVisible()
     const archive = screen.getByText("Authoritative archive").closest("article")
     if (!archive) throw new Error("expected authoritative archive row")
@@ -543,7 +541,7 @@ describe("Feishu fixture rendering", () => {
     render(<App initialEntries={fixtureEntries} />)
     await user.click(screen.getAllByRole("checkbox", { name: "Markdown task" })[0])
     await user.click(screen.getByRole("button", { name: "永久归档" }))
-    await user.click(screen.getByRole("button", { name: "Confirm archive" }))
+    await user.click(screen.getByRole("button", { name: "确认归档" }))
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to update entry. Please try again.")
     expect(screen.getByRole("dialog")).toContainElement(document.activeElement as HTMLElement | null)
     expect(screen.getByText("Active fixture")).toBeVisible()
@@ -576,10 +574,10 @@ describe("Feishu fixture rendering", () => {
     render(<App initialEntries={fixtureEntries} />)
 
     await user.click(screen.getAllByRole("checkbox", { name: "Markdown task" })[0])
-    await user.click(screen.getByRole("button", { name: "Confirm archive" }))
+    await user.click(screen.getByRole("button", { name: "确认归档" }))
     expect(await screen.findByRole("alert")).toBeVisible()
     await user.click(screen.getByRole("button", { name: "永久归档" }))
-    await user.click(screen.getByRole("button", { name: "Confirm archive" }))
+    await user.click(screen.getByRole("button", { name: "确认归档" }))
     await waitFor(() => expect(screen.queryByText("Active fixture")).not.toBeInTheDocument())
 
     const firstRequest = fetchMock.mock.calls[1][1]
@@ -616,10 +614,10 @@ describe("Feishu fixture rendering", () => {
     render(<App initialEntries={fixtureEntries} />)
 
     await user.click(screen.getAllByRole("checkbox", { name: "Markdown task" })[0])
-    await user.click(screen.getByRole("button", { name: "Confirm archive" }))
+    await user.click(screen.getByRole("button", { name: "确认归档" }))
     expect(await screen.findByRole("alert")).toBeVisible()
     await user.click(screen.getByRole("button", { name: "限期归档" }))
-    await user.click(screen.getByRole("button", { name: "Confirm archive" }))
+    await user.click(screen.getByRole("button", { name: "确认归档" }))
     await waitFor(() => expect(screen.queryByText("Active fixture")).not.toBeInTheDocument())
 
     const firstRequest = fetchMock.mock.calls[1][1]
@@ -639,7 +637,7 @@ describe("Feishu fixture rendering", () => {
     managedTask.focus()
 
     await user.click(managedTask)
-    const dialog = screen.getByRole("dialog", { name: "Choose completion action" })
+    const dialog = screen.getByRole("dialog", { name: "选择完成操作" })
     expect(dialog).toContainElement(document.activeElement as HTMLElement | null)
     await user.keyboard("{Escape}")
 
@@ -653,7 +651,7 @@ describe("Feishu fixture rendering", () => {
     const markdownTask = screen.getAllByRole("checkbox", { name: "Markdown task" })[0]
     await user.click(markdownTask)
     expect(markdownTask).not.toBeChecked()
-    expect(screen.getByRole("dialog", { name: "Choose completion action" })).toBeVisible()
+    expect(screen.getByRole("dialog", { name: "选择完成操作" })).toBeVisible()
   })
 
   it("keeps fixtures public-safe and rejects malformed timed archive presentation data", () => {
@@ -680,13 +678,13 @@ describe("Feishu fixture rendering", () => {
   it("retains the compact tokenized shell and local theme-only state", async () => {
     const user = userEvent.setup()
     render(<App initialEntries={fixtureEntries} />)
-    expect(screen.getByRole("main", { name: "Feishu Pastebin" })).toHaveClass("max-w-5xl")
+    expect(screen.getByRole("main", { name: "Feishu Pastebin" })).toHaveClass("max-w-[64rem]")
     expect(screen.getByRole("heading", { name: "Pastebin" })).toBeVisible()
     expect(screen.getByRole("tablist", { name: "Entry views" })).toBeVisible()
     expect(document.documentElement).toHaveClass("light")
-    await user.click(screen.getByRole("button", { name: "Switch to dark theme" }))
+    await user.click(screen.getByRole("button", { name: "切换到深色主题" }))
     expect(document.documentElement).toHaveClass("dark")
-    expect(screen.getByRole("button", { name: "Switch to light theme" })).toBeVisible()
+    expect(screen.getByRole("button", { name: "切换到浅色主题" })).toBeVisible()
   })
 
   it("keeps the content-first shell free of client chrome markers", () => {

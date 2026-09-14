@@ -1,4 +1,4 @@
-import { Copy, ExternalLink } from "lucide-react"
+import { Copy, Download, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export function EntryActions({
@@ -14,25 +14,26 @@ export function EntryActions({
 }) {
   if (!publicUrl && !openHref && !downloadHref) return null
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap justify-end gap-1">
       {openHref ? (
         <Button asChild variant="outline" size="sm">
           <a href={openHref} rel="noreferrer" target="_blank">
             <ExternalLink />
-            Open
+            打开
           </a>
         </Button>
       ) : null}
       {publicUrl && onCopy ? (
         <Button type="button" variant="outline" size="sm" onClick={() => onCopy(publicUrl)}>
           <Copy />
-          Copy URL
+          复制链接
         </Button>
       ) : null}
       {downloadHref ? (
         <Button asChild size="sm">
           <a href={downloadHref} rel="noreferrer" target="_blank">
-            Download
+            <Download />
+            下载
           </a>
         </Button>
       ) : null}

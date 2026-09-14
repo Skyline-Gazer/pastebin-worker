@@ -14,9 +14,8 @@ export function LifecycleMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" disabled={disabled} aria-label="Lifecycle actions">
+        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" disabled={disabled} aria-label="更多">
           <MoreHorizontal />
-          更多
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

@@ -1,0 +1,71 @@
+import type { FixtureEntry } from "./fixtures"
+import { validateFixtureEntries } from "./fixtures"
+
+export const visualPreviewEntries: FixtureEntry[] = [
+  {
+    id: "single-a",
+    pasteName: "n7k2qm",
+    publicUrl: "https://example.invalid/n7k2qm",
+    content: "SEND_FT_CREATE_20260912_01",
+    visibility: "active",
+    retentionMode: "permanent",
+    expiresAt: null,
+    managedTask: { state: "unchecked" },
+  },
+  {
+    id: "single-b",
+    pasteName: "p3w9ls",
+    publicUrl: "https://example.invalid/p3w9ls",
+    content: "Follow-up note",
+    visibility: "active",
+    retentionMode: "permanent",
+    expiresAt: null,
+    managedTask: { state: "unchecked" },
+  },
+  {
+    id: "markdown-multi",
+    pasteName: "weekly-md",
+    publicUrl: "https://example.invalid/weekly-md",
+    content: "Weekly notes\n\n- keep the preview compact\n- `code` stays readable",
+    visibility: "active",
+    retentionMode: "permanent",
+    expiresAt: null,
+    managedTask: { state: "unchecked" },
+  },
+  {
+    id: "gfm-task",
+    pasteName: "task-entry",
+    publicUrl: "https://example.invalid/task-entry",
+    content: "- [ ] first Markdown task\n- [x] already done",
+    visibility: "active",
+    retentionMode: "permanent",
+    expiresAt: null,
+    managedTask: { state: "unchecked" },
+  },
+  {
+    id: "file-entry",
+    pasteName: "filepaste",
+    publicUrl: "https://example.invalid/filepaste",
+    content: null,
+    visibility: "active",
+    retentionMode: "permanent",
+    expiresAt: null,
+    managedTask: { state: "unchecked" },
+    kind: "file",
+    filename: "cat.png",
+    mimeType: "image/png",
+    sizeBytes: 12,
+  },
+  {
+    id: "timed-archive",
+    pasteName: "timed-archive",
+    publicUrl: "https://example.invalid/timed-archive",
+    content: "Timed archived fixture content.",
+    visibility: "archived",
+    retentionMode: "timed",
+    expiresAt: "2030-01-02T03:04:05.000Z",
+    managedTask: { state: "checked" },
+  },
+]
+
+validateFixtureEntries(visualPreviewEntries)

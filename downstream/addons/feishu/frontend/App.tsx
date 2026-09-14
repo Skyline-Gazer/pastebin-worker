@@ -8,6 +8,7 @@ import { ProviderLogin } from "@/components/auth/ProviderLogin"
 import { BatchToolbar, type BatchAction } from "@/components/batch/BatchToolbar"
 import { EmptyState } from "@/components/EmptyState"
 import { EntryCard } from "@/components/entries/EntryCard"
+import { EntryList, EntryRow } from "@/components/entries/EntryList"
 import { ErrorState } from "@/components/ErrorState"
 import { Toaster } from "@/components/ui/sonner"
 import {
@@ -286,7 +287,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
   const [batchPending, setBatchPending] = useState(false)
   const [boot, setBoot] = useState<BootState>(fixtureMode ? "ready" : "loading")
   const [loginProviders, setLoginProviders] = useState<AuthProvider[]>(["feishu"])
-  const [sessionBrand, setSessionBrand] = useState<"Feishu" | "Lark" | undefined>(undefined)
+  const [sessionBrand, setSessionBrand] = useState<"Feishu" | "Lark" | undefined>(fixtureMode ? "Feishu" : undefined)
   const [entries, setEntries] = useState<FixtureEntry[]>(() => (fixtureMode ? [...initialEntries] : []))
   const [action, setAction] = useState<CompletionAction | null>(null)
   const [completionEntryId, setCompletionEntryId] = useState<string | null>(null)
@@ -300,6 +301,8 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
   const completionRequestIdRef = useRef<string | null>(null)
   const nextTheme = theme === "light" ? "dark" : "light"
   const visibleEntries = entries.filter((entry) => entry.visibility === tab)
+  const activeCount = entries.filter((entry) => entry.visibility === "active").length
+  const archivedCount = entries.filter((entry) => entry.visibility === "archived").length
   const visibleEligibleIds = useMemo(() => deriveVisibleEligibleActiveIds(entries, tab), [entries, tab])
   const prunedSelectedIds = pruneSelectedIds(selectedIds, visibleEligibleIds)
 
@@ -566,9 +569,9 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
   async function copyUrl(url: string) {
     try {
       await navigator.clipboard.writeText(url)
-      toast.success("Copied URL")
+      toast.success("已复制链接")
     } catch {
-      toast.error("Unable to copy URL")
+      toast.error("无法复制链接")
     }
   }
 
@@ -577,7 +580,10 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
 
   return (
     <TooltipProvider>
-      <main aria-label="Feishu Pastebin" className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 p-4">
+      <main
+        aria-label="Feishu Pastebin"
+        className="mx-auto flex min-h-screen w-full max-w-[64rem] flex-col gap-4 px-4 py-4 md:px-6"
+      >
         <AppHeader
           authenticated={boot === "ready" || boot === "empty"}
           brand={sessionBrand}
@@ -587,7 +593,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
         />
         {boot === "loading" && (
           <div className="space-y-3">
-            <p>Loading…</p>
+            <p>加载中…</p>
             <Skeleton className="h-24 w-full" />
           </div>
         )}
@@ -595,25 +601,34 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
         {boot === "error" && <ErrorState message="Unable to load entries." />}
         {(boot === "ready" || boot === "empty") && (
           <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
-            <TabsList aria-label="Entry views">
-              <TabsTrigger value="active">进行中</TabsTrigger>
-              <TabsTrigger value="archived">归档</TabsTrigger>
-            </TabsList>
-            <TabsContent value="active" className="space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <TabsList aria-label="Entry views" className="h-8 justify-start self-start bg-transparent p-0">
+                <TabsTrigger value="active" className="gap-1 shadow-none data-[state=active]:shadow-none">
+                  进行中
+                  <span className="text-xs font-normal text-muted-foreground">{activeCount}</span>
+                </TabsTrigger>
+                <TabsTrigger value="archived" className="gap-1 shadow-none data-[state=active]:shadow-none">
+                  归档
+                  <span className="text-xs font-normal text-muted-foreground">{archivedCount}</span>
+                </TabsTrigger>
+              </TabsList>
               <BatchToolbar
                 batchMode={batchMode}
-                tab="active"
+                tab={tab}
                 eligible={Boolean(visibleEligibleIds)}
-                count={prunedSelectedIds.size}
+                selectedCount={prunedSelectedIds.size}
+                eligibleCount={visibleEligibleIds?.size ?? 0}
                 disabled={batchPending}
                 onToggleMode={toggleBatchMode}
                 onSelectAll={selectAllVisibleEligible}
                 onClear={() => setSelectedIds(new Set())}
                 onAction={(nextAction) => beginBatchAction(nextAction, document.activeElement as HTMLButtonElement)}
               />
+            </div>
+            <TabsContent value="active" className="space-y-3">
               {batchMode && (
                 <p className="visually-hidden" id="batch-mode-lock-explanation">
-                  Batch Mode is active. Use Batch Selectors or exit Batch Mode to complete an entry.
+                  批量管理已开启。请使用条目选择框，或点完成退出批量管理后再勾选任务。
                 </p>
               )}
               {batchResult && (
@@ -623,7 +638,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
               )}
               {retryIntent && !batchPending && (
                 <Button type="button" variant="outline" onClick={() => void submitBatchIntent(retryIntent)}>
-                  Retry failed items
+                  重试失败项
                 </Button>
               )}
               {error && <ErrorState message="Unable to update entry. Please try again." />}
@@ -631,57 +646,59 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
                 {visibleEntries.length === 0 ? (
                   <EmptyState />
                 ) : (
-                  <div className="flex flex-col gap-4">
-                    {visibleEntries.map((entry) => (
-                      <EntryCard
-                        key={entry.id}
-                        entry={entry}
-                        tab="active"
-                        batchMode={batchMode}
-                        selected={prunedSelectedIds.has(entry.id)}
-                        eligible={Boolean(visibleEligibleIds?.has(entry.id))}
-                        pending={pending}
-                        restorePending={restorePendingId !== null}
-                        reconciliationPending={reconciliationPendingId !== null}
-                        onBatchToggle={() => toggleBatchSelection(entry.id)}
-                        onLifecycle={(nextAction) => beginCompletion(entry.id, nextAction)}
-                        onRestore={() => void submitRestore(entry)}
-                        onReconcile={() => void submitReconciliation(entry)}
-                        onCopy={(url) => void copyUrl(url)}
-                        onTaskActivate={(control) => beginCompletion(entry.id, "archive_permanent", control)}
-                      />
+                  <EntryList>
+                    {visibleEntries.map((entry, index) => (
+                      <EntryRow key={entry.id} last={index === visibleEntries.length - 1}>
+                        <EntryCard
+                          entry={entry}
+                          tab="active"
+                          batchMode={batchMode}
+                          selected={prunedSelectedIds.has(entry.id)}
+                          eligible={Boolean(visibleEligibleIds?.has(entry.id))}
+                          pending={pending}
+                          restorePending={restorePendingId !== null}
+                          reconciliationPending={reconciliationPendingId !== null}
+                          onBatchToggle={() => toggleBatchSelection(entry.id)}
+                          onLifecycle={(nextAction) => beginCompletion(entry.id, nextAction)}
+                          onRestore={() => void submitRestore(entry)}
+                          onReconcile={() => void submitReconciliation(entry)}
+                          onCopy={(url) => void copyUrl(url)}
+                          onTaskActivate={(control) => beginCompletion(entry.id, "archive_permanent", control)}
+                        />
+                      </EntryRow>
                     ))}
-                  </div>
+                  </EntryList>
                 )}
               </section>
             </TabsContent>
-            <TabsContent value="archived" className="space-y-4">
+            <TabsContent value="archived" className="space-y-3">
               {error && <ErrorState message="Unable to update entry. Please try again." />}
               <section aria-label="归档">
                 {visibleEntries.length === 0 ? (
                   <EmptyState />
                 ) : (
-                  <div className="flex flex-col gap-4">
-                    {visibleEntries.map((entry) => (
-                      <EntryCard
-                        key={entry.id}
-                        entry={entry}
-                        tab="archived"
-                        batchMode={false}
-                        selected={false}
-                        eligible={false}
-                        pending={pending}
-                        restorePending={restorePendingId !== null}
-                        reconciliationPending={reconciliationPendingId !== null}
-                        onBatchToggle={() => undefined}
-                        onLifecycle={() => undefined}
-                        onRestore={() => void submitRestore(entry)}
-                        onReconcile={() => void submitReconciliation(entry)}
-                        onCopy={(url) => void copyUrl(url)}
-                        onTaskActivate={() => undefined}
-                      />
+                  <EntryList>
+                    {visibleEntries.map((entry, index) => (
+                      <EntryRow key={entry.id} last={index === visibleEntries.length - 1}>
+                        <EntryCard
+                          entry={entry}
+                          tab="archived"
+                          batchMode={false}
+                          selected={false}
+                          eligible={false}
+                          pending={pending}
+                          restorePending={restorePendingId !== null}
+                          reconciliationPending={reconciliationPendingId !== null}
+                          onBatchToggle={() => undefined}
+                          onLifecycle={() => undefined}
+                          onRestore={() => void submitRestore(entry)}
+                          onReconcile={() => void submitReconciliation(entry)}
+                          onCopy={(url) => void copyUrl(url)}
+                          onTaskActivate={() => undefined}
+                        />
+                      </EntryRow>
                     ))}
-                  </div>
+                  </EntryList>
                 )}
               </section>
             </TabsContent>
@@ -700,7 +717,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
             }}
           >
             <DialogHeader>
-              <DialogTitle>Choose completion action</DialogTitle>
+              <DialogTitle>选择完成操作</DialogTitle>
               <DialogDescription>{action ? actionLabels[action] : ""}</DialogDescription>
             </DialogHeader>
             <div className="flex flex-wrap gap-2">
@@ -717,10 +734,10 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
             {error && <ErrorState message="Unable to update entry. Please try again." />}
             <DialogFooter>
               <Button type="button" variant="outline" disabled={pending} onClick={closeCompletion}>
-                Cancel
+                取消
               </Button>
               <Button type="button" disabled={pending} onClick={() => void submitCompletion()}>
-                Confirm archive
+                确认归档
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -733,13 +750,13 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
             }}
           >
             <AlertDialogHeader>
-              <AlertDialogTitle>Confirm delete</AlertDialogTitle>
-              <AlertDialogDescription>This permanently deletes the entry.</AlertDialogDescription>
+              <AlertDialogTitle>确认删除</AlertDialogTitle>
+              <AlertDialogDescription>将永久删除该条目。</AlertDialogDescription>
             </AlertDialogHeader>
             {error && <ErrorState message="Unable to update entry. Please try again." />}
             <AlertDialogFooter>
               <AlertDialogCancel disabled={pending} onClick={closeCompletion}>
-                Cancel
+                取消
               </AlertDialogCancel>
               <AlertDialogAction
                 disabled={pending}
@@ -748,7 +765,7 @@ export function App({ initialEntries }: { initialEntries?: readonly FixtureEntry
                   void submitCompletion()
                 }}
               >
-                Delete entry
+                删除
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

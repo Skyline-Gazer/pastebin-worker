@@ -714,8 +714,9 @@ describe("FT-04 Markdown inbound RED contracts (#151)", () => {
         )
       ).status,
     ).toBe(200)
-    expect(send.mock.calls[0][0].content).toBe(source)
-    expect(send.mock.calls[0][0].content).not.toBe(source + "\n")
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0][0]).toMatchObject({ content: source })
+    expect(send.mock.calls[0][0]).not.toMatchObject({ content: source + "\n" })
   })
 
   it("B3: code_block.text with terminal LF is preserved byte-for-byte (no trim)", async () => {
@@ -740,7 +741,8 @@ describe("FT-04 Markdown inbound RED contracts (#151)", () => {
         )
       ).status,
     ).toBe(200)
-    expect(send.mock.calls[0][0].content).toBe(source)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0][0]).toMatchObject({ content: source })
   })
 
   it("C: multiline Markdown code block preserves exact line boundaries without fences", async () => {

@@ -12,13 +12,15 @@ This document does **not** send P2P, mutate Cloudflare, D1, queues, or productio
 
 ## 1. Objective
 
-Validate **exactly one** new production Paste created from **exactly one** owner-originated **real Feishu** P2P whose entire body is:
+Validate **exactly one** new production Paste created from **exactly one** owner-originated **real Feishu** P2P whose intended owner-visible token is:
 
 ```text
 FT_CREATE_20260912_01
 ```
 
-No prefix. No suffix. No added whitespace variant.
+(or the authorized retry token `FT_CREATE_20260915_02` for the Markdown-inbound remediation).
+
+Acceptance of stored bytes is against **provider MarkdownSource**, not against a no-terminal-LF assertion on owner-visible glyphs. See §6.3 and [ft04-markdown-inbound-spec.md](ft04-markdown-inbound-spec.md) §4.1.
 
 Lark P2P is **not** FT-04.
 
@@ -204,11 +206,27 @@ Never print credentials, tokens, management passwords, full session ids, CSRF, o
 
 ### 6.3 Exact content
 
-Returned Paste body MUST equal exact text:
+Returned Paste body MUST equal the **canonical MarkdownSource** extracted from the provider payload for that send, **byte-for-byte**, with no application-added transformation.
 
 ```text
-FT_CREATE_20260912_01
+PROVIDER_MARKDOWN_SOURCE === STORED_PASTE_BODY
 ```
+
+For native Feishu Code Block UI:
+
+- Do **not** require that `STORED_PASTE_BODY` equal the owner-visible token string with an asserted “no terminal LF”.
+- A provider-supplied terminal LF is **permitted** and **MUST** be preserved (see [ft04-markdown-inbound-spec.md](ft04-markdown-inbound-spec.md) §4.1 / §5).
+- Fences, language labels, line numbers, or other decoration MUST NOT appear.
+
+Retry token for the FT-04 Markdown-inbound remediation attempt:
+
+```text
+FT_CREATE_20260915_02
+```
+
+Historical first-attempt token `FT_CREATE_20260912_01` remains historical and must not be reused.
+
+Observed production adjudication for the native Code Block retry: stored body was `FT_CREATE_20260915_02` + LF; classified as acceptance-contract match to provider source (not a runtime LF-injection defect).
 
 Expected retention: **permanent**.
 
@@ -266,7 +284,7 @@ Do not repair production in the same test run.
 
 Using the authenticated **Feishu** browser context on `https://pb.test.223.im`:
 
-- exact body `FT_CREATE_20260912_01`
+- exact body matching `PROVIDER_MARKDOWN_SOURCE` (provider-preserved terminal LF allowed; no fences/decoration)
 - one new matching entry
 - permanent retention
 - provider context is Feishu
@@ -283,8 +301,10 @@ Require:
 
 ```text
 GET https://pb.223.im/<paste-name> → 200
-body exactly FT_CREATE_20260912_01
+STORED_PASTE_BODY === PROVIDER_MARKDOWN_SOURCE (byte-for-byte)
 ```
+
+Do **not** fail solely because a provider-preserved terminal LF differs from owner-visible glyph expectation.
 
 Do not delete it. This Paste remains the lifecycle object for FT-05+.
 

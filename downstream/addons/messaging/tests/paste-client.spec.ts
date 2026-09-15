@@ -22,6 +22,23 @@ describe("reviewed Patch 010 HTTP contract", () => {
     expect((init.body as FormData).get("s")).toBe("a".repeat(64))
   })
 
+  it("preserves MarkdownSource without inventing or stripping a terminal LF on create", async () => {
+    for (const source of ["FT_CREATE_TEST", "FT_CREATE_TEST\n"] as const) {
+      const transport = vi.fn<typeof fetch>(() =>
+        Promise.resolve(
+          Response.json({
+            url: "https://paste.example/abcd",
+            expireAt: null,
+            expirationSeconds: null,
+          }),
+        ),
+      )
+      const client = new PasteClient("https://paste.example", transport)
+      expect(await client.create(source, "a".repeat(64))).toBe("abcd")
+      expect((transport.mock.calls[0][1]!.body as FormData).get("c")).toBe(source)
+    }
+  })
+
   it("rejects timed responses, foreign URLs and changed PUT identity", async () => {
     for (const data of [
       { url: "https://paste.example/abcd", expireAt: "tomorrow", expirationSeconds: 10 },

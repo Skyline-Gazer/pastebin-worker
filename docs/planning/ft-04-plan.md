@@ -99,13 +99,17 @@ If versions have changed, STOP and ask the owner; do not treat a drifted Worker 
 
 ## Expected input
 
-Exactly one owner-originated Feishu P2P whose **body equals**:
+Exactly one owner-originated Feishu P2P whose **owner-visible token** is:
 
 ```text
 FT_CREATE_20260912_01
 ```
 
+(or an owner-authorized retry token such as `FT_CREATE_20260915_02`).
+
 Do not send it synthetically. Do not send a second P2P. Do not send a Lark P2P as FT-04.
+
+Stored Paste body MUST equal provider MarkdownSource byte-for-byte (`PROVIDER_MARKDOWN_SOURCE === STORED_PASTE_BODY`). A provider-preserved terminal LF from Feishu native Code Block UI is **not** a runtime defect (see [ft04-markdown-inbound-spec.md](ft04-markdown-inbound-spec.md) §4.1; adjudicated on production Paste `7Zf3ZDjmyj2dQMWpSwfc7CK8`).
 
 If the agent cannot send Feishu P2P, stop and report:
 
@@ -113,7 +117,7 @@ If the agent cannot send Feishu P2P, stop and report:
 OWNER_INTERACTION_REQUIRED: SEND_FT_CREATE_20260912_01
 ```
 
-The 2026-09-12 token is the canonical PASS body. Do not rename it to a later date in this PLAN.
+The 2026-09-12 token is the original PASS body name; the remediation retry used `FT_CREATE_20260915_02`. Do not invent additional tokens without owner authorization.
 
 ## Test sequence (execution later; not this turn)
 
@@ -122,8 +126,8 @@ The 2026-09-12 token is the canonical PASS body. Do not rename it to a later dat
 3. **Ingress.** Observe Feishu webhook 200 on `pastebin-feishu-prod` (`POST /api/feishu/events`). Do not inject a fake event.
 4. **Create path.** Confirm ingress consume → create → Service Binding → `pastebin-prod POST /` → 200.
 5. **D1.** Confirm a succeeded create operation bound to the **Feishu** principal/scope (`feishu:v1:…`), not Lark.
-6. **Frontend.** Authenticated listing on `https://pb.test.223.im` shows one new Active entry; body exactly `FT_CREATE_20260912_01`; permanent retention.
-7. **Public Paste.** `GET https://pb.223.im/<paste-name>` returns 200 with that exact body.
+6. **Frontend.** Authenticated listing on `https://pb.test.223.im` shows one new Active entry; body matches provider MarkdownSource (terminal LF preserved if present); permanent retention.
+7. **Public Paste.** `GET https://pb.223.im/<paste-name>` returns 200 with `STORED_PASTE_BODY === PROVIDER_MARKDOWN_SOURCE`.
 8. **Uniqueness / health.** One and only one new Paste; no DLQ increment; no `reconciliation_required`.
 9. **Record.** Operation id, paste name, public URL.
 10. **STOP.** Do not continue into FT-05+ unless a later owner instruction starts those tests. The FT-04 entry is the input for later lifecycle tests (archive/restore/delete); leave it in place.

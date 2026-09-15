@@ -21,6 +21,7 @@
 - [`planning/ft-defect-01-plan.md`](planning/ft-defect-01-plan.md) / [`ft-defect-01-spec.md`](planning/ft-defect-01-spec.md) — FT-DEFECT-01 Pastebin upload/download path ([#133](https://github.com/Skyline-Gazer/pastebin-worker/issues/133)).
 - [`planning/ft-defect-03-plan.md`](planning/ft-defect-03-plan.md) / [`ft-defect-03-spec.md`](planning/ft-defect-03-spec.md) — FT-DEFECT-03 simultaneous Feishu + Lark identity/auth ([#134](https://github.com/Skyline-Gazer/pastebin-worker/issues/134)).
 - [`planning/provider-neutral-messaging-plan.md`](planning/provider-neutral-messaging-plan.md) / [`provider-neutral-messaging-spec.md`](planning/provider-neutral-messaging-spec.md) / [`provider-neutral-messaging-todo.md`](planning/provider-neutral-messaging-todo.md) — provider-neutral messaging architecture ([#146](https://github.com/Skyline-Gazer/pastebin-worker/issues/146)).
+- [`planning/ft-04-plan.md`](planning/ft-04-plan.md) — FT-04 PLAN: new Feishu P2P create ([#149](https://github.com/Skyline-Gazer/pastebin-worker/issues/149)). PLAN only; not executed.
 
 ## Operational scaffold
 

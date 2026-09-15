@@ -18,13 +18,13 @@ That instruction names the exact body token `FT_CREATE_20260912_01`, forbids syn
 
 Supporting repo records (sequencing and pause only; they do **not** redefine FT-04):
 
-| Source | What it records |
-| --- | --- |
-| [ft-defect-remediation.md](ft-defect-remediation.md) / closed [#132](https://github.com/Skyline-Gazer/pastebin-worker/issues/132) | FT-04+ blocked until remediation + targeted regressions; `FT_CREATE_20260912_01_SENT: NO`; do not send P2P or delete test Pastes unless a later Function Test step is authorized |
-| [ft-auth-origin-fix.md](ft-auth-origin-fix.md) / [#130](https://github.com/Skyline-Gazer/pastebin-worker/issues/130) | After origin defect, resume at FT-02; do not send `FT_CREATE_20260912_01` yet |
-| FT-DEFECT-01/02/03 PLANs and SPECs | `FT-04+` not started during defect work |
-| [provider-neutral-messaging-todo.md](provider-neutral-messaging-todo.md) §C / [#146](https://github.com/Skyline-Gazer/pastebin-worker/issues/146) | Start-gate note: do not start FT-04 until `FT-DEFECT-03=PASS`. **Not** a new FT-04 spec. Optional Lark P2P is a **separate** AFTER_LARK_ENABLEMENT item |
-| Closed [#134](https://github.com/Skyline-Gazer/pastebin-worker/issues/134) | Dual Feishu+Lark auth/ingestion gate; does not change FT-04 into Lark P2P |
+| Source                                                                                                                                            | What it records                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ft-defect-remediation.md](ft-defect-remediation.md) / closed [#132](https://github.com/Skyline-Gazer/pastebin-worker/issues/132)                 | FT-04+ blocked until remediation + targeted regressions; `FT_CREATE_20260912_01_SENT: NO`; do not send P2P or delete test Pastes unless a later Function Test step is authorized |
+| [ft-auth-origin-fix.md](ft-auth-origin-fix.md) / [#130](https://github.com/Skyline-Gazer/pastebin-worker/issues/130)                              | After origin defect, resume at FT-02; do not send `FT_CREATE_20260912_01` yet                                                                                                    |
+| FT-DEFECT-01/02/03 PLANs and SPECs                                                                                                                | `FT-04+` not started during defect work                                                                                                                                          |
+| [provider-neutral-messaging-todo.md](provider-neutral-messaging-todo.md) §C / [#146](https://github.com/Skyline-Gazer/pastebin-worker/issues/146) | Start-gate note: do not start FT-04 until `FT-DEFECT-03=PASS`. **Not** a new FT-04 spec. Optional Lark P2P is a **separate** AFTER_LARK_ENABLEMENT item                          |
+| Closed [#134](https://github.com/Skyline-Gazer/pastebin-worker/issues/134)                                                                        | Dual Feishu+Lark auth/ingestion gate; does not change FT-04 into Lark P2P                                                                                                        |
 
 No GitHub issue previously tracked FT-04 itself. [#146](https://github.com/Skyline-Gazer/pastebin-worker/issues/146) is **not** the FT-04 tracker.
 
@@ -53,10 +53,10 @@ Current production webhook for Feishu is `POST /api/feishu/events` on `pastebin-
 
 **Both:**
 
-| Worker | Role in FT-04 |
-| --- | --- |
+| Worker                 | Role in FT-04                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------- |
 | `pastebin-feishu-prod` | Feishu webhook, ingress queue consume, D1 operation/scope write, Service Binding call |
-| `pastebin-prod` | `POST /` Paste create; public `GET` of the new Paste |
+| `pastebin-prod`        | `POST /` Paste create; public `GET` of the new Paste                                  |
 
 Add-on origin: `https://pb.test.223.im`  
 Paste origin: `https://pb.223.im`

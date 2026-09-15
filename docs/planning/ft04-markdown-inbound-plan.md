@@ -49,7 +49,7 @@ MarkdownSource      → existing create pipeline → Paste raw body → Rendered
 
 Do **not** store provider rich-text AST as canonical content. Do **not** wrap native code-block contents in Markdown fences. Do **not** add language labels, line numbers, prefixes, suffixes, UI decoration, or an extra newline.
 
-For a native code block containing exactly `FT_CREATE_20260912_01`, Paste body MUST be byte-for-byte that string.
+For a native code block containing provider text `FT_CREATE_20260912_01` (with or without a provider terminal LF), Paste body MUST equal that provider `code_block.text` byte-for-byte — including a trailing LF **iff** the provider supplied one. Do not invent or strip terminal newlines for FT assertions against owner-visible glyphs.
 
 Multiline Markdown inside a code block MUST preserve source text and line boundaries deterministically.
 

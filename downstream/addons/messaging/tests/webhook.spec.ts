@@ -693,6 +693,58 @@ describe("FT-04 Markdown inbound RED contracts (#151)", () => {
     expect(send.mock.calls[0][0]).toMatchObject({ content: source })
   })
 
+  it("B2: code_block.text without terminal LF is preserved byte-for-byte (no invented newline)", async () => {
+    const source = "FT_CREATE_TEST"
+    const classified = await normalizeAuthorizedEventResult(codeBlockEvent(source), secrets)
+    expect(classified.kind).toBe("accepted")
+    if (classified.kind !== "accepted") throw new Error("expected accepted")
+    expect(classified.event.content).toBe(source)
+    expect(classified.event.content.endsWith("\n")).toBe(false)
+
+    const send = vi.fn().mockResolvedValue(undefined)
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    expect(
+      (
+        await createFeishuWebhookHandler(env).fetch(
+          await signedRequest({ encrypt: await encrypted(codeBlockEvent(source)) }, env),
+        )
+      ).status,
+    ).toBe(200)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0][0]).toMatchObject({ content: source })
+    expect(send.mock.calls[0][0]).not.toMatchObject({ content: source + "\n" })
+  })
+
+  it("B3: code_block.text with terminal LF is preserved byte-for-byte (no trim)", async () => {
+    const source = "FT_CREATE_TEST\n"
+    const classified = await normalizeAuthorizedEventResult(codeBlockEvent(source), secrets)
+    expect(classified.kind).toBe("accepted")
+    if (classified.kind !== "accepted") throw new Error("expected accepted")
+    expect(classified.event.content).toBe(source)
+    expect(classified.event.content.endsWith("\n")).toBe(true)
+    expect(classified.event.content).not.toBe("FT_CREATE_TEST")
+
+    const send = vi.fn().mockResolvedValue(undefined)
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    expect(
+      (
+        await createFeishuWebhookHandler(env).fetch(
+          await signedRequest({ encrypt: await encrypted(codeBlockEvent(source)) }, env),
+        )
+      ).status,
+    ).toBe(200)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0][0]).toMatchObject({ content: source })
+  })
+
   it("C: multiline Markdown code block preserves exact line boundaries without fences", async () => {
     const source = "# Tasks\n\n- [ ] Build VM\n- [x] Configure NAS"
     const classified = await normalizeAuthorizedEventResult(codeBlockEvent(source), secrets)

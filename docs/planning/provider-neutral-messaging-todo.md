@@ -4,7 +4,37 @@ Durable ledger. Items survive this refactor. States: `NOW` | `AFTER_MERGE` | `AF
 
 Tracking: [#146](https://github.com/Skyline-Gazer/pastebin-worker/issues/146)
 
-FT-DEFECT-03 remains **PAUSED_PENDING_PROVIDER_ARCHITECTURE** until this work is merged and deployed.
+FT-DEFECT-03 remains **NOT PASS**. Provider-neutral architecture is live. Local operator config paths are canonicalized below. Cloudflare production resource names remain deferred.
+
+---
+
+## LOCAL_OPERATOR_CONFIG_PATHS
+
+### Operator overlay filenames (DONE)
+
+Canonical local production-config path (single source of truth):
+
+```text
+~/.config/pastebin-worker/wrangler.messaging-prod.toml
+~/.config/pastebin-worker/messaging-prod.env
+~/.config/pastebin-worker/messaging-prod.runtime.env
+```
+
+Historical filenames remain compatibility symlinks to those canonical files:
+
+```text
+wrangler.feishu-prod.toml → wrangler.messaging-prod.toml
+feishu-prod.env → messaging-prod.env
+feishu-prod.runtime.env → messaging-prod.runtime.env
+```
+
+This is **not** Cloudflare resource renaming. Worker `pastebin-feishu-prod`, D1, queues, `FEISHU_*` bindings, D1 table names, cookie, and queue wire schema stay under **DEFERRED_COMPAT_CLEANUP**.
+
+Provider credentials stay provider-specific (`FEISHU_*`, `LARK_*`, future `SLACK_*` / `WECOM_*` / `DINGTALK_*`). Future provider additions MUST use the generic `messaging-prod` overlay path. Do not put `LARK_*` into a Feishu-named canonical file.
+
+- Why now: operator filenames said Feishu after the runtime became provider-neutral; Lark must not be provisioned into a Feishu-identity config file
+- Trigger: owner-authorized local path migration before Lark webhook provisioning
+- Evidence: canonical files exist; historical names are symlinks; no second secret-bearing copy
 
 ---
 
@@ -219,15 +249,16 @@ Not DONE: production deploy, Lark enablement, FT-DEFECT-03 PASS, FT-04, P2P.
 
 Live add-on scope after this refactor:
 
-| Symbol / name                                                                                          | Classification                                                          |
-| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| `FeishuAdapter`, `LarkAdapter`, `feishuAdapter`, `larkAdapter`                                         | PROVIDER_SPECIFIC_VALID                                                 |
-| `verifyFeishuChallenge` (Open Platform challenge helper still used by both Feishu/Lark tests)          | TODO_RENAME (shared helper; keep export for test compatibility this PR) |
-| `FEISHU_*` / `LARK_*` credential env vars                                                              | PROVIDER_SPECIFIC_VALID                                                 |
-| `FEISHU_BINDINGS_DB`, `FEISHU_INGRESS_QUEUE`, `FEISHU_PRINCIPAL_KEY`, `FEISHU_SESSION_COOKIE_NAME`     | LEGACY_COMPATIBILITY (see D/F)                                          |
-| `feishu_oauth_states`, `feishu_browser_sessions`, `feishu_principal_scope_map`, `feishu_addon_session` | LEGACY_COMPATIBILITY (see E)                                            |
-| `pastebin-feishu-prod`, queue names, workflow filename `feishu-phase3.yml`                             | LEGACY_COMPATIBILITY (see D / AFTER_MERGE-workflow)                     |
-| Wire `feishu.message-create.v1`                                                                        | LEGACY_COMPATIBILITY (see G)                                            |
-| Type aliases `FeishuMessageCreateV1`, `consumeFeishuMessages`, `createFeishuWebhookHandler`            | LEGACY_COMPATIBILITY (deprecated exports)                               |
-| Historical `docs/planning/phase5–9-*.md` paths `downstream/addons/feishu`                              | LEGACY_COMPATIBILITY                                                    |
-| Generic runtime `Messaging*` / `Inbound*` / `Provider*`                                                | PROVIDER_SPECIFIC_VALID (neutral)                                       |
+| Symbol / name                                                                                          | Classification                                                                           |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `FeishuAdapter`, `LarkAdapter`, `feishuAdapter`, `larkAdapter`                                         | PROVIDER_SPECIFIC_VALID                                                                  |
+| `verifyFeishuChallenge` (Open Platform challenge helper still used by both Feishu/Lark tests)          | TODO_RENAME (shared helper; keep export for test compatibility this PR)                  |
+| `FEISHU_*` / `LARK_*` credential env vars                                                              | PROVIDER_SPECIFIC_VALID                                                                  |
+| `FEISHU_BINDINGS_DB`, `FEISHU_INGRESS_QUEUE`, `FEISHU_PRINCIPAL_KEY`, `FEISHU_SESSION_COOKIE_NAME`     | LEGACY_COMPATIBILITY (see D/F)                                                           |
+| `feishu_oauth_states`, `feishu_browser_sessions`, `feishu_principal_scope_map`, `feishu_addon_session` | LEGACY_COMPATIBILITY (see E)                                                             |
+| `pastebin-feishu-prod`, queue names, workflow filename `feishu-phase3.yml`                             | LEGACY_COMPATIBILITY (see D / AFTER_MERGE-workflow)                                      |
+| Local overlay `wrangler.feishu-prod.toml` / `feishu-prod.env` (symlinks)                               | LEGACY_COMPATIBILITY; canonical `messaging-prod` paths (see LOCAL_OPERATOR_CONFIG_PATHS) |
+| Wire `feishu.message-create.v1`                                                                        | LEGACY_COMPATIBILITY (see G)                                                             |
+| Type aliases `FeishuMessageCreateV1`, `consumeFeishuMessages`, `createFeishuWebhookHandler`            | LEGACY_COMPATIBILITY (deprecated exports)                                                |
+| Historical `docs/planning/phase5–9-*.md` paths `downstream/addons/feishu`                              | LEGACY_COMPATIBILITY                                                                     |
+| Generic runtime `Messaging*` / `Inbound*` / `Provider*`                                                | PROVIDER_SPECIFIC_VALID (neutral)                                                        |

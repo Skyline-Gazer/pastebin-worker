@@ -15,7 +15,17 @@ downstream/addons/messaging/
 ```
 
 Frontend and webhook/backend are part of the same product unit even if built separately.
-Production serves both from Worker `pastebin-feishu-prod`. The canonical browser origin is `https://pb.test.223.im`. OAuth callback is `https://pb.test.223.im/api/auth/callback`. `FEISHU_ALLOWED_ORIGINS` is that same origin. workers.dev may stay enabled operationally but is not the OAuth/session cookie host.
+Production serves both from Worker `pastebin-feishu-prod` (Cloudflare identity is still that historical name). The canonical browser origin is `https://pb.test.223.im`. OAuth callback is `https://pb.test.223.im/api/auth/callback`. `FEISHU_ALLOWED_ORIGINS` is that same origin. workers.dev may stay enabled operationally but is not the OAuth/session cookie host.
+
+Local operator production config is provider-neutral:
+
+```text
+~/.config/pastebin-worker/wrangler.messaging-prod.toml
+~/.config/pastebin-worker/messaging-prod.env
+~/.config/pastebin-worker/messaging-prod.runtime.env
+```
+
+Do not treat `wrangler.feishu-prod.toml` as a second editable copy; that path is a symlink to the messaging overlay. Put `LARK_*` (when provisioned) in the messaging-prod files, never in a Feishu-named canonical file. Cloudflare Worker/D1/queue names stay `pastebin-feishu-*` until a separate deferred migration.
 
 ## 2. Frontend responsibilities
 

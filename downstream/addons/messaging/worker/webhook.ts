@@ -1,6 +1,6 @@
 import type { EntryResult } from "../shared/entries"
 import { type Platform, type ProviderCredentialEnvironment, providerRegistry } from "./platform"
-import { boundedIdentity } from "./providers/open-platform"
+import { boundedIdentity, extractOpenPlatformMarkdownSource } from "./providers/open-platform"
 import type { ProviderAdapter, ProviderWebhookConfig } from "./providers/types"
 
 const encoder = new TextEncoder()
@@ -42,8 +42,7 @@ export type UnsupportedInboundReason =
   | "UNSUPPORTED_POST_STRUCTURE"
 
 export type NormalizeAuthorizedResult =
-  | { kind: "accepted"; event: AuthorizedInboundEvent }
-  | { kind: "unsupported"; reason: UnsupportedInboundReason }
+  { kind: "accepted"; event: AuthorizedInboundEvent } | { kind: "unsupported"; reason: UnsupportedInboundReason }
 
 export interface MessagingWebhookEnvironment extends ProviderCredentialEnvironment {
   FEISHU_INGRESS_QUEUE: { send(message: InboundMessageV1): Promise<void> }
@@ -131,6 +130,23 @@ function adapterFor(provider?: Platform): ProviderAdapter {
   if (!adapter) throw new WebhookError("UNAVAILABLE", 503)
   return adapter
 }
+
+function logWebhookDisposition(fields: {
+  provider: string
+  correlationId: string
+  disposition:
+    "challenge" | "unsupported_event" | "queue_publish_begin" | "queue_publish_success" | "queue_publish_failed"
+  reason?: UnsupportedInboundReason
+}) {
+  const parts = [
+    `WEBHOOK_DISPOSITION=${fields.disposition}`,
+    `provider=${fields.provider}`,
+    `correlationId=${fields.correlationId}`,
+  ]
+  if (fields.reason) parts.push(`reason=${fields.reason}`)
+  console.log(parts.join(" "))
+}
+
 function bytes(value: string) {
   return encoder.encode(value)
 }
@@ -236,20 +252,6 @@ export async function normalizeAuthorizedEventResult(
   principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
   provider?: Platform,
 ): Promise<NormalizeAuthorizedResult> {
-  // RED harness: real classification lands in the implementation commit.
-  void value
-  void env
-  void principal
-  void provider
-  throw new WebhookError("UNAVAILABLE", 503)
-}
-
-export async function normalizeAuthorizedEvent(
-  value: unknown,
-  env: ProviderCredentialEnvironment,
-  principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
-  provider?: Platform,
-): Promise<AuthorizedInboundEvent | null> {
   const checked = webhookConfig(env, adapterFor(provider))
   if (!value || typeof value !== "object") throw new WebhookError("MALFORMED", 400)
   const root = object(value)
@@ -268,40 +270,51 @@ export async function normalizeAuthorizedEvent(
   )
     throw new WebhookError("FORBIDDEN", 403)
   if (!boundedIdentity(header.event_id)) throw new WebhookError("MALFORMED", 400)
-  if (
-    header.event_type !== "im.message.receive_v1" ||
-    sender?.sender_type !== "user" ||
-    message.chat_type !== "p2p" ||
-    message.message_type !== "text"
-  )
-    return null
+  // First failing unsupported gate wins (SPEC order).
+  if (header.event_type !== "im.message.receive_v1") return { kind: "unsupported", reason: "UNSUPPORTED_EVENT_TYPE" }
+  if (sender?.sender_type !== "user") return { kind: "unsupported", reason: "UNSUPPORTED_SENDER_TYPE" }
+  if (message.chat_type !== "p2p") return { kind: "unsupported", reason: "UNSUPPORTED_CHAT_TYPE" }
+  if (message.message_type !== "text" && message.message_type !== "post")
+    return { kind: "unsupported", reason: "UNSUPPORTED_MESSAGE_TYPE" }
   if (!boundedIdentity(message.message_id) || !boundedIdentity(message.chat_id) || typeof message.content !== "string")
     throw new WebhookError("MALFORMED", 400)
-  const content = object(json(message.content))
-  if (
-    !content ||
-    typeof content.text !== "string" ||
-    content.text.length === 0 ||
-    bytes(content.text).byteLength > TEXT_LIMIT
-  )
+  const extracted = extractOpenPlatformMarkdownSource(message.message_type, message.content)
+  if (extracted.kind === "malformed") throw new WebhookError("MALFORMED", 400)
+  if (extracted.kind === "unsupported_message_type") return { kind: "unsupported", reason: "UNSUPPORTED_MESSAGE_TYPE" }
+  if (extracted.kind === "unsupported_post_structure")
+    return { kind: "unsupported", reason: "UNSUPPORTED_POST_STRUCTURE" }
+  if (extracted.source.length === 0 || bytes(extracted.source).byteLength > TEXT_LIMIT)
     throw new WebhookError("UNSUPPORTED", 400)
   // A supported P2P event establishes browser authorization only when the provider supplied
   // a sender open_id. Missing identity is deliberately fail-closed, never queued.
   if (!boundedIdentity(senderId?.open_id)) throw new WebhookError("MALFORMED", 400)
   const principalKey = principal ? await principal(checked.appId, header.tenant_key, senderId.open_id) : ""
   return {
-    ...(await deriveMessageIdentity(
-      checked.appId,
-      header.tenant_key,
-      message.chat_id,
-      message.message_id,
-      checked.provider,
-    )),
-    sourceMessageId: message.message_id,
-    content: content.text,
-    principalKey,
-    ...(checked.provider === "lark" ? { provider: "lark" as const } : {}),
+    kind: "accepted",
+    event: {
+      ...(await deriveMessageIdentity(
+        checked.appId,
+        header.tenant_key,
+        message.chat_id,
+        message.message_id,
+        checked.provider,
+      )),
+      sourceMessageId: message.message_id,
+      content: extracted.source,
+      principalKey,
+      ...(checked.provider === "lark" ? { provider: "lark" as const } : {}),
+    },
   }
+}
+
+export async function normalizeAuthorizedEvent(
+  value: unknown,
+  env: ProviderCredentialEnvironment,
+  principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
+  provider?: Platform,
+): Promise<AuthorizedInboundEvent | null> {
+  const result = await normalizeAuthorizedEventResult(value, env, principal, provider)
+  return result.kind === "accepted" ? result.event : null
 }
 
 async function readBounded(request: Request): Promise<Uint8Array> {
@@ -350,8 +363,15 @@ function createWebhookHandler(
         const provider = webhookConfig(env, adapter)
         const raw = await readBounded(request)
         const envelope = json(decoder.decode(raw))
-        if (envelope && typeof envelope === "object" && (envelope as { type?: unknown }).type === "url_verification")
-          return Response.json({ challenge: await verifyFeishuChallenge(envelope, env, providerOverride) })
+        if (envelope && typeof envelope === "object" && (envelope as { type?: unknown }).type === "url_verification") {
+          const challenge = await verifyFeishuChallenge(envelope, env, providerOverride)
+          logWebhookDisposition({
+            provider: provider.provider,
+            correlationId,
+            disposition: "challenge",
+          })
+          return Response.json({ challenge })
+        }
         if (
           envelope &&
           typeof envelope === "object" &&
@@ -363,8 +383,15 @@ function createWebhookHandler(
           } catch {
             // Ordinary events are deliberately authenticated from the exact raw body.
           }
-          if (object(clear)?.type === "url_verification")
-            return Response.json({ challenge: await verifyFeishuChallenge(envelope, env, providerOverride) })
+          if (object(clear)?.type === "url_verification") {
+            const challenge = await verifyFeishuChallenge(envelope, env, providerOverride)
+            logWebhookDisposition({
+              provider: provider.provider,
+              correlationId,
+              disposition: "challenge",
+            })
+            return Response.json({ challenge })
+          }
         }
         const timestamp = request.headers.get("x-lark-request-timestamp")
         const nonce = request.headers.get("x-lark-request-nonce")
@@ -381,13 +408,22 @@ function createWebhookHandler(
           typeof (envelope as { encrypt?: unknown }).encrypt !== "string"
         )
           throw new WebhookError("MALFORMED", 400)
-        const normalized = await normalizeAuthorizedEvent(
+        const classified = await normalizeAuthorizedEventResult(
           await decrypt((envelope as { encrypt: string }).encrypt, provider.encryptKey),
           env,
           principal,
           providerOverride,
         )
-        if (!normalized) return new Response(null, { status: 200 })
+        if (classified.kind === "unsupported") {
+          logWebhookDisposition({
+            provider: provider.provider,
+            correlationId,
+            disposition: "unsupported_event",
+            reason: classified.reason,
+          })
+          return new Response(null, { status: 200 })
+        }
+        const normalized = classified.event
         if (recorder) {
           if (!normalized.principalKey) throw new WebhookError("UNAVAILABLE", 503)
           await recorder.upsertPrincipalScope(normalized.principalKey, normalized.scopeId)
@@ -395,11 +431,26 @@ function createWebhookHandler(
         const { principalKey: _principalKey, ...queueSafe } = normalized
         const item: InboundMessageV1 = { schema: INBOUND_MESSAGE_WIRE_SCHEMA, correlationId, ...queueSafe }
         if (bytes(JSON.stringify(item)).byteLength > QUEUE_LIMIT) throw new WebhookError("TOO_LARGE", 413)
+        logWebhookDisposition({
+          provider: provider.provider,
+          correlationId,
+          disposition: "queue_publish_begin",
+        })
         try {
           await env.FEISHU_INGRESS_QUEUE.send(item)
         } catch {
+          logWebhookDisposition({
+            provider: provider.provider,
+            correlationId,
+            disposition: "queue_publish_failed",
+          })
           throw new WebhookError("UNAVAILABLE", 503)
         }
+        logWebhookDisposition({
+          provider: provider.provider,
+          correlationId,
+          disposition: "queue_publish_success",
+        })
         return new Response(null, { status: 200 })
       } catch (error) {
         const safe = error instanceof WebhookError ? error : new WebhookError("UNAVAILABLE", 503)

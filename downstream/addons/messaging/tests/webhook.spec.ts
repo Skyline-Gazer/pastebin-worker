@@ -584,11 +584,7 @@ describe("Feishu Queue consumer", () => {
   })
 })
 
-function receivePostContent(body: {
-  title?: string
-  content: unknown
-  content_v2?: unknown
-}): string {
+function receivePostContent(body: { title?: string; content: unknown; content_v2?: unknown }): string {
   return JSON.stringify(body)
 }
 
@@ -659,7 +655,8 @@ describe("FT-04 Markdown inbound RED contracts (#151)", () => {
     const normalized = await normalizeAuthorizedEvent(event(), secrets)
     expect(normalized).toMatchObject({ content: " hello\nworld " })
     const result = await normalizeAuthorizedEventResult(event(), secrets)
-    expect(result).toEqual({ kind: "accepted", event: expect.objectContaining({ content: " hello\nworld " }) })
+    expect(result.kind).toBe("accepted")
+    if (result.kind === "accepted") expect(result.event).toMatchObject({ content: " hello\nworld " })
 
     const send = vi.fn().mockResolvedValue(undefined)
     const env: FeishuWebhookEnvironment = {
@@ -681,7 +678,8 @@ describe("FT-04 Markdown inbound RED contracts (#151)", () => {
     expect(normalized?.content).toBe(source)
     expect(normalized?.content).not.toContain("```")
     const classified = await normalizeAuthorizedEventResult(payload, secrets)
-    expect(classified).toEqual({ kind: "accepted", event: expect.objectContaining({ content: source }) })
+    expect(classified.kind).toBe("accepted")
+    if (classified.kind === "accepted") expect(classified.event).toMatchObject({ content: source })
 
     const send = vi.fn().mockResolvedValue(undefined)
     const env: FeishuWebhookEnvironment = {
@@ -698,7 +696,7 @@ describe("FT-04 Markdown inbound RED contracts (#151)", () => {
   it("C: multiline Markdown code block preserves exact line boundaries without fences", async () => {
     const source = "# Tasks\n\n- [ ] Build VM\n- [x] Configure NAS"
     const classified = await normalizeAuthorizedEventResult(codeBlockEvent(source), secrets)
-    expect(classified).toEqual({ kind: "accepted", event: expect.objectContaining({ content: source }) })
+    expect(classified.kind).toBe("accepted")
     if (classified.kind !== "accepted") throw new Error("expected accepted")
     expect(classified.event.content).toBe(source)
     expect(classified.event.content).not.toContain("```")
@@ -721,8 +719,10 @@ describe("FT-04 Markdown inbound RED contracts (#151)", () => {
       FEISHU_INGRESS_QUEUE: { send },
       FEISHU_INGRESS_DLQ_CONFIGURED: "true",
     }
-    expect((await createFeishuWebhookHandler(env).fetch(await signedRequest({ encrypt: await encrypted(payload) }, env)))
-      .status).toBe(200)
+    expect(
+      (await createFeishuWebhookHandler(env).fetch(await signedRequest({ encrypt: await encrypted(payload) }, env)))
+        .status,
+    ).toBe(200)
     expect(send).not.toHaveBeenCalled()
   })
 
@@ -730,10 +730,7 @@ describe("FT-04 Markdown inbound RED contracts (#151)", () => {
     const payload = codeBlockEvent("a", {
       content: receivePostContent({
         title: "",
-        content: [
-          [{ tag: "code_block", text: "a" }],
-          [{ tag: "code_block", text: "b" }],
-        ],
+        content: [[{ tag: "code_block", text: "a" }], [{ tag: "code_block", text: "b" }]],
       }),
     })
     await expect(normalizeAuthorizedEventResult(payload, secrets)).resolves.toEqual({
@@ -746,10 +743,7 @@ describe("FT-04 Markdown inbound RED contracts (#151)", () => {
     const payload = codeBlockEvent("a", {
       content: receivePostContent({
         title: "",
-        content: [
-          [{ tag: "code_block", text: "a" }],
-          [{ tag: "text", text: "more" }],
-        ],
+        content: [[{ tag: "code_block", text: "a" }], [{ tag: "text", text: "more" }]],
       }),
     })
     await expect(normalizeAuthorizedEventResult(payload, secrets)).resolves.toEqual({
@@ -762,10 +756,7 @@ describe("FT-04 Markdown inbound RED contracts (#151)", () => {
     const payload = codeBlockEvent("a", {
       content: receivePostContent({
         title: "",
-        content: [
-          [{ tag: "code_block", text: "a" }],
-          [{ tag: "img", image_key: "img_1" }],
-        ],
+        content: [[{ tag: "code_block", text: "a" }], [{ tag: "img", image_key: "img_1" }]],
       }),
     })
     await expect(normalizeAuthorizedEventResult(payload, secrets)).resolves.toEqual({
@@ -797,23 +788,26 @@ describe("FT-04 Markdown inbound RED contracts (#151)", () => {
   })
 
   it("J: bot/app sender is UNSUPPORTED_SENDER_TYPE", async () => {
-    await expect(
-      normalizeAuthorizedEventResult(codeBlockEvent("x", { sender_type: "bot" }), secrets),
-    ).resolves.toEqual({
-      kind: "unsupported",
-      reason: "UNSUPPORTED_SENDER_TYPE",
-    })
-    await expect(
-      normalizeAuthorizedEventResult(codeBlockEvent("x", { sender_type: "app" }), secrets),
-    ).resolves.toEqual({
-      kind: "unsupported",
-      reason: "UNSUPPORTED_SENDER_TYPE",
-    })
+    await expect(normalizeAuthorizedEventResult(codeBlockEvent("x", { sender_type: "bot" }), secrets)).resolves.toEqual(
+      {
+        kind: "unsupported",
+        reason: "UNSUPPORTED_SENDER_TYPE",
+      },
+    )
+    await expect(normalizeAuthorizedEventResult(codeBlockEvent("x", { sender_type: "app" }), secrets)).resolves.toEqual(
+      {
+        kind: "unsupported",
+        reason: "UNSUPPORTED_SENDER_TYPE",
+      },
+    )
   })
 
   it("K: wrong message_type is UNSUPPORTED_MESSAGE_TYPE", async () => {
     await expect(
-      normalizeAuthorizedEventResult(codeBlockEvent("x", { message_type: "image", content: '{"image_key":"img"}' }), secrets),
+      normalizeAuthorizedEventResult(
+        codeBlockEvent("x", { message_type: "image", content: '{"image_key":"img"}' }),
+        secrets,
+      ),
     ).resolves.toEqual({
       kind: "unsupported",
       reason: "UNSUPPORTED_MESSAGE_TYPE",
@@ -829,8 +823,10 @@ describe("FT-04 Markdown inbound RED contracts (#151)", () => {
       FEISHU_INGRESS_QUEUE: { send },
       FEISHU_INGRESS_DLQ_CONFIGURED: "true",
     }
-    expect((await createFeishuWebhookHandler(env).fetch(await signedRequest({ encrypt: await encrypted(payload) }, env)))
-      .status).toBe(400)
+    expect(
+      (await createFeishuWebhookHandler(env).fetch(await signedRequest({ encrypt: await encrypted(payload) }, env)))
+        .status,
+    ).toBe(400)
     expect(send).not.toHaveBeenCalled()
   })
 

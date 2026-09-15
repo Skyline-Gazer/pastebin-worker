@@ -1,6 +1,6 @@
 # PLAN — Markdown-first inbound (native code block + webhook disposition)
 
-Status: **PLAN ONLY**. No SPEC. No application code. No production mutation.
+Status: **PLAN APPROVED FOR SPEC**. SPEC draft: [ft04-markdown-inbound-spec.md](ft04-markdown-inbound-spec.md). No application code. No production mutation.
 
 Tracking: [#151](https://github.com/Skyline-Gazer/pastebin-worker/issues/151). Parent Function Test: [#149](https://github.com/Skyline-Gazer/pastebin-worker/issues/149). Architecture context only: [#146](https://github.com/Skyline-Gazer/pastebin-worker/issues/146). Checkbox shorthand (not in this implementation): [#153](https://github.com/Skyline-Gazer/pastebin-worker/issues/153).
 

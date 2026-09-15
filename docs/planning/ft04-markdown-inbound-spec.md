@@ -196,11 +196,11 @@ Byte-for-byte identical.
 
 ### 4.1 OWNER_VISIBLE_TEXT vs PROVIDER_MARKDOWN_SOURCE vs STORED_PASTE_BODY
 
-| Concept                     | Meaning                                                                                          |
-| --------------------------- | ------------------------------------------------------------------------------------------------ |
-| `OWNER_VISIBLE_TEXT`        | Glyphs the owner sees / intends while composing in Feishu native Code Block UI                   |
-| `PROVIDER_MARKDOWN_SOURCE`  | Authoritative `code_block.text` (or plain `content.text`) after webhook JSON decode              |
-| `STORED_PASTE_BODY`         | Bytes persisted via Paste create and returned by public GET                                      |
+| Concept                    | Meaning                                                                             |
+| -------------------------- | ----------------------------------------------------------------------------------- |
+| `OWNER_VISIBLE_TEXT`       | Glyphs the owner sees / intends while composing in Feishu native Code Block UI      |
+| `PROVIDER_MARKDOWN_SOURCE` | Authoritative `code_block.text` (or plain `content.text`) after webhook JSON decode |
+| `STORED_PASTE_BODY`        | Bytes persisted via Paste create and returned by public GET                         |
 
 Required invariant (application must not transform):
 

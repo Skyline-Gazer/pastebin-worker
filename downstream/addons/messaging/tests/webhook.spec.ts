@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { resolveProviderConfig } from "../worker/platform"
 import {
   createFeishuWebhookHandler,
@@ -6,6 +6,7 @@ import {
   consumeFeishuMessages,
   deriveMessageIdentity,
   normalizeAuthorizedEvent,
+  normalizeAuthorizedEventResult,
   type FeishuWebhookEnvironment,
   verifyFeishuChallenge,
 } from "../worker/webhook"
@@ -580,5 +581,339 @@ describe("Feishu Queue consumer", () => {
       false,
     )
     expect(actions).toContain("dlq-retry")
+  })
+})
+
+function receivePostContent(body: { title?: string; content: unknown; content_v2?: unknown }): string {
+  return JSON.stringify(body)
+}
+
+function codeBlockEvent(
+  text: string,
+  overrides: {
+    language?: string
+    title?: string
+    chat_type?: string
+    sender_type?: string
+    message_type?: string
+    content?: string
+    headerEventType?: string
+  } = {},
+) {
+  const node: Record<string, unknown> = { tag: "code_block", text }
+  if (overrides.language !== undefined) node.language = overrides.language
+  const post = {
+    title: overrides.title ?? "",
+    content: [[node]],
+  }
+  return event({
+    ...(overrides.headerEventType
+      ? {
+          header: {
+            event_type: overrides.headerEventType,
+            app_id: "cli_phase4",
+            tenant_key: "tenant-a",
+            event_id: "evt-1",
+            token: "verification-token",
+          },
+        }
+      : {}),
+    event: {
+      sender: {
+        sender_type: overrides.sender_type ?? "user",
+        sender_id: { open_id: "ou_1" },
+      },
+      message: {
+        chat_type: overrides.chat_type ?? "p2p",
+        message_type: overrides.message_type ?? "post",
+        message_id: "om_1",
+        chat_id: "oc_1",
+        content: overrides.content ?? receivePostContent(post),
+      },
+    },
+  })
+}
+
+function captureWebhookLogs() {
+  const lines: string[] = []
+  const spy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+    lines.push(args.map(String).join(" "))
+  })
+  return {
+    lines,
+    restore: () => spy.mockRestore(),
+    joined: () => lines.join("\n"),
+  }
+}
+
+describe("FT-04 Markdown inbound RED contracts (#151)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("A: existing P2P text still normalizes and queues once with exact content", async () => {
+    const normalized = await normalizeAuthorizedEvent(event(), secrets)
+    expect(normalized).toMatchObject({ content: " hello\nworld " })
+    const result = await normalizeAuthorizedEventResult(event(), secrets)
+    expect(result.kind).toBe("accepted")
+    if (result.kind === "accepted") expect(result.event).toMatchObject({ content: " hello\nworld " })
+
+    const send = vi.fn().mockResolvedValue(undefined)
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    const handler = createFeishuWebhookHandler(env)
+    expect((await handler.fetch(await signedRequest({ encrypt: await encrypted(event()) }, env))).status).toBe(200)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0][0]).toMatchObject({ content: " hello\nworld " })
+  })
+
+  it("B: native single code_block FT_CREATE_20260912_01 queues once with exact MarkdownSource", async () => {
+    const source = "FT_CREATE_20260912_01"
+    const payload = codeBlockEvent(source, { language: "TEXT" })
+    const normalized = await normalizeAuthorizedEvent(payload, secrets)
+    expect(normalized).not.toBeNull()
+    expect(normalized?.content).toBe(source)
+    expect(normalized?.content).not.toContain("```")
+    const classified = await normalizeAuthorizedEventResult(payload, secrets)
+    expect(classified.kind).toBe("accepted")
+    if (classified.kind === "accepted") expect(classified.event).toMatchObject({ content: source })
+
+    const send = vi.fn().mockResolvedValue(undefined)
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    const handler = createFeishuWebhookHandler(env)
+    expect((await handler.fetch(await signedRequest({ encrypt: await encrypted(payload) }, env))).status).toBe(200)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0][0]).toMatchObject({ content: source })
+  })
+
+  it("C: multiline Markdown code block preserves exact line boundaries without fences", async () => {
+    const source = "# Tasks\n\n- [ ] Build VM\n- [x] Configure NAS"
+    const classified = await normalizeAuthorizedEventResult(codeBlockEvent(source), secrets)
+    expect(classified.kind).toBe("accepted")
+    if (classified.kind !== "accepted") throw new Error("expected accepted")
+    expect(classified.event.content).toBe(source)
+    expect(classified.event.content).not.toContain("```")
+  })
+
+  it("D: paragraph-only rich post is unsupported with UNSUPPORTED_POST_STRUCTURE", async () => {
+    const payload = codeBlockEvent("ignored", {
+      content: receivePostContent({
+        title: "",
+        content: [[{ tag: "text", text: "hello" }]],
+      }),
+    })
+    await expect(normalizeAuthorizedEventResult(payload, secrets)).resolves.toEqual({
+      kind: "unsupported",
+      reason: "UNSUPPORTED_POST_STRUCTURE",
+    })
+    const send = vi.fn()
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    expect(
+      (await createFeishuWebhookHandler(env).fetch(await signedRequest({ encrypt: await encrypted(payload) }, env)))
+        .status,
+    ).toBe(200)
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it("E: multiple code blocks are unsupported", async () => {
+    const payload = codeBlockEvent("a", {
+      content: receivePostContent({
+        title: "",
+        content: [[{ tag: "code_block", text: "a" }], [{ tag: "code_block", text: "b" }]],
+      }),
+    })
+    await expect(normalizeAuthorizedEventResult(payload, secrets)).resolves.toEqual({
+      kind: "unsupported",
+      reason: "UNSUPPORTED_POST_STRUCTURE",
+    })
+  })
+
+  it("F: code block + text is unsupported", async () => {
+    const payload = codeBlockEvent("a", {
+      content: receivePostContent({
+        title: "",
+        content: [[{ tag: "code_block", text: "a" }], [{ tag: "text", text: "more" }]],
+      }),
+    })
+    await expect(normalizeAuthorizedEventResult(payload, secrets)).resolves.toEqual({
+      kind: "unsupported",
+      reason: "UNSUPPORTED_POST_STRUCTURE",
+    })
+  })
+
+  it("G: code block + image/resource is unsupported", async () => {
+    const payload = codeBlockEvent("a", {
+      content: receivePostContent({
+        title: "",
+        content: [[{ tag: "code_block", text: "a" }], [{ tag: "img", image_key: "img_1" }]],
+      }),
+    })
+    await expect(normalizeAuthorizedEventResult(payload, secrets)).resolves.toEqual({
+      kind: "unsupported",
+      reason: "UNSUPPORTED_POST_STRUCTURE",
+    })
+  })
+
+  it("H: unknown node/tag is unsupported", async () => {
+    const payload = codeBlockEvent("a", {
+      content: receivePostContent({
+        title: "",
+        content: [[{ tag: "unknown_widget", text: "x" }]],
+      }),
+    })
+    await expect(normalizeAuthorizedEventResult(payload, secrets)).resolves.toEqual({
+      kind: "unsupported",
+      reason: "UNSUPPORTED_POST_STRUCTURE",
+    })
+  })
+
+  it("I: group code-block message is UNSUPPORTED_CHAT_TYPE", async () => {
+    await expect(normalizeAuthorizedEventResult(codeBlockEvent("x", { chat_type: "group" }), secrets)).resolves.toEqual(
+      {
+        kind: "unsupported",
+        reason: "UNSUPPORTED_CHAT_TYPE",
+      },
+    )
+  })
+
+  it("J: bot/app sender is UNSUPPORTED_SENDER_TYPE", async () => {
+    await expect(normalizeAuthorizedEventResult(codeBlockEvent("x", { sender_type: "bot" }), secrets)).resolves.toEqual(
+      {
+        kind: "unsupported",
+        reason: "UNSUPPORTED_SENDER_TYPE",
+      },
+    )
+    await expect(normalizeAuthorizedEventResult(codeBlockEvent("x", { sender_type: "app" }), secrets)).resolves.toEqual(
+      {
+        kind: "unsupported",
+        reason: "UNSUPPORTED_SENDER_TYPE",
+      },
+    )
+  })
+
+  it("K: wrong message_type is UNSUPPORTED_MESSAGE_TYPE", async () => {
+    await expect(
+      normalizeAuthorizedEventResult(
+        codeBlockEvent("x", { message_type: "image", content: '{"image_key":"img"}' }),
+        secrets,
+      ),
+    ).resolves.toEqual({
+      kind: "unsupported",
+      reason: "UNSUPPORTED_MESSAGE_TYPE",
+    })
+  })
+
+  it("L: malformed native-code-block structure fails closed without queue", async () => {
+    const payload = codeBlockEvent("x", { content: "{not-json" })
+    await expect(normalizeAuthorizedEventResult(payload, secrets)).rejects.toMatchObject({ code: "MALFORMED" })
+    const send = vi.fn()
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    expect(
+      (await createFeishuWebhookHandler(env).fetch(await signedRequest({ encrypt: await encrypted(payload) }, env)))
+        .status,
+    ).toBe(400)
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it("M: extracted Markdown over TEXT_LIMIT is rejected with existing semantics", async () => {
+    const huge = "x".repeat(100_001)
+    await expect(normalizeAuthorizedEventResult(codeBlockEvent(huge), secrets)).rejects.toMatchObject({
+      code: "UNSUPPORTED",
+    })
+  })
+
+  it("N: queue send rejection yields HTTP 503 and queue_publish_failed disposition", async () => {
+    const logs = captureWebhookLogs()
+    const send = vi.fn().mockRejectedValue(new Error("queue down — must not appear"))
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    const payload = codeBlockEvent("FT_CREATE_20260912_01")
+    const response = await createFeishuWebhookHandler(env).fetch(
+      await signedRequest({ encrypt: await encrypted(payload) }, env),
+    )
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({ code: "UNAVAILABLE" })
+    expect(logs.joined()).toContain("WEBHOOK_DISPOSITION=queue_publish_failed")
+    expect(logs.joined()).not.toContain("queue down")
+    logs.restore()
+  })
+
+  it("O: success path emits queue_publish_begin then queue_publish_success", async () => {
+    const logs = captureWebhookLogs()
+    const send = vi.fn().mockResolvedValue(undefined)
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    const payload = codeBlockEvent("FT_CREATE_20260912_01")
+    expect(
+      (await createFeishuWebhookHandler(env).fetch(await signedRequest({ encrypt: await encrypted(payload) }, env)))
+        .status,
+    ).toBe(200)
+    const joined = logs.joined()
+    const begin = joined.indexOf("WEBHOOK_DISPOSITION=queue_publish_begin")
+    const success = joined.indexOf("WEBHOOK_DISPOSITION=queue_publish_success")
+    expect(begin).toBeGreaterThanOrEqual(0)
+    expect(success).toBeGreaterThan(begin)
+    logs.restore()
+  })
+
+  it("P: disposition logs never leak body, tokens, tenant, or open identifiers", async () => {
+    const logs = captureWebhookLogs()
+    const send = vi.fn().mockResolvedValue(undefined)
+    const env: FeishuWebhookEnvironment = {
+      ...secrets,
+      FEISHU_INGRESS_QUEUE: { send },
+      FEISHU_INGRESS_DLQ_CONFIGURED: "true",
+    }
+    const source = "FT_CREATE_20260912_01"
+    const payload = codeBlockEvent(source)
+    await createFeishuWebhookHandler(env).fetch(await signedRequest({ encrypt: await encrypted(payload) }, env))
+    await createFeishuWebhookHandler(env).fetch(
+      new Request("https://worker/api/feishu/events", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "url_verification", token: "verification-token", challenge: "abc" }),
+      }),
+    )
+    const unsupported = codeBlockEvent("x", {
+      content: receivePostContent({ title: "", content: [[{ tag: "text", text: "nope" }]] }),
+    })
+    await createFeishuWebhookHandler(env).fetch(await signedRequest({ encrypt: await encrypted(unsupported) }, env))
+    const joined = logs.joined()
+    expect(joined).toContain("WEBHOOK_DISPOSITION=challenge")
+    expect(joined).toContain("WEBHOOK_DISPOSITION=unsupported_event")
+    expect(joined).toContain("reason=UNSUPPORTED_POST_STRUCTURE")
+    for (const forbidden of [
+      source,
+      "hello\nworld",
+      secrets.FEISHU_ENCRYPT_KEY,
+      secrets.FEISHU_VERIFICATION_TOKEN,
+      "tenant-a",
+      "ou_1",
+      "oc_1",
+      "om_1",
+    ])
+      expect(joined).not.toContain(forbidden)
+    logs.restore()
   })
 })

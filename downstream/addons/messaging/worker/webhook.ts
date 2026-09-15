@@ -34,6 +34,17 @@ export interface AuthorizedInboundEvent extends Omit<InboundMessageV1, "schema" 
 /** @deprecated Use AuthorizedInboundEvent */
 export type AuthorizedFeishuEvent = AuthorizedInboundEvent
 
+export type UnsupportedInboundReason =
+  | "UNSUPPORTED_EVENT_TYPE"
+  | "UNSUPPORTED_SENDER_TYPE"
+  | "UNSUPPORTED_CHAT_TYPE"
+  | "UNSUPPORTED_MESSAGE_TYPE"
+  | "UNSUPPORTED_POST_STRUCTURE"
+
+export type NormalizeAuthorizedResult =
+  | { kind: "accepted"; event: AuthorizedInboundEvent }
+  | { kind: "unsupported"; reason: UnsupportedInboundReason }
+
 export interface MessagingWebhookEnvironment extends ProviderCredentialEnvironment {
   FEISHU_INGRESS_QUEUE: { send(message: InboundMessageV1): Promise<void> }
   /** Deployment validation marker: a consumer must have a configured DLQ. */
@@ -217,6 +228,20 @@ export async function deriveMessageIdentity(
     recordKey,
     requestId: `${provider}:v1:create:${await digest(JSON.stringify([scopeId, recordKey]))}`,
   }
+}
+
+export async function normalizeAuthorizedEventResult(
+  value: unknown,
+  env: ProviderCredentialEnvironment,
+  principal?: (appId: string, tenantKey: string, openId: string) => Promise<string>,
+  provider?: Platform,
+): Promise<NormalizeAuthorizedResult> {
+  // RED harness: real classification lands in the implementation commit.
+  void value
+  void env
+  void principal
+  void provider
+  throw new WebhookError("UNAVAILABLE", 503)
 }
 
 export async function normalizeAuthorizedEvent(

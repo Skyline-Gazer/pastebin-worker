@@ -383,10 +383,23 @@ No mutation.
 - no pending mutation for target
 - no `reconciliation_required` for target
 
+Capture exact pre-action baselines for every PASS delta (required evidence; do not invent missing counters after the click):
+
+```text
+OPERATIONS_TOTAL_BEFORE=<n>
+RESTORE_PERMANENT_SUCCEEDED_TOTAL_BEFORE=<n>
+TARGET_RESTORE_PERMANENT_COUNT_BEFORE=0
+RECONCILIATION_REQUIRED_TOTAL_BEFORE=<n>
+TARGET_RECONCILIATION_COUNT_BEFORE=0
+BINDINGS_TOTAL_BEFORE=<n>
+CREATE_SUCCEEDED_TOTAL_BEFORE=<n>
+TARGET_VERSION_BEFORE=2
+```
+
 ### QUEUE
 
 - DLQ healthy
-- DLQ baseline captured
+- DLQ baseline captured as `DLQ_BASELINE=<n>` (expected `0` unless continuity evidence shows otherwise)
 
 ARM return token on success:
 

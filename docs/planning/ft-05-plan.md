@@ -32,12 +32,12 @@ Do not generate duplicate production events merely to prove idempotency.
 
 Supporting durable references (sequencing / fixture preservation only; they do **not** redefine FT-05 as archive/lifecycle):
 
-| Source | Relevance |
-| ------ | --------- |
-| Owner instruction `START PRODUCTION FUNCTION TEST` (2026-09-12) | Canonical FT-01…FT-15 list; FT-05 text above |
-| [#149](https://github.com/Skyline-Gazer/pastebin-worker/issues/149) | FT-04 complete; out-of-scope note “FT-05 through FT-15”; Paste retained for later lifecycle |
-| [ft-04-plan.md](ft-04-plan.md) / [ft-04-spec.md](ft-04-spec.md) | FT-04 entry is input for later **lifecycle** tests (FT-06+); do not auto-start FT-05; do not archive/restore/delete in FT-04 |
-| Closed [#132](https://github.com/Skyline-Gazer/pastebin-worker/issues/132) | Remediation umbrella before lifecycle testing; does not redefine FT-05 |
+| Source                                                                     | Relevance                                                                                                                    |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Owner instruction `START PRODUCTION FUNCTION TEST` (2026-09-12)            | Canonical FT-01…FT-15 list; FT-05 text above                                                                                 |
+| [#149](https://github.com/Skyline-Gazer/pastebin-worker/issues/149)        | FT-04 complete; out-of-scope note “FT-05 through FT-15”; Paste retained for later lifecycle                                  |
+| [ft-04-plan.md](ft-04-plan.md) / [ft-04-spec.md](ft-04-spec.md)            | FT-04 entry is input for later **lifecycle** tests (FT-06+); do not auto-start FT-05; do not archive/restore/delete in FT-04 |
+| Closed [#132](https://github.com/Skyline-Gazer/pastebin-worker/issues/132) | Remediation umbrella before lifecycle testing; does not redefine FT-05                                                       |
 
 No prior `docs/planning/ft-05-*.md` existed on `downstream/main` at `ae491a185d428a0f506505f6c7c428ebba04b6f3`.
 

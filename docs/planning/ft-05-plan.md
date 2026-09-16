@@ -1,8 +1,14 @@
 # FT-05 PLAN — Idempotency / duplicate delivery protection
 
-Status: **PLAN DRAFT — OWNER APPROVAL REQUIRED BEFORE SPEC/EXECUTION**.
+Status: **PLAN APPROVED** (owner `OWNER_APPROVAL: FT05_PLAN`).
+
+```text
+APPROVED_PLAN_HEAD=43463c4f26e5f0434131e0dedccaab806272cbcf
+```
 
 Tracking: [#157](https://github.com/Skyline-Gazer/pastebin-worker/issues/157). Parent Function Test sequence: owner instruction `START PRODUCTION FUNCTION TEST` (2026-09-12). FT-04 tracker [#149](https://github.com/Skyline-Gazer/pastebin-worker/issues/149) **CLOSED** (`FT04_PASS=YES`).
+
+SPEC: [ft-05-spec.md](ft-05-spec.md) (same planning PR; SPEC approval / execution still required separately).
 
 This PLAN does **not** authorize FT-05 execution, webhook/queue replay, D1 mutation, Paste mutation, deploy, P2P, or FT-06+.
 
@@ -154,7 +160,7 @@ FT-05 does **not** archive/restore/delete that Paste. It may **read** D1/operati
 
 ## Next workflow stage
 
-Owner approval of this PLAN → SPEC (`docs/planning/ft-05-spec.md`) → owner SPEC approval → execution authorization.
+PLAN approved at `43463c4f26e5f0434131e0dedccaab806272cbcf` → SPEC in [ft-05-spec.md](ft-05-spec.md) awaiting owner review → owner SPEC approval → execution authorization.
 
 ```text
 FT05_STARTED=NO

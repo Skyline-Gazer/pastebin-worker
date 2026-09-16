@@ -1,6 +1,6 @@
 # FT-06 PLAN — Single permanent archive
 
-Status: **PLAN DRAFT — OWNER APPROVAL REQUIRED BEFORE SPEC/EXECUTION**.
+Status: **PLAN APPROVED** (`OWNER_APPROVAL: FT06_PLAN`).
 
 ```text
 PLANNING_CLASSIFICATION=FIXTURE_CORRECTED_DEDICATED_LIFECYCLE_FIXTURE
@@ -9,11 +9,14 @@ FT06_HISTORICAL_FIXTURE_DESIGN_MISMATCH=CONFIRMED
 OWNER_CORRECTION_SCOPE=FIXTURE_ONLY
 FT04_PASTE_PRESERVED=YES
 LIFECYCLE_FIXTURE_SOURCE_PENDING=YES
+APPROVED_PLAN_HEAD=82840e4769213055a37e6b4331ecb07762d6bd7b
 FT06_STARTED=NO
 PRODUCTION_MUTATION=NO
 ```
 
 Tracking: [#160](https://github.com/Skyline-Gazer/pastebin-worker/issues/160). Parent Function Test sequence: owner instruction `START PRODUCTION FUNCTION TEST` (2026-09-12). FT-04 / FT-05 complete. Non-blocking #159 and separate #153 remain out of scope.
+
+SPEC: [ft-06-spec.md](ft-06-spec.md) (same planning PR; SPEC approval and later stage-specific execution authorizations still required separately).
 
 This PLAN does **not** authorize FT06_SETUP P2P, FT-06 archive execution, UI clicks, lifecycle API calls, D1 writes, Paste updates, deploy, or FT-07+.
 
@@ -475,4 +478,4 @@ Forbidden now: lifecycle fixture P2P; archive checkbox/menu; lifecycle POST; D1 
 
 ## Next workflow stage
 
-Owner approval of this amended PLAN → SPEC (covering FT06_SETUP + FT06_EXECUTION gates) → separate production authorizations for setup then archive. No SPEC in this amendment turn.
+PLAN approved at `82840e4769213055a37e6b4331ecb07762d6bd7b` → SPEC in [ft-06-spec.md](ft-06-spec.md) awaiting owner review → separate production authorizations for `FT06_SETUP` then `FT06_EXECUTION`.

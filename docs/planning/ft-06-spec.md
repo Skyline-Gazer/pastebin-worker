@@ -312,10 +312,10 @@ Source order must remain:
 
 ```text
 request duplicate lookup
-→ binding/lifecycle validation
+→ binding lookup
 → PasteClient.read(existing paste)
 → completeManagedTask([ ] → [x]) or MANAGED_TASK_AMBIGUOUS stop
-→ reserveCompletion
+→ reserveCompletion (active + permanent + expires_at NULL validation)
 → dispatch
 → PasteClient.update(..., "never")
 → finishCompletion

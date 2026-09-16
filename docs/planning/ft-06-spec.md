@@ -181,7 +181,10 @@ Identity model for setup create remains the approved FT-05 contract:
 - DLQ delta = `0`
 - public GET `200`
 - body equals provider MarkdownSource byte-for-byte
-- body contains exactly one valid top-level unchecked GFM task
+- body satisfies the archive managed-task precondition exactly:
+  - exactly one non-fenced top-level unchecked GFM task
+  - the task list marker starts at column zero
+  - no second top-level unchecked task candidate
 - frontend Active list contains target fixture
 - frontend renders exactly one interactive unchecked task
 - lifecycle state = `active` / `permanent`

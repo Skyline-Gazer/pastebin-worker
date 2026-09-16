@@ -579,3 +579,75 @@ Not authorized by this SPEC draft alone:
 - Worker deploy/traffic change
 - FT-08+
 - any mutation of `7Zf3ZDjmyj2dQMWpSwfc7CK8`
+
+## 22. Compatibility
+
+```text
+COMPATIBILITY_CLASS=PRODUCTION_FUNCTION_TEST_OF_SHIPPED_RESTORE
+CODE_CHANGE_IN_FT07=NO
+SCHEMA_MIGRATION_IN_FT07=NO
+UPSTREAM_PATCH_IN_FT07=NO
+```
+
+FT-07 exercises already-shipped permanent restore against the FT-06 result fixture. It MUST NOT:
+
+- alter restore API contracts;
+- alter D1 schema;
+- alter managed-task matcher/transform semantics;
+- introduce timed-restore expiry-cancel on the permanent path;
+- mutate historical FT-04 evidence Paste `7Zf3ZDjmyj2dQMWpSwfc7CK8`.
+
+Backward compatibility expectation: after PASS, Active permanent entry with unchecked managed task remains valid input for FT-08 (timed archive) without fixture recreation.
+
+## 23. Test specification
+
+This is a production Function Test SPEC, not a product-implementation SPEC. Mapping:
+
+| Behavior                                                                                                                | Evidence class                                                                                                       | When                                 |
+| ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Pre-ARM LIVE/TARGET/BODY/FRONTEND/OPERATIONS/QUEUE gates                                                                | read-only production observation                                                                                     | `FT07_PRE_ARM`                       |
+| `restoreManagedTask` exact `[x]`→`[ ]` byte transform                                                                   | public Paste GET before/after + unit regression already covering matcher                                             | execution observe                    |
+| `POST /api/entries/:id/restore` empty body + Idempotency-Key                                                            | frontend network / sanitized op evidence                                                                             | execution observe                    |
+| `restore_permanent` fingerprint / reservation-before-update                                                             | D1 operation row + live Worker version continuity                                                                    | execution observe                    |
+| D1 visibility/active + version 2→3                                                                                      | D1 binding read                                                                                                      | execution observe                    |
+| Paste in-place `e=never` update, no new Paste                                                                           | public GET + create-op delta=0                                                                                       | execution observe                    |
+| Archive→Active frontend transition, unchecked interactive task                                                          | authenticated UI observation                                                                                         | execution observe                    |
+| Idempotency / conflict classes (`REQUEST_CONFLICT`, `VERSION_CONFLICT`, `MUTATION_CONFLICT`, `RECONCILIATION_REQUIRED`) | negative: do **not** force in production; covered by existing automated tests; production STOP classes listed in §18 | tests already shipped / FAIL classes |
+| DLQ unchanged                                                                                                           | queue observation vs `DLQ_BASELINE`                                                                                  | execution observe                    |
+
+Required repository regression posture (already expected green on planning PR; not re-authorized as product work here):
+
+- messaging unit/integration covering `restoreManagedTask`, permanent restore reservation/finish, restore route empty-body contract
+- no new product test suite is required solely to approve this SPEC
+
+Negative production behaviors are fail-closed via §18; they are not intentionally induced during FT-07.
+
+## 24. Open questions
+
+```text
+OPEN_QUESTIONS=NONE
+```
+
+Owner-resolved before SPEC review:
+
+| Topic                                 | Disposition                                                          |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| Target identity                       | `FT07_USES_FT06_RESULT=YES`; `TARGET_PASTE=DMkerQPTisMNhhp8tdQc5Ech` |
+| Historical “content unchanged”        | `SUPERSEDED_BY_MANAGED_TASK_RESTORE_CONTRACT`                        |
+| Confirm dialog                        | none; one **恢复** click is the mutation trigger                     |
+| Timed expiry-cancel on permanent path | not executed                                                         |
+| Batch restore                         | out of scope                                                         |
+| Cleanup                               | `FT07_CLEANUP=NONE`                                                  |
+| FT-08                                 | not started; handoff retains same Paste                              |
+
+Any later ambiguity during Pre-ARM or execution → STOP / `FT07_FAIL_UNRESOLVED` / owner escalation. Do not invent answers in-run.
+
+---
+
+```text
+Status: SPEC READY FOR OWNER REVIEW
+Implementation has NOT started.
+PRODUCTION_MUTATION=NO
+FT07_STARTED=NO
+FT08_STARTED=NO
+```

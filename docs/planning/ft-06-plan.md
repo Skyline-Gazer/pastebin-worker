@@ -335,10 +335,10 @@ Then FT-06 may later authorize exactly **ONE** frontend archive confirmation.
 UI permanent archive confirm
 → POST /api/entries/:id/complete { action: archive_permanent }
 → EntryService.completeEntry
-→ read Paste
-→ completeManagedTask ([ ] → [x])
 → fingerprint(["complete", scopeId, entryId, "archive_permanent"])
 → operation lookup (idempotency)
+→ read Paste
+→ completeManagedTask ([ ] → [x])
 → reserveCompletion (active+permanent only)
 → dispatch
 → PasteClient.update(same paste_name, content, e=never)

@@ -242,7 +242,10 @@ After `FT06_SETUP` PASS and before archive authorization, require read-only proo
 - `retention_mode=permanent`
 - `expires_at=NULL`
 - public GET `200`
-- exact MarkdownSource contains one unchecked top-level task
+- exact MarkdownSource satisfies the archive managed-task precondition:
+  - exactly one non-fenced top-level unchecked GFM task
+  - the task list marker starts at column zero
+  - no second top-level unchecked task candidate
 - frontend renders one interactive unchecked task
 - authenticated Feishu frontend session valid
 - no pending operation

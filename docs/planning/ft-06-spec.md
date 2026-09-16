@@ -237,7 +237,7 @@ This stage begins only after `FT06_SETUP` PASS and a separate owner authorizatio
 After `FT06_SETUP` PASS and before archive authorization, require read-only proof of:
 
 - `TARGET_PASTE` known
-- exactly one binding
+- exactly one binding for the lifecycle fixture target (`TARGET_PASTE`)
 - `visibility=active`
 - `retention_mode=permanent`
 - `expires_at=NULL`

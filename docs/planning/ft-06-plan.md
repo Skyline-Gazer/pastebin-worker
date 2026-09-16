@@ -3,18 +3,23 @@
 Status: **PLAN DRAFT — OWNER APPROVAL REQUIRED BEFORE SPEC/EXECUTION**.
 
 ```text
-PLANNING_CLASSIFICATION=FT06_TARGET_NOT_ARCHIVABLE_AS_CANONICAL_FIXTURE
+PLANNING_CLASSIFICATION=FIXTURE_CORRECTED_DEDICATED_LIFECYCLE_FIXTURE
+FT06_TARGET_NOT_ARCHIVABLE_AS_CANONICAL_FIXTURE=RESOLVED_BY_OWNER_FIXTURE_CORRECTION
+FT06_HISTORICAL_FIXTURE_DESIGN_MISMATCH=CONFIRMED
+OWNER_CORRECTION_SCOPE=FIXTURE_ONLY
+FT04_PASTE_PRESERVED=YES
+LIFECYCLE_FIXTURE_SOURCE_PENDING=YES
 FT06_STARTED=NO
 PRODUCTION_MUTATION=NO
 ```
 
 Tracking: [#160](https://github.com/Skyline-Gazer/pastebin-worker/issues/160). Parent Function Test sequence: owner instruction `START PRODUCTION FUNCTION TEST` (2026-09-12). FT-04 / FT-05 complete. Non-blocking #159 and separate #153 remain out of scope.
 
-This PLAN does **not** authorize FT-06 execution, UI archive clicks, lifecycle API calls, D1 writes, Paste updates, P2P, deploy, or FT-07+.
+This PLAN does **not** authorize FT06_SETUP P2P, FT-06 archive execution, UI clicks, lifecycle API calls, D1 writes, Paste updates, deploy, or FT-07+.
 
 ## 1. Canonical source
 
-Authoritative definition (verbatim intent recovered from the 2026-09-12 production Function Test instruction; not invented in this turn):
+Authoritative historical definition (verbatim intent recovered from the 2026-09-12 production Function Test instruction; retained for provenance):
 
 ```text
 # FT-06 — Single permanent archive
@@ -38,7 +43,7 @@ Verify:
 * no DLQ/reconciliation anomaly
 ```
 
-FT-07 handoff (same instruction; fixture retention):
+FT-07 handoff (same instruction; historical wording retained):
 
 ```text
 # FT-07 — Restore permanent archive
@@ -59,18 +64,68 @@ Supporting durable references (do not redefine FT-06 as timed archive / batch / 
 | Source                                                                     | Relevance                                                  |
 | -------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | Owner instruction `START PRODUCTION FUNCTION TEST` (2026-09-12)            | Canonical FT-01…FT-15; FT-06 / FT-07 text above            |
-| Closed [#149](https://github.com/Skyline-Gazer/pastebin-worker/issues/149) | FT-04 create; retained Paste for later lifecycle           |
+| Closed [#149](https://github.com/Skyline-Gazer/pastebin-worker/issues/149) | FT-04 create; retained Paste for FT-04/FT-05 evidence      |
 | Closed [#157](https://github.com/Skyline-Gazer/pastebin-worker/issues/157) | FT-05 PASS; Paste still active/permanent at completion     |
-| [ft-05-plan.md](ft-05-plan.md) / [ft-05-spec.md](ft-05-spec.md)            | Idempotency complete; FT-06+ owns first lifecycle mutation |
+| [ft-05-plan.md](ft-05-plan.md) / [ft-05-spec.md](ft-05-spec.md)            | Idempotency complete; lifecycle mutation starts at FT-06   |
 | `AGENTS.md` §14                                                            | Permanent archive vs timed archive vs delete product rules |
 | Open [#159](https://github.com/Skyline-Gazer/pastebin-worker/issues/159)   | Non-blocking create-idempotency **test** gap — not FT-06   |
-| Open [#153](https://github.com/Skyline-Gazer/pastebin-worker/issues/153)   | Separate — do not mix                                      |
+| Open [#153](https://github.com/Skyline-Gazer/pastebin-worker/issues/153)   | Separate — do not mix; fixture uses standard `- [ ]` GFM   |
 
-No prior `docs/planning/ft-06-*.md` existed on `downstream/main` at `63b623548e749373716560d13effca24f3be6388`.
+## 1.1 Owner fixture correction
+
+Owner disposition (`OWNER_SCOPE_DECISION: FT06_USE_DEDICATED_LIFECYCLE_FIXTURE`):
+
+```text
+HISTORICAL_TARGET=7Zf3ZDjmyj2dQMWpSwfc7CK8
+HISTORICAL_TARGET_ARCHIVABLE=NO
+FT06_HISTORICAL_FIXTURE_DESIGN_MISMATCH=CONFIRMED_REAL_FIXTURE_CONTRACT_MISMATCH
+DISPOSITION=PRESERVE_HISTORICAL_PASTE_AND_USE_DEDICATED_LIFECYCLE_FIXTURE
+OWNER_CORRECTION_SCOPE=FIXTURE_ONLY
+FT04_PASTE_PRESERVED=YES
+```
+
+### Why
+
+Historical FT sequence said FT-06 uses the FT-04 entry. Retained FT-04 Paste body is:
+
+```text
+FT_CREATE_20260915_02\n
+```
+
+with **zero** top-level unchecked GFM tasks. Current product contract requires permanent archive to complete exactly one managed task (`[ ]` → `[x]` via `completeManagedTask`). Therefore the historical **test-fixture assumption** is incompatible with the product contract.
+
+```text
+CLASSIFY_AS=FT06_HISTORICAL_FIXTURE_DESIGN_MISMATCH
+NOT=runtime archive defect
+NOT=Markdown parser defect
+NOT=#153 shorthand defect
+```
+
+### What this correction overrides
+
+**Fixture identity only.** Executable contract becomes:
+
+> using the dedicated lifecycle fixture created by **FT06_SETUP**, because the retained FT-04 exact-body fixture does not satisfy the managed-task lifecycle precondition.
+
+### What this correction does **not** change
+
+- permanent archive semantics
+- frontend single-item requirement
+- managed task `[ ]` → `[x]`
+- same-Paste update-in-place
+- permanent retention (`e=never`)
+- D1 lifecycle contract
+- single-mutation rule
+- runtime/product code (`completeManagedTask`, `completeEntry`, UI, schema)
+
+```text
+FT06_TARGET_NOT_ARCHIVABLE_AS_CANONICAL_FIXTURE=RESOLVED_BY_OWNER_FIXTURE_CORRECTION
+DO_NOT_REWRITE_FT04_PASTE=YES
+```
 
 ## 2. Purpose
 
-Validate **exactly one** frontend single-item **permanent** archive of the retained FT-04 entry:
+Validate **exactly one** frontend single-item **permanent** archive of the **dedicated lifecycle fixture** (after FT06_SETUP):
 
 - UI succeeds
 - backend succeeds
@@ -80,7 +135,24 @@ Validate **exactly one** frontend single-item **permanent** archive of the retai
 - D1 lifecycle agrees
 - no DLQ / reconciliation anomaly
 
-## 3. Preconditions
+## 3. Stages (must not collapse)
+
+```text
+FT06_SETUP      — one normal Feishu create to establish archivable lifecycle fixture
+FT06_EXECUTION  — one frontend single-item permanent archive of that fixture
+```
+
+FT06_SETUP is **not**: a replay of FT-04; another FT-04 attempt; FT-06 archive itself; FT-07; a synthetic webhook.
+
+Each stage requires its own later explicit production authorization. Until then:
+
+```text
+P2P_SENT=NO
+PRODUCTION_MUTATION=NO
+FT06_STARTED=NO
+```
+
+## 4. Preconditions
 
 ```text
 FT-01 PASS
@@ -97,37 +169,71 @@ pastebin-feishu-prod  4c18eccc-0d80-472f-8d33-349047442fde @ 100%
 pastebin-prod         1d84dbbd-fa52-4b5a-a158-d1dab939d32b @ 100%
 ```
 
-Later ARM (SPEC/execution) MUST also confirm, read-only:
+## 5. Target entry (corrected)
 
-- target binding exists exactly once for the locked Paste
-- visibility=`active`, retention_mode=`permanent`, expires_at NULL
-- no pending / `reconciliation_required` operation on that entry
-- public Paste GET 200
-- authenticated Feishu frontend session usable for the canonical UI surface
-- D1 create/completion baseline; DLQ/backlog healthy
-- no prior succeeded `complete_permanent` for this entry
-
-## 4. Target entry
+### 5.1 Historical FT-04 evidence (immutable; not FT-06 target)
 
 ```text
-TARGET_PASTE=7Zf3ZDjmyj2dQMWpSwfc7CK8
+FT04_PASTE=7Zf3ZDjmyj2dQMWpSwfc7CK8
 PUBLIC_URL=https://pb.223.im/7Zf3ZDjmyj2dQMWpSwfc7CK8
+BODY=FT_CREATE_20260915_02\n
+HAS_TOP_LEVEL_UNCHECKED_GFM_TASK=NO
 ```
 
-Canonical instruction: **“Using the entry created by FT-04”** → this retained Paste is the locked target.
+Do **not** rewrite, prepend `- [ ]`, update, archive, delete, or reuse as FT-06 target.
 
-Known state at FT-05 completion (planning baseline; reconfirm at ARM):
+### 5.2 Dedicated lifecycle fixture (execution target)
 
 ```text
-visibility=active
-retention_mode=permanent
+LIFECYCLE_FIXTURE_TOKEN=FT_LIFECYCLE_20260916_01
+TARGET_MARKDOWN_SOURCE=- [ ] FT_LIFECYCLE_20260916_01
+TARGET_PASTE=PENDING_FIXTURE_CREATE
+LIFECYCLE_FIXTURE_SOURCE_PENDING=YES
+TARGET_REQUIRED_INITIAL_STATE=active/permanent
+TARGET_REQUIRED_TASK_STATE=unchecked
 ```
 
-Do **not** mutate during planning.
+Exact semantic requirements for MarkdownSource:
 
-## 5. Owner / user action
+- exactly one top-level unchecked GFM task
+- standard GFM syntax `- [ ] …` (**not** bare `[ ]` shorthand; does not depend on #153)
+- no nested task; no second task
+- no fenced Markdown stored in Paste body
+- provider-supplied terminal LF may be preserved exactly if present
 
-Canonical action is a **frontend single-item** lifecycle action — **not** a direct HTTP call as the Function Test surface, and **not** batch mode.
+Suggested later setup container: Feishu native Code Block with inner source:
+
+```text
+- [ ] FT_LIFECYCLE_20260916_01
+```
+
+Do **not** send in this planning turn.
+
+## 6. Lifecycle-chain ownership
+
+Unless a later canonical test explicitly requires another fixture, this dedicated lifecycle fixture is the chain fixture for:
+
+```text
+FT-06 permanent archive
+→ FT-07 permanent restore
+→ FT-08 timed archive
+→ FT-09 timed restore
+→ FT-10 Markdown rendering observation where applicable
+→ FT-11 single delete
+```
+
+Do **not** create a fresh Paste for every lifecycle test.
+
+- FT-07 MUST use the FT-06 archived result
+- FT-08 SHOULD use the FT-07 restored result if requirements remain compatible
+- FT-09 SHOULD use the FT-08 timed-archived result
+- FT-11 may ultimately delete the lifecycle fixture if the canonical sequence confirms it
+
+Do not execute any of these now.
+
+## 7. Owner / user action (FT06_EXECUTION)
+
+Canonical action remains a **frontend single-item** lifecycle action — **not** a direct HTTP call as the Function Test surface, and **not** batch mode.
 
 Mapped to current UI (`downstream/addons/messaging/frontend`):
 
@@ -144,14 +250,12 @@ DIRECT_HTTP_AS_PRIMARY_FUNCTION_TEST=NO
 BATCH_MODE=NO
 ```
 
-Exactly **one** authorized owner activation later (one confirm). No repeated clicking; no API retry; no manual replay. Uncertain result → STOP and observe.
+Exactly **one** authorized owner activation for FT06_EXECUTION (one confirm). No repeated clicking; no API retry; no manual replay. Uncertain result → STOP and observe.
 
-## 6. User surface under test
-
-Primary product path under AGENTS.md §14 and current frontend:
+## 8. User surface under test
 
 1. Authenticated Add-on frontend (`https://pb.test.223.im`)
-2. Active list shows the FT-04 entry
+2. Active list shows the **lifecycle fixture** entry (not the FT-04 evidence Paste)
 3. Single-item permanent archive via checkbox chooser **or** LifecycleMenu (same `archive_permanent` completion flow)
 4. After success: entry absent from Active; present under Archive with permanent status
 
@@ -165,9 +269,7 @@ body: { "action": "archive_permanent" }
 
 Handler: `worker/completion.ts` → `EntryService.completeEntry` (`worker/service.ts`).
 
-## 7. Managed Markdown prerequisite
-
-### 7.1 Implementation contract (source)
+## 9. Managed Markdown prerequisite (unchanged product contract)
 
 `EntryService.completeManagedTask` (`service.ts`):
 
@@ -175,40 +277,56 @@ Handler: `worker/completion.ts` → `EntryService.completeEntry` (`worker/servic
 - Collects **top-level** unchecked GFM tasks matching `/^(?:[-+*]|\d+[.)])\s+\[ \]/`
 - Requires **exactly one** candidate; otherwise returns `null`
 - On archive: transforms that `[ ]` → `[x]` (lowercase x)
-- On `null`: `MANAGED_TASK_AMBIGUOUS` (HTTP **409** via completion handler)
+- On `null`: `MANAGED_TASK_AMBIGUOUS` (HTTP **409**)
 
-Frontend: interactive Markdown checkbox appears only when content has an eligible task; LifecycleMenu can still offer **永久归档** but backend will reject without the managed task.
+Do **not** change this contract to make arbitrary plain-text Pastes archivable merely to satisfy FT-06. A future product requirement for non-task archival would need its own PLAN/SPEC.
 
-### 7.2 Read-only fixture audit (planning)
+The dedicated lifecycle fixture is designed so this prerequisite holds after FT06_SETUP.
 
-Public GET of locked Paste (planning observation only; body not modified):
+## 10. Future FT06_SETUP gates (SPEC later; not authorized now)
 
-```text
-BODY = FT_CREATE_20260915_02\n
-HAS_TOP_LEVEL_UNCHECKED_GFM_TASK = NO
-```
+Before setup:
 
-### 7.3 Planning classification (blocking for execution)
+- live Worker versions reconfirmed
+- collision for lifecycle token `FT_LIFECYCLE_20260916_01` = 0
+- D1/create baseline recorded
+- ingress/DLQ healthy
+- no existing lifecycle fixture matching token
 
-Under current source, this canonical FT-04 fixture **cannot** successfully permanent-archive:
-
-```text
-FT06_TARGET_NOT_ARCHIVABLE_AS_CANONICAL_FIXTURE
-```
-
-Reasons:
-
-- Canonical FT-06 targets the FT-04 entry
-- Permanent archive **requires** exactly one managed top-level unchecked GFM task
-- Retained body has **zero** such tasks → `MANAGED_TASK_AMBIGUOUS`
+Authorized setup (**later only**, separate owner authorization):
 
 ```text
-DO_NOT_REWRITE_PASTE_TO_FORCE_PASS=YES
+one Feishu native Code Block P2P
+inner source: - [ ] FT_LIFECYCLE_20260916_01
 ```
 
-Owner decision required before SPEC/execution (examples of decisions **not** made here): separate fixture creation under a new Function Test authorization; product change; or re-scope. Planning MUST NOT invent a Paste rewrite.
+Expected:
 
-## 8. Expected lifecycle path (when precondition holds)
+```text
+webhook → queue → create → Service Binding → one new Paste
+→ one succeeded create op
+→ active/permanent
+→ frontend renders one interactive unchecked task
+```
+
+No automatic second send. No replay. No synthetic webhook.
+
+## 11. Future FT06_EXECUTION gates (after setup; before archive auth)
+
+Read-only proof required:
+
+- exactly one lifecycle fixture binding for the new Paste
+- visibility=`active`; retention_mode=`permanent`; expires_at NULL
+- exactly one top-level unchecked GFM task
+- public GET body matches provider-preserved MarkdownSource
+- frontend renders exactly one interactive task
+- no pending / `reconciliation_required` mutation
+- no existing `complete_permanent` op for that entry
+- Paste-count and DLQ baselines recorded
+
+Then FT-06 may later authorize exactly **ONE** frontend archive confirmation.
+
+## 12. Expected lifecycle path (FT06_EXECUTION)
 
 ```text
 UI permanent archive confirm
@@ -226,20 +344,20 @@ UI permanent archive confirm
 
 Operation kind: `complete_permanent`.
 
-## 9. Expected Paste mutation (when precondition holds)
+## 13. Expected Paste mutation (FT06_EXECUTION)
 
-| Field            | Before                         | After                                   |
-| ---------------- | ------------------------------ | --------------------------------------- |
-| paste name       | `7Zf3ZDjmyj2dQMWpSwfc7CK8`     | **same** (update in place; no `create`) |
-| managed task     | exactly one top-level `[ ]`    | that task becomes `[x]`                 |
-| other body bytes | unchanged aside from that mark | unchanged aside from that mark          |
-| retention param  | n/a                            | upstream update with `e=never`          |
+| Field            | Before                                           | After                                                   |
+| ---------------- | ------------------------------------------------ | ------------------------------------------------------- |
+| paste name       | lifecycle fixture Paste (from FT06_SETUP)        | **same** (update in place; no `create`)                 |
+| managed task     | `- [ ] FT_LIFECYCLE_20260916_01` (+ optional LF) | `- [x] FT_LIFECYCLE_20260916_01` (+ same LF if present) |
+| other body bytes | unchanged aside from that mark                   | unchanged aside from that mark                          |
+| retention param  | n/a                                              | upstream update with `e=never`                          |
 
 ```text
 NEW_PASTE_CREATED=NO
 ```
 
-## 10. Expected D1 mutation (when precondition holds)
+## 14. Expected D1 mutation (FT06_EXECUTION)
 
 Same binding id / same `paste_name`:
 
@@ -258,9 +376,7 @@ status=succeeded
 result present (projected PublicEntry)
 ```
 
-Exactly one such succeeded completion attributable to this action identity under the SPEC request-id rules.
-
-## 11. Idempotency / concurrency safety
+## 15. Idempotency / concurrency safety
 
 From current `completeEntry` / store (document for later SPEC; do not execute):
 
@@ -272,11 +388,11 @@ From current `completeEntry` / store (document for later SPEC; do not execute):
 - `reserveCompletion` before `PasteClient.update`
 - Race / unique conflict → re-read + duplicate semantics or conflict; no second blind update
 - Stale version → `VERSION_CONFLICT`
-- Wrong lifecycle state (not active+permanent) → fail closed (`INVALID_LIFECYCLE_STATE` / reserve false)
+- Wrong lifecycle state (not active+permanent) → fail closed
 
-Single-mutation rule for FT-06 execution: **one** owner confirm only.
+Single-mutation rule for FT06_EXECUTION: **one** owner confirm only.
 
-## 12. Permanent retention semantics
+## 16. Permanent retention semantics
 
 ```text
 FT-06 action = archive_permanent
@@ -285,80 +401,78 @@ expires_at = NULL
 PasteClient.update(..., "never")   # e=never
 ```
 
-**Not** FT-08:
+**Not** FT-08 (timed archive / `e=max` / countdown). Do not introduce timed retention into FT-06.
 
-```text
-FT-08 = timed archive (archive_expiring / e=max / countdown)
-```
+## 17. PASS criteria (planning-level; SPEC will freeze tokens)
 
-Do not introduce timed retention into FT-06.
+After FT06_SETUP succeeds and later SPEC/execution authorization:
 
-## 13. PASS criteria (planning-level; SPEC will freeze tokens)
-
-Subject to clearing §7 fixture block and later SPEC:
-
-- UI permanent archive succeeds once
+- UI permanent archive succeeds once on the lifecycle fixture
 - Backend succeeds once
 - Entry leaves Active; appears in Archive
 - Same `paste_name`; public Paste still exists
-- Managed task exactly `[ ]` → `[x]` (when precondition holds)
+- Managed task exactly `[ ]` → `[x]` (LF preserved iff provider-supplied)
 - D1: archived + permanent + expires_at NULL + version +1
 - Operation `complete_permanent` succeeded exactly once for the action identity
 - No extra Paste; no DLQ / reconciliation anomaly
+- FT-04 evidence Paste untouched
 - Result retained for FT-07 (**no** cleanup)
 
-While §7 classification stands, FT-06 **execution PASS is not available** on this fixture without owner scope decision.
+## 18. Failure / STOP conditions (planning-level)
 
-## 14. Failure / STOP conditions (planning-level)
-
-| Class (planning names; SPEC may rename)           | Meaning                                                    |
-| ------------------------------------------------- | ---------------------------------------------------------- |
-| `FT06_TARGET_NOT_ARCHIVABLE_AS_CANONICAL_FIXTURE` | Locked FT-04 body lacks exactly one managed unchecked task |
-| Ambiguous target identity                         | ≠1 binding for Paste / scope mismatch                      |
-| Pending / reconciliation exists                   | Outstanding mutation claim                                 |
-| Lifecycle request rejected                        | HTTP/error from complete (incl. `MANAGED_TASK_AMBIGUOUS`)  |
-| Upstream update uncertain                         | `RECONCILIATION_REQUIRED` after dispatch                   |
-| D1 finalization conflict                          | finish/reserve/version failure                             |
-| Duplicate mutation evidence                       | Extra succeeded `complete_permanent` / extra Paste         |
-| Unexpected new Paste                              | `create` observed                                          |
-| Retention not permanent                           | timed / non-null expires_at after FT-06                    |
-| Task source not transformed exactly               | Wrong/missing `[x]` transform                              |
+| Class (planning names; SPEC may rename)     | Meaning                                                     |
+| ------------------------------------------- | ----------------------------------------------------------- |
+| Historical finding retained                 | FT-04 body not archivable (resolved via fixture correction) |
+| Setup collision / duplicate lifecycle token | Existing fixture matching `FT_LIFECYCLE_20260916_01`        |
+| Ambiguous target identity                   | ≠1 binding for lifecycle Paste / scope mismatch             |
+| Pending / reconciliation exists             | Outstanding mutation claim                                  |
+| Lifecycle request rejected                  | HTTP/error from complete (incl. `MANAGED_TASK_AMBIGUOUS`)   |
+| Upstream update uncertain                   | `RECONCILIATION_REQUIRED` after dispatch                    |
+| D1 finalization conflict                    | finish/reserve/version failure                              |
+| Duplicate mutation evidence                 | Extra succeeded `complete_permanent` / extra Paste          |
+| Unexpected new Paste on archive             | `create` observed during archive                            |
+| Retention not permanent                     | timed / non-null expires_at after FT-06                     |
+| Task source not transformed exactly         | Wrong/missing `[x]` transform                               |
+| FT-04 evidence mutated                      | Historical Paste rewritten/archived/deleted                 |
 
 Do not repair production in the same Function Test run.
 
-## 15. Cleanup policy
+## 19. Cleanup policy
 
 ```text
 FT06_CLEANUP=NONE
+FT04_PASTE_PRESERVED=YES
 ```
 
-Do **not** restore, delete, or rewrite the entry after a successful FT-06. Do **not** delete historical Pastes.
+Do **not** restore, delete, or rewrite the lifecycle fixture after a successful FT-06. Do **not** touch the historical FT-04 Paste.
 
-## 16. FT-07 handoff
-
-Canonical FT-07 restores **the same FT-04 entry** after permanent archive.
+## 20. FT-07 handoff
 
 ```text
 FT07_USES_FT06_RESULT=YES
 FT07_STARTED=NO
 ```
 
-Successful FT-06 must leave the entry **archived + permanent** as the FT-07 fixture. FT-06 success does **not** auto-start FT-07.
+Successful FT-06 must leave the **lifecycle fixture** **archived + permanent** as the FT-07 fixture. FT-06 success does **not** auto-start FT-07. Historical FT-07 wording (“same FT-04 entry”) is superseded for **fixture identity** by §1.1; restore semantics remain unchanged.
 
-Note: with current fixture (§7), FT-07 is also blocked until an archivable permanent-archive result exists.
-
-## 17. Production mutation boundary
+## 21. Production mutation boundary
 
 ```text
-PRODUCTION_MUTATION=NO   (this planning turn)
+PRODUCTION_MUTATION=NO   (this planning amendment)
 P2P_SENT=NO
 LIVE_REPLAY=NO
 FT06_STARTED=NO
 FT07_STARTED=NO
+FT04_PASTE_PRESERVED=YES
 ```
 
-Forbidden now: archive checkbox/menu activation; lifecycle POST; D1 write; Paste update/create/delete; webhook/queue/DLQ mutation; Worker deploy/traffic; FT-07+.
+Forbidden now: lifecycle fixture P2P; archive checkbox/menu; lifecycle POST; D1 write; Paste create/update/delete; webhook/queue/DLQ mutation; Worker deploy/traffic; FT-07+; any change to runtime lifecycle code.
+
+## 22. #153 / #159
+
+- [#153](https://github.com/Skyline-Gazer/pastebin-worker/issues/153) remains OPEN and untouched; fixture uses standard `- [ ]`, not bare `[ ]`.
+- [#159](https://github.com/Skyline-Gazer/pastebin-worker/issues/159) remains non-blocking and separate.
 
 ## Next workflow stage
 
-Owner review of this PLAN — including disposition of `FT06_TARGET_NOT_ARCHIVABLE_AS_CANONICAL_FIXTURE` — → SPEC only after PLAN approval and fixture/scope resolution → execution authorization separate.
+Owner approval of this amended PLAN → SPEC (covering FT06_SETUP + FT06_EXECUTION gates) → separate production authorizations for setup then archive. No SPEC in this amendment turn.

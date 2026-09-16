@@ -337,9 +337,10 @@ UI permanent archive confirm
 → EntryService.completeEntry
 → fingerprint(["complete", scopeId, entryId, "archive_permanent"])
 → operation lookup (idempotency)
+→ binding lookup
 → read Paste
 → completeManagedTask ([ ] → [x])
-→ reserveCompletion (active+permanent only)
+→ reserveCompletion (active + permanent + expires_at NULL)
 → dispatch
 → PasteClient.update(same paste_name, content, e=never)
 → finishCompletion

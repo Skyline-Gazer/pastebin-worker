@@ -15,6 +15,16 @@ FT09_FUNCTIONAL_RESULT=NOT_RUN
 RETROACTIVE_EVIDENCE=NO
 ```
 
+## 0. Planning source baseline (frozen; single definition)
+
+```text
+PLANNING_SOURCE_BASELINE=20f65c28315fca3cd4ee8161c986ca91da5bdd70
+```
+
+Same meaning as PLAN §0: reviewed planning/source baseline, **not** a production
+deployment pin. FT-09 runtime requires capability compatibility only. Actual
+`WORKER_PIN` is resolved read-only at Phase A. No second baseline definition.
+
 ## 1. Scope
 
 Verify the `restore_timed` path (expiry cancellation + restore content) and its
@@ -47,7 +57,8 @@ FT09_PRECONDITION_3_FIXTURE_BODY    # exact `- [x] FT_LIFECYCLE_20260916_01`; HA
 FT09_PRECONDITION_4_NOT_EXPIRED     # public Paste exists; expiresAt > current time; not stale/expired
 FT09_PRECONDITION_5_AUTH            # authenticated canonical frontend session + CSRF/Origin + scope authorization
 FT09_PRECONDITION_6_DEPLOY_COMPAT   # production Worker supports timed restore + restore_timed +
-                                    #   RESTORE_STAGE timed markers (#165); actual WORKER_PIN resolved at Phase A
+                                    #   RESTORE_STAGE timed markers (#165) AND post-expiry-cancel reconciliation
+                                    #   fix deployed (FT09_KNOWN_SOURCE_BLOCKER_POST_CANCEL_COMPENSATION=OPEN until then)
 FT09_PRECONDITION_7_NO_PENDING_OP   # no pending/uncertain/reconciliation-required target op
 FT09_PRECONDITION_8_OWNER           # fresh explicit owner authorization before production action
 ```
@@ -66,6 +77,8 @@ FT09_ACTION_SUBMITTED_BEFORE_ACTION=NO
 ```text
 FT09_RESTORE_STAGE_REQUIRED_BEFORE_EXECUTION=YES
 FT09_RUNTIME_DEPLOYMENT_REQUIREMENT=version-compatible-with-timed-restore-and-RESTORE_STAGE
+FT09_EXECUTION_ALLOWED=NO   # until blocker fix deployed + fresh Phase A PASS
+FT09_KNOWN_SOURCE_BLOCKER_POST_CANCEL_COMPENSATION=OPEN
 ```
 
 - Production Worker must contain the equivalent of merged #165 `RESTORE_STAGE`
@@ -76,6 +89,16 @@ FT09_RUNTIME_DEPLOYMENT_REQUIREMENT=version-compatible-with-timed-restore-and-RE
   because FT-08 passed (FT-08 did not exercise restore telemetry).
 - Phase A resolves actual live `WORKER_PIN`; if live production lacks telemetry,
   a **separate owner-authorized deployment gate** is required before execution.
+- **Known source blocker (see PLAN §5.1, tracker [#170](https://github.com/Skyline-Gazer/pastebin-worker/issues/170)):** post-expiry-cancel Stage-2 / finish
+  failure must enter reconciliation-required / fail-closed, never clean terminal
+  `failed` with an apparently normal archived/timed binding. `FT09_PRECONDITION_6_DEPLOY_COMPAT`
+  additionally requires this defect fixed and deployed. Until then
+  `FT09_EXECUTION_ALLOWED=NO`.
+- **Revalidation after deployment (Phase B):** if any production Worker deployment
+  occurs, pre-deployment Phase A results MUST NOT be used for Phase C — re-enter
+  Phase A, resolve new `WORKER_PIN`, re-verify fixture/auth/capability/ordering
+  markers, form a fresh Pre-ARM snapshot; only a fresh Phase A PASS may proceed
+  to Phase C (`FT09_PREFLIGHT_REVALIDATION_AFTER_DEPLOY=REQUIRED`).
 - This planning round deploys nothing.
 
 ## 5. Action gate

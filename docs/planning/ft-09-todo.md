@@ -24,8 +24,27 @@ FT07_ORDERING_EVIDENCE=INCONCLUSIVE
 
 ## Phase B — telemetry / deployment gate (if required)
 
-- [ ] If live production lacks `RESTORE_STAGE` telemetry: **STOP** — a separate
-      owner-authorized deployment gate is required before Phase C. Do not deploy.
+- [ ] If live production lacks `RESTORE_STAGE` telemetry (**or** lacks the
+      post-expiry-cancel reconciliation fix, `FT09_KNOWN_SOURCE_BLOCKER_POST_CANCEL_COMPENSATION=OPEN`):
+      **STOP** — a separate owner-authorized deployment gate is required. Do not deploy.
+
+### If any production Worker deployment actually occurs (Phase B)
+
+```text
+FT09_PREFLIGHT_REVALIDATION_AFTER_DEPLOY=REQUIRED
+```
+
+1. STOP after deployment completes;
+2. re-enter Phase A;
+3. resolve the new actual `WORKER_PIN` read-only;
+4. re-verify: fixture `archived/timed/v4`; exact checked body `- [x] FT_LIFECYCLE_20260916_01` / no LF;
+   Paste still exists; `expiresAt > now`; auth readiness; runtime timed-restore compatibility;
+   `RESTORE_STAGE` timed-marker capability; no pending/uncertain/reconciliation op =>
+   `FT09_PRECONDITION_6_DEPLOY_COMPAT=YES` (incl. post-cancel reconciliation fixed+deployed);
+5. form a fresh Pre-ARM snapshot;
+6. only a fresh Phase A PASS may enter Phase C.
+
+Do NOT carry any pre-deployment `FT09_PRECONDITION_*` forward after a deployment.
 
 ## Phase C — owner execution authorization checkpoint
 
@@ -34,10 +53,19 @@ FT07_ORDERING_EVIDENCE=INCONCLUSIVE
 
 ## Phase D — single production action
 
+- [ ] **Final drift check immediately before submit:** Worker pin unchanged from approved fresh preflight; fixture still `archived/timed/v4`; `expiresAt` still future; exact body unchanged; no pending op; session still valid. Any drift → `FT09_EXECUTION_STATUS=BLOCKED_PRECONDITION`, `FT09_FUNCTIONAL_RESULT=NOT_RUN`, STOP.
 - [ ] Enter Phase D only after `FT09_AUTHORIZED=YES`; set `FT09_STARTED=YES`.
-- [ ] Canonical frontend Archive single-item: select target, click `恢复`.
+- [ ] Canonical frontend Archive single-item: clicking the target's **`恢复`** action IS the single authorized submission.
 
-  ⚠ The restore chooser must be **non-submitting**; opening a chooser must not mutate state. If it is not mechanically provable mutation-free, click the action control directly (which submits the single restore once).
+  ```text
+  FT09_CANONICAL_RESTORE_CLICK_COUNT=1
+  ```
+
+  Restore has **no chooser / second confirmation** (unlike `archive_expiring`):
+  `恢复` → `onRestore` → `submitRestore(entry)` → one request identity → `POST /api/entries/:id/restore` (empty body, opaque Idempotency-Key).
+
+  Do not assume a chooser exists; do not look for a second confirm; do not
+  double-click; no direct API secondary submit; no replay.
 
 - [ ] Exactly one submission → `FT09_ACTION_SUBMITTED=YES`, `FT09_ACTION_SINGLE_SUBMISSION=YES`. No double-click / replay / direct API secondary request / retry after terminal success.
 
@@ -51,7 +79,7 @@ FT07_ORDERING_EVIDENCE=INCONCLUSIVE
 
 ## Phase F — mechanical settlement
 
-- [ ] Evaluate `FT09_PRECONDITION_*` (1–8 + deploy compat), `FT09_ACTION_SINGLE_SUBMISSION`, `FT09_RESULT_1..11`, including `FT09_RESULT_10_ORDERING` (RESTORE_STAGE timed seq ordering under one correlation).
+- [ ] Evaluate `FT09_PRECONDITION_1..8`, `FT09_ACTION_SINGLE_SUBMISSION`, `FT09_RESULT_1..11`, including `FT09_RESULT_10_ORDERING` (RESTORE_STAGE timed seq ordering under one correlation).
 - [ ] `FT08`/`FT07` flags remain unchanged even on FT-09 PASS (`FT07_ORDERING_EVIDENCE=INCONCLUSIVE`, `ORDERING_VERIFIED_BY_STEP_LOGS=NO`, `FT08_FUNCTIONAL_RESULT=PASS`).
 - [ ] Record `FT09_FUNCTIONAL_RESULT=PASS/FAIL/INCONCLUSIVE` (or `BLOCKED_PRECONDITION`/`NOT_RUN`) in a durable evidence doc.
 
@@ -73,6 +101,9 @@ FT07_ORDERING_EVIDENCE=INCONCLUSIVE
 NO deploy (incl. #165) triggered by this TODO
 NO production mutation before Phase D without owner authorization
 NO FT-07/FT-08 replay or restore (beyond the one authorized timed restore)
+FT09_EXECUTION_ALLOWED=NO until blocker fix deployed + fresh Phase A PASS
+FT09_KNOWN_SOURCE_BLOCKER_POST_CANCEL_COMPENSATION=OPEN (separate defect tracker)
+FT09_PREFLIGHT_REVALIDATION_AFTER_DEPLOY=REQUIRED
 FT09_AUTHORIZED=NO
 FT09_STARTED=NO
 FT09_ACTION_SUBMITTED=NO

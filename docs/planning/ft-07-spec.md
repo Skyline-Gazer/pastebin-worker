@@ -565,11 +565,14 @@ execution-time vs closeout re-observation timestamps.
 
 ## 21. Production authorization boundary
 
-This SPEC defines future execution only.
+### 21.1 Historical pre-execution authorization snapshot
 
-Current turn remains:
+The following block is the **pre-execution** SPEC draft boundary (before owner
+execution authorization). It is retained as history — **not** the current
+closeout posture:
 
 ```text
+# HISTORICAL_PRE_EXECUTION_SNAPSHOT (do not reinterpret as current)
 FT04_PASTE_PRESERVED=YES
 PRODUCTION_MUTATION=NO
 FT07_STARTED=NO
@@ -577,7 +580,7 @@ FT08_STARTED=NO
 RESTORE_CLICK_SENT=NO
 ```
 
-Not authorized by this SPEC draft alone:
+At that time, this SPEC alone did **not** authorize:
 
 - Restore / **恢复** click
 - restore API POST
@@ -588,6 +591,31 @@ Not authorized by this SPEC draft alone:
 - Worker deploy/traffic change
 - FT-08+
 - any mutation of `7Zf3ZDjmyj2dQMWpSwfc7CK8`
+
+### 21.2 Current closeout posture
+
+FT-07 later completed **one** owner-authorized Restore under a separate
+execution authorization. Functional result:
+
+```text
+FT07_FUNCTIONAL_RESULT=PASS
+```
+
+Evidence: [evidence/ft-07-restore-pass.md](evidence/ft-07-restore-pass.md).
+
+This docs closeout / remediation turn:
+
+```text
+DOCS_ONLY=YES
+PRODUCTION_MUTATION_THIS_CLOSEOUT=NO
+FT08_STARTED=NO
+SECOND_RESTORE_AUTHORIZED=NO
+```
+
+Do **not** conflate the historical `FT07_STARTED=NO` / `RESTORE_CLICK_SENT=NO`
+snapshot with “no production write ever occurred,” nor with this docs-only
+closeout’s `PRODUCTION_MUTATION_THIS_CLOSEOUT=NO`. Document fixes do **not**
+authorize a second restore or any other production mutation.
 
 ## 22. Compatibility
 

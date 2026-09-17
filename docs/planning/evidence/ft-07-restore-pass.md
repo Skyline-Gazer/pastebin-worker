@@ -64,7 +64,6 @@ NO_IDEMPOTENCY_KEY_RETRY=YES
 TARGET_PASTE=DMkerQPTisMNhhp8tdQc5Ech
 PUBLIC_URL=https://pb.223.im/DMkerQPTisMNhhp8tdQc5Ech
 BINDING_ID_PREFIX=d6450b83…
-BINDING_ID_FULL_AT_EXECUTION=d6450b83-a11d-4f45-9272-2197dcc5da60
 ```
 
 Historical FT-04 evidence Paste `7Zf3ZDjmyj2dQMWpSwfc7CK8` was not restored /
@@ -166,13 +165,15 @@ Cloudflare zone analytics (`pb.test.223.im`, path like `%/restore%`):
 
 ```text
 method=POST
-path=/api/entries/d6450b83-a11d-4f45-9272-2197dcc5da60/restore
+path=/api/entries/<binding_id_prefix:d6450b83…>/restore
 edgeResponseStatus=200
 count=1
 datetime=2026-09-17T01:24:04Z
+PATH_MATCHES_TARGET_BINDING=YES
 ```
 
-Matches binding id and op minute.
+Path matched the target binding (prefix `d6450b83…`) and the op minute.
+Full durable binding UUID omitted per SPEC §19 redaction.
 
 ### 5.5 Frontend (authenticated observe-only after click)
 

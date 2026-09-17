@@ -37,21 +37,19 @@ Evaluated **before** the first action (Phase A/ARM). If any is false at that
 time, do not submit any action:
 
 ```text
-ft08_precondition_1_ft07_pass=YES           # ft07_functional_result=PASS, handoff baseline §7
-ft08_precondition_2_fixture_active=YES      # visibility=active, retention=permanent, expires_at=NULL, version=3
-ft08_precondition_3_fixture_body=YES        # body `- [ ] FT_LIFECYCLE_20260916_01`, task_state unchecked, no LF
-ft08_precondition_4_auth=YES                # session + CSRF + Origin + scope join (canonical single-item surface)
-ft08_precondition_5_deploy_compat=YES       # deployed Worker version-compatible with archive_expiring contract
-                                            #   (record actual WORKER_PIN; see PLAN §3.1)
-ft08_precondition_6_no_pending_op=YES       # no pending/uncertain op on target fixture
-ft08_precondition_7_owner=YES               # explicit fresh owner authorization before Phase C
-ft08_precondition_8_first_action=YES        # (REMOVED - see FT08_ACTION_SINGLE_SUBMISSION below)
+FT08_PRECONDITION_1_FT07_PASS=YES         # FT07_FUNCTIONAL_RESULT=PASS, handoff baseline §7
+FT08_PRECONDITION_2_FIXTURE_ACTIVE=YES    # visibility=active, retention=permanent, expires_at=NULL, version=3
+FT08_PRECONDITION_3_FIXTURE_BODY=YES      # body `- [ ] FT_LIFECYCLE_20260916_01`, task_state unchecked, no LF
+FT08_PRECONDITION_4_AUTH=YES              # session + CSRF + Origin + scope join (canonical single-item surface)
+FT08_PRECONDITION_5_DEPLOY_COMPAT=YES     # deployed Worker version-compatible with archive_expiring contract
+                                          #   (record actual WORKER_PIN; see PLAN §3.1)
+FT08_PRECONDITION_6_NO_PENDING_OP=YES     # no pending/uncertain op on target fixture
+FT08_PRECONDITION_7_OWNER=YES             # explicit fresh owner authorization before Phase C
 ```
 
-Token values are lower-case here to mark them as **provisional** (frozen to
-upper-case at SPEC approval). `FT08_PRECONDITION_8` is removed: "exactly one
-action submission" cannot be proven before Phase C; it is an execution
-invariant (`FT08_ACTION_SINGLE_SUBMISSION`), not a precondition.
+Token names are **frozen** uppercase (`FT08_PRECONDITION_*`). "Exactly one
+action submission" is **not** a precondition and was removed from this set; it
+is the execution invariant `FT08_ACTION_SINGLE_SUBMISSION` (see §4).
 
 ```text
 FT08_EXECUTION_STATUS_BEFORE_ACTION=BLOCKED_PRECONDITION (if any precondition false)

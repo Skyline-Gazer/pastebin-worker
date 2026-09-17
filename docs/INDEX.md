@@ -24,6 +24,7 @@
 - [`planning/ft-04-plan.md`](planning/ft-04-plan.md) / [`ft-04-spec.md`](planning/ft-04-spec.md) — FT-04 PLAN/SPEC: new Feishu P2P create ([#149](https://github.com/Skyline-Gazer/pastebin-worker/issues/149)).
 - [`planning/ft-07-plan.md`](planning/ft-07-plan.md) / [`ft-07-spec.md`](planning/ft-07-spec.md) — FT-07 PLAN/SPEC: restore permanent archive ([#162](https://github.com/Skyline-Gazer/pastebin-worker/issues/162)).
 - [`planning/evidence/ft-07-restore-pass.md`](planning/evidence/ft-07-restore-pass.md) — FT-07 functional PASS evidence + FT-08 handoff baseline.
+- [`planning/restore-ordering-telemetry-plan.md`](planning/restore-ordering-telemetry-plan.md) / [`restore-ordering-telemetry-spec.md`](planning/restore-ordering-telemetry-spec.md) — post-deploy `RESTORE_STAGE` observability debt (does **not** re-verify historical FT-07 ordering).
 - [`planning/ft04-markdown-inbound-plan.md`](planning/ft04-markdown-inbound-plan.md) — #151 PLAN: Markdown-first inbound (native code block + webhook disposition).
 
 ## Operational scaffold

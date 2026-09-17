@@ -255,6 +255,18 @@ gate (which requires reservation-before-update as a contract property plus
 functional outcomes). It **must not** be restated as “step logs proved the
 sequence.”
 
+**Observability debt (code-only, non-retroactive):** a later messaging change may
+add `RESTORE_STAGE` markers for **future** restores after deploy. Those markers
+MUST NOT be treated as evidence for this historical FT-07 run. Until a future
+execution is verified from those logs:
+
+```text
+FT07_ORDERING_EVIDENCE=INCONCLUSIVE
+ORDERING_VERIFIED_BY_STEP_LOGS=NO
+```
+
+See [restore-ordering-telemetry-spec.md](../restore-ordering-telemetry-spec.md).
+
 ---
 
 ## 7. FT-08 handoff baseline

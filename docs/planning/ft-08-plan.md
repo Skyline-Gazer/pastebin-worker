@@ -188,7 +188,7 @@ operation result: result JSON of archived public entry (project())
 - upstream update rejected/uncertain; ENTRY_NOT_FOUND; managed task ambiguous
 - unexpected upstream mutation (new paste / wrong body / unrequested retention)
 - partial / ambiguous state (op reconciliation_required, mismatch of D1 vs upstream vs UI)
-- any situation requiring replay of FT-07 (e.g. missing precondition) 
+- any situation requiring replay of FT-07 (e.g. missing precondition)
 ```
 
 On STOP: stop and record; no automatic retry; blind retry forbidden when retry-safety unknown.

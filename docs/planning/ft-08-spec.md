@@ -150,18 +150,18 @@ Each condition:
 requirement → evidence source → expected value
 ```
 
-| Requirement | Evidence source | Expected |
-| --- | --- | --- |
-| preconditions 1–7 + deploy compat | PLAN §3 + Pre-ARM record + `WORKER_PIN` | YES each |
-| HTTP 200 entry | request/response capture incl. time | 200 + entry JSON |
-| entry archived/timed/ISO/v4 | HTTP body + D1 | exact match |
-| D1 binding row | SELECT feishu_bindings by id | archived/timed/ISO/4 |
-| D1 op row | SELECT feishu_operations by request_id | complete_expiring/succeeded/3 |
-| Paste body | public GET 200 text | `- [x] FT_LIFECYCLE_20260916_01`, no LF |
-| timed effect | update response + metadata `expireAt` | finite ISO == D1 `expires_at`; retention timed |
-| UI active/archive | frontend observation + screenshot/aria | row move + countdown label |
-| version delta | binding before/after | +1 (3→4) |
-| no anomaly | D1 / queue / DLQ counts | zero delta for listed anomalies |
+| Requirement                       | Evidence source                         | Expected                                       |
+| --------------------------------- | --------------------------------------- | ---------------------------------------------- |
+| preconditions 1–7 + deploy compat | PLAN §3 + Pre-ARM record + `WORKER_PIN` | YES each                                       |
+| HTTP 200 entry                    | request/response capture incl. time     | 200 + entry JSON                               |
+| entry archived/timed/ISO/v4       | HTTP body + D1                          | exact match                                    |
+| D1 binding row                    | SELECT feishu_bindings by id            | archived/timed/ISO/4                           |
+| D1 op row                         | SELECT feishu_operations by request_id  | complete_expiring/succeeded/3                  |
+| Paste body                        | public GET 200 text                     | `- [x] FT_LIFECYCLE_20260916_01`, no LF        |
+| timed effect                      | update response + metadata `expireAt`   | finite ISO == D1 `expires_at`; retention timed |
+| UI active/archive                 | frontend observation + screenshot/aria  | row move + countdown label                     |
+| version delta                     | binding before/after                    | +1 (3→4)                                       |
+| no anomaly                        | D1 / queue / DLQ counts                 | zero delta for listed anomalies                |
 
 ## 7. FAIL conditions
 

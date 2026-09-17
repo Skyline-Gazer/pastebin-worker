@@ -2,6 +2,7 @@ import type { EntryContext, EntryResult, PublicEntry, ReconciliationResult } fro
 import type { Credentials } from "./credentials"
 import { PasteError } from "./paste-client"
 import type { PasteClient } from "./paste-client"
+import { createRestoreStageEmitter } from "./restore-telemetry"
 import type { Binding, BindingStore, Operation } from "./store"
 
 function identifier(value: unknown): value is string {
@@ -114,17 +115,27 @@ export class EntryService {
   async restoreEntry(context: EntryContext, input: { entryId: string; requestId: string }): Promise<EntryResult> {
     if (!identifier(context.scopeId) || !identifier(input.entryId) || !identifier(input.requestId))
       return this.error("INVALID_INPUT")
+    const stages = createRestoreStageEmitter(input.requestId)
+    stages.emit("request_accepted")
     try {
       const previous = await this.store.operation(context.scopeId, input.requestId)
+      stages.emit("duplicate_lookup_completed")
       if (previous) {
         const kind = previous.kind === "restore_permanent" ? "restore_permanent" : "restore_timed"
+        stages.setKind(kind)
+        stages.setOpId(previous.id)
+        stages.emit("duplicate_replayed")
         return this.duplicate(
           previous,
           await this.credentials.fingerprint(JSON.stringify([kind, context.scopeId, input.entryId])),
         )
       }
       const binding = await this.store.get(context.scopeId, input.entryId)
-      if (!binding) return this.error("ENTRY_NOT_FOUND")
+      if (!binding) {
+        stages.emit("binding_lookup_completed", "ENTRY_NOT_FOUND")
+        return this.error("ENTRY_NOT_FOUND")
+      }
+      stages.emit("binding_lookup_completed")
       const permanent =
         binding.visibility === "archived" && binding.retention_mode === "permanent" && binding.expires_at === null
       const timed =
@@ -132,13 +143,40 @@ export class EntryService {
         binding.retention_mode === "timed" &&
         typeof binding.expires_at === "string" &&
         Number.isFinite(Date.parse(binding.expires_at))
-      if (!permanent && !timed) return this.error("INVALID_LIFECYCLE_STATE")
+      if (!permanent && !timed) {
+        stages.emit("lifecycle_gate_failed", "INVALID_LIFECYCLE_STATE")
+        return this.error("INVALID_LIFECYCLE_STATE")
+      }
+      stages.emit("lifecycle_gate_passed")
       const kind = timed ? "restore_timed" : "restore_permanent"
+      stages.setKind(kind)
       const fingerprint = await this.credentials.fingerprint(JSON.stringify([kind, context.scopeId, input.entryId]))
-      const password = await this.credentials.open(binding.id, binding.credential)
-      const source = await this.client.read(binding.paste_name!)
+      stages.emit("fingerprint_kind_completed")
+      let password: string
+      try {
+        password = await this.credentials.open(binding.id, binding.credential)
+        stages.emit("credential_open_completed")
+      } catch (error) {
+        stages.emit("credential_open_failed", "STORAGE_OR_CREDENTIAL_UNAVAILABLE")
+        throw error
+      }
+      let source: string
+      try {
+        source = await this.client.read(binding.paste_name!)
+        stages.emit("paste_read_completed")
+      } catch (error) {
+        stages.emit(
+          "paste_read_failed",
+          error instanceof PasteError ? error.code : "STORAGE_OR_CREDENTIAL_UNAVAILABLE",
+        )
+        throw error
+      }
       const content = this.restoreManagedTask(source)
-      if (content === null) return this.error("MANAGED_TASK_AMBIGUOUS")
+      if (content === null) {
+        stages.emit("managed_task_failed", "MANAGED_TASK_AMBIGUOUS")
+        return this.error("MANAGED_TASK_AMBIGUOUS")
+      }
+      stages.emit("managed_task_completed")
       const op = await this.operation(
         context.scopeId,
         input.requestId,
@@ -148,21 +186,34 @@ export class EntryService {
         content,
         binding.version,
       )
+      stages.setOpId(op.id)
+      stages.emit("operation_constructed")
       try {
-        if (!(timed ? await this.store.reserveTimedRestore(op) : await this.store.reservePermanentRestore(op)))
+        if (!(timed ? await this.store.reserveTimedRestore(op) : await this.store.reservePermanentRestore(op))) {
+          stages.emit("reservation_failed", "VERSION_CONFLICT")
           return this.error("VERSION_CONFLICT", op.id)
+        }
       } catch {
         const raced = await this.store.operation(context.scopeId, input.requestId)
+        stages.emit("reservation_failed", raced ? "REQUEST_CONFLICT" : "MUTATION_CONFLICT")
         return raced ? this.duplicate(raced, fingerprint) : this.error("MUTATION_CONFLICT", op.id)
       }
-      if (!(await this.store.dispatch(op.id))) return this.error("MUTATION_CONFLICT", op.id)
+      stages.emit("reservation_completed")
+      if (!(await this.store.dispatch(op.id))) {
+        stages.emit("dispatch_failed", "MUTATION_CONFLICT")
+        return this.error("MUTATION_CONFLICT", op.id)
+      }
+      stages.emit("dispatch_completed")
       if (timed) {
         // This confirmed response is the expiry-cancellation boundary. The
         // checked source and archived deadline remain durable until it succeeds.
+        stages.emit("expiry_cancel_started")
         try {
           await this.client.update(binding.paste_name!, password, source, "never")
+          stages.emit("expiry_cancel_completed")
         } catch (error) {
           if (error instanceof PasteError && (error.code === "UPSTREAM_REJECTED" || error.code === "ENTRY_NOT_FOUND")) {
+            stages.emit("expiry_cancel_failed", error.code)
             try {
               await this.store.fail(op.id)
             } catch {
@@ -170,6 +221,7 @@ export class EntryService {
             }
             return this.error(error.code, op.id)
           }
+          stages.emit("expiry_cancel_failed", "RECONCILIATION_REQUIRED")
           try {
             await this.store.uncertain(op.id)
           } catch {
@@ -178,14 +230,18 @@ export class EntryService {
           return this.error("RECONCILIATION_REQUIRED", op.id)
         }
       }
+      stages.emit("upstream_update_started")
       try {
         await this.client.update(binding.paste_name!, password, content, "never")
+        stages.emit("upstream_update_completed")
         const active: Binding = { ...binding, visibility: "active", retention_mode: "permanent", expires_at: null }
         const entry = this.project(active, op.expected_version + 1)
         await this.store.finishPermanentRestore(op, JSON.stringify(entry))
+        stages.emit("finish_completed")
         return { ok: true, entry }
       } catch (error) {
         if (error instanceof PasteError && (error.code === "UPSTREAM_REJECTED" || error.code === "ENTRY_NOT_FOUND")) {
+          stages.emit("upstream_update_failed", error.code)
           try {
             await this.store.fail(op.id)
           } catch {
@@ -193,6 +249,10 @@ export class EntryService {
           }
           return this.error(error.code, op.id)
         }
+        // Finish/persistence failures after a confirmed upstream update remain
+        // reconciliation_required (unchanged compensation). Distinguish in logs only.
+        if (!(error instanceof PasteError)) stages.emit("finish_failed", "RECONCILIATION_REQUIRED")
+        else stages.emit("upstream_update_failed", "RECONCILIATION_REQUIRED")
         try {
           await this.store.uncertain(op.id)
         } catch {

@@ -383,6 +383,113 @@ describe("persistent internal entry services", () => {
     expect((writes[0][1]!.body as FormData).get("e")).toBe("never")
   })
 
+  it("emits RESTORE_STAGE markers proving reserve before upstream update on permanent restore", async () => {
+    const logs: string[] = []
+    const log = vi.spyOn(console, "log").mockImplementation((message: unknown) => {
+      logs.push(String(message))
+    })
+    const { service } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] FT_RESTORE_TELEMETRY_BODY" })
+    if (!created.ok) throw new Error("create failed")
+    await service.completeEntry(context, {
+      entryId: created.entry.id,
+      requestId: "archive-for-stage-order",
+      action: "archive_permanent",
+    })
+    logs.length = 0
+    const password = "a".repeat(64)
+    const restored = await service.restoreEntry(context, {
+      entryId: created.entry.id,
+      requestId: "restore-stage-order",
+    })
+    expect(restored).toMatchObject({ ok: true, entry: { visibility: "active" } })
+    const restoreLogs = logs.filter((line) => line.startsWith("RESTORE_STAGE="))
+    const stageOf = (line: string) => /RESTORE_STAGE=(\S+)/.exec(line)?.[1]
+    const seqOf = (line: string) => Number(/seq=(\d+)/.exec(line)?.[1])
+    const stages = restoreLogs.map(stageOf)
+    expect(stages).toEqual([
+      "request_accepted",
+      "duplicate_lookup_completed",
+      "binding_lookup_completed",
+      "lifecycle_gate_passed",
+      "fingerprint_kind_completed",
+      "credential_open_completed",
+      "paste_read_completed",
+      "managed_task_completed",
+      "operation_constructed",
+      "reservation_completed",
+      "dispatch_completed",
+      "upstream_update_started",
+      "upstream_update_completed",
+      "finish_completed",
+    ])
+    for (let index = 1; index < restoreLogs.length; index++) {
+      expect(seqOf(restoreLogs[index])).toBeGreaterThan(seqOf(restoreLogs[index - 1]))
+    }
+    const requestIds = new Set(
+      restoreLogs.map((line) => /request_id=(\S+)/.exec(line)?.[1]).filter(Boolean),
+    )
+    expect(requestIds).toEqual(new Set(["restore-stage-order"]))
+    const opIds = [
+      ...new Set(restoreLogs.map((line) => /op_id=(\S+)/.exec(line)?.[1]).filter(Boolean)),
+    ]
+    expect(opIds).toHaveLength(1)
+    expect(opIds[0]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    )
+    expect(seqOf(restoreLogs[stages.indexOf("reservation_completed")])).toBeLessThan(
+      seqOf(restoreLogs[stages.indexOf("upstream_update_started")]),
+    )
+    expect(seqOf(restoreLogs[stages.indexOf("dispatch_completed")])).toBeLessThan(
+      seqOf(restoreLogs[stages.indexOf("upstream_update_started")]),
+    )
+    expect(seqOf(restoreLogs[stages.indexOf("upstream_update_completed")])).toBeLessThan(
+      seqOf(restoreLogs[stages.indexOf("finish_completed")]),
+    )
+    const joined = restoreLogs.join("\n")
+    expect(joined).not.toContain(password)
+    expect(joined).not.toContain("FT_RESTORE_TELEMETRY_BODY")
+    expect(joined).not.toContain("- [")
+    expect(joined).not.toContain("manageUrl")
+    log.mockRestore()
+  })
+
+  it("stops RESTORE_STAGE completed chain when upstream update fails", async () => {
+    const logs: string[] = []
+    const log = vi.spyOn(console, "log").mockImplementation((message: unknown) => {
+      logs.push(String(message))
+    })
+    const { service, transport } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] fail-update" })
+    if (!created.ok) throw new Error("create failed")
+    await service.completeEntry(context, {
+      entryId: created.entry.id,
+      requestId: "archive-fail-update",
+      action: "archive_permanent",
+    })
+    transport.mockImplementation((_, init) =>
+      init?.method === "PUT"
+        ? Promise.resolve(new Response(null, { status: 403 }))
+        : Promise.resolve(new Response("- [x] fail-update")),
+    )
+    logs.length = 0
+    expect(
+      await service.restoreEntry(context, { entryId: created.entry.id, requestId: "restore-fail-update" }),
+    ).toMatchObject({ ok: false, code: "UPSTREAM_REJECTED" })
+    const restoreLogs = logs.filter((line) => line.startsWith("RESTORE_STAGE="))
+    const stages = restoreLogs.map((line) => /RESTORE_STAGE=(\S+)/.exec(line)?.[1])
+    expect(stages).toContain("reservation_completed")
+    expect(stages).toContain("dispatch_completed")
+    expect(stages).toContain("upstream_update_started")
+    expect(stages).toContain("upstream_update_failed")
+    expect(stages).not.toContain("upstream_update_completed")
+    expect(stages).not.toContain("finish_completed")
+    expect(restoreLogs.some((line) => line.includes("code=UPSTREAM_REJECTED"))).toBe(true)
+    expect(restoreLogs.join("\n")).not.toContain("- [x]")
+    expect(restoreLogs.join("\n")).not.toContain("secret=")
+    log.mockRestore()
+  })
+
   it("fails closed for timed, active, ambiguous, and uncertain permanent restore", async () => {
     const { service, transport, store } = await setup()
     const created = await service.createEntry(context, { ...input, content: "- [ ] managed" })

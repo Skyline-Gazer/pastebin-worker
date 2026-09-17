@@ -426,17 +426,11 @@ describe("persistent internal entry services", () => {
     for (let index = 1; index < restoreLogs.length; index++) {
       expect(seqOf(restoreLogs[index])).toBeGreaterThan(seqOf(restoreLogs[index - 1]))
     }
-    const requestIds = new Set(
-      restoreLogs.map((line) => /request_id=(\S+)/.exec(line)?.[1]).filter(Boolean),
-    )
+    const requestIds = new Set(restoreLogs.map((line) => /request_id=(\S+)/.exec(line)?.[1]).filter(Boolean))
     expect(requestIds).toEqual(new Set(["restore-stage-order"]))
-    const opIds = [
-      ...new Set(restoreLogs.map((line) => /op_id=(\S+)/.exec(line)?.[1]).filter(Boolean)),
-    ]
+    const opIds = [...new Set(restoreLogs.map((line) => /op_id=(\S+)/.exec(line)?.[1]).filter(Boolean))]
     expect(opIds).toHaveLength(1)
-    expect(opIds[0]).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    )
+    expect(opIds[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
     expect(seqOf(restoreLogs[stages.indexOf("reservation_completed")])).toBeLessThan(
       seqOf(restoreLogs[stages.indexOf("upstream_update_started")]),
     )

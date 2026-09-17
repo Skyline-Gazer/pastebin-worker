@@ -165,10 +165,7 @@ export class EntryService {
         source = await this.client.read(binding.paste_name!)
         stages.emit("paste_read_completed")
       } catch (error) {
-        stages.emit(
-          "paste_read_failed",
-          error instanceof PasteError ? error.code : "STORAGE_OR_CREDENTIAL_UNAVAILABLE",
-        )
+        stages.emit("paste_read_failed", error instanceof PasteError ? error.code : "STORAGE_OR_CREDENTIAL_UNAVAILABLE")
         throw error
       }
       const content = this.restoreManagedTask(source)

@@ -74,17 +74,17 @@ Do **not** use Workers invocation aggregates alone.
 
 ## 5. Failure stages
 
-| Failure | Marker | Must not appear afterward |
-| --- | --- | --- |
-| lifecycle gate | `lifecycle_gate_failed` | reservation/dispatch/update/finish completed |
-| credential open | `credential_open_failed` | paste_read+ completed |
-| paste read | `paste_read_failed` | managed_task+ completed |
-| managed task | `managed_task_failed` | operation+ completed |
-| reservation | `reservation_failed` | dispatch/update/finish completed |
-| dispatch | `dispatch_failed` | update/finish completed |
-| timed expiry cancel | `expiry_cancel_failed` | upstream_update/finish completed |
-| upstream update | `upstream_update_failed` | upstream_update_completed / finish_completed |
-| finish / post-update persist | `finish_failed` | finish_completed |
+| Failure                      | Marker                   | Must not appear afterward                    |
+| ---------------------------- | ------------------------ | -------------------------------------------- |
+| lifecycle gate               | `lifecycle_gate_failed`  | reservation/dispatch/update/finish completed |
+| credential open              | `credential_open_failed` | paste_read+ completed                        |
+| paste read                   | `paste_read_failed`      | managed_task+ completed                      |
+| managed task                 | `managed_task_failed`    | operation+ completed                         |
+| reservation                  | `reservation_failed`     | dispatch/update/finish completed             |
+| dispatch                     | `dispatch_failed`        | update/finish completed                      |
+| timed expiry cancel          | `expiry_cancel_failed`   | upstream_update/finish completed             |
+| upstream update              | `upstream_update_failed` | upstream_update_completed / finish_completed |
+| finish / post-update persist | `finish_failed`          | finish_completed                             |
 
 Compensation / API error codes remain unchanged; markers are additive only.
 

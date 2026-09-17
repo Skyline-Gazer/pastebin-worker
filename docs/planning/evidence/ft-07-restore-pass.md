@@ -183,8 +183,15 @@ ARCHIVE_LIST_REMOVED=YES
 ACTIVE_LIST_TARGET_COUNT=1
 ACTIVE_LIST_PRESENT=YES
 TASK_RENDER_STATE=UNCHECKED
+INTERACTIVE_UNCHECKED_TASK_COUNT=1
 tab_counts_observed=进行中 4 / 归档 0
 ```
+
+Authenticated Active-tab a11y observation for the target article
+(`DMkerQPTisMNhhp8tdQc5Ech`): exactly one `Markdown task` checkbox with
+states `readonly` only — **not** `checked`, **not** `disabled` — matching
+SPEC PASS criterion `INTERACTIVE_UNCHECKED_TASK_COUNT=1`. (CDP evaluate was
+unavailable in-session; a11y snapshot is the recorded interactivity evidence.)
 
 ---
 

@@ -1,17 +1,20 @@
 # FT-08 TODO — Timed archive + countdown execution runbook
 
-Status: **TODO DRAFT** (execution not authorized; `FT08_STARTED=NO`)
+Status: **TODO COMPLETE** (Phase A–G executed; `FT08_FUNCTIONAL_RESULT=PASS`; `FT09_STARTED=NO`).
 
 Parent PLAN/SPEC: [ft-08-plan.md](ft-08-plan.md), [ft-08-spec.md](ft-08-spec.md)
 
 ```text
-OWNER_AUTHORIZATION_REQUIRED_BEFORE_PHASE_C=YES
-FT08_AUTHORIZED=NO
-FT08_STARTED=NO
-FT08_ACTION_SUBMITTED=NO
+OWNER_AUTHORIZATION_REQUIRED_BEFORE_PHASE_C=YES  (was honored; owner authorized Phase C)
+FT08_AUTHORIZED=YES (Phase C turn)
+FT08_STARTED=YES (Phase C)
+FT08_ACTION_SUBMITTED=YES
 ORDERING_VERIFIED_BY_STEP_LOGS=NO
 FT07_ORDERING_EVIDENCE=INCONCLUSIVE
+FT09_STARTED=NO
 ```
+
+Durable execution evidence: [evidence/ft-08-timed-archive-pass.md](evidence/ft-08-timed-archive-pass.md).
 
 ## Phase A — read-only preflight
 

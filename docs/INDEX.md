@@ -26,7 +26,8 @@
 - [`planning/evidence/ft-07-restore-pass.md`](planning/evidence/ft-07-restore-pass.md) — FT-07 functional PASS evidence + FT-08 handoff baseline.
 - [`planning/restore-ordering-telemetry-plan.md`](planning/restore-ordering-telemetry-plan.md) / [`restore-ordering-telemetry-spec.md`](planning/restore-ordering-telemetry-spec.md) — post-deploy `RESTORE_STAGE` observability debt (does **not** re-verify historical FT-07 ordering).
 - [`planning/ft04-markdown-inbound-plan.md`](planning/ft04-markdown-inbound-plan.md) — #151 PLAN: Markdown-first inbound (native code block + webhook disposition).
-- [`planning/ft-08-plan.md`](planning/ft-08-plan.md) / [`ft-08-spec.md`](planning/ft-08-spec.md) / [`ft-08-todo.md`](planning/ft-08-todo.md) — FT-08 PLAN/SPEC/TODO: timed archive + countdown (docs-only draft; execution requires fresh owner authorization).
+- [`planning/ft-08-plan.md`](planning/ft-08-plan.md) / [`ft-08-spec.md`](planning/ft-08-spec.md) / [`ft-08-todo.md`](planning/ft-08-todo.md) — FT-08 PLAN/SPEC/TODO: timed archive + countdown (approved; `FT08_FUNCTIONAL_RESULT=PASS`).
+- [`planning/evidence/ft-08-timed-archive-pass.md`](planning/evidence/ft-08-timed-archive-pass.md) — FT-08 functional PASS evidence + FT-09 handoff baseline.
 
 ## Operational scaffold
 

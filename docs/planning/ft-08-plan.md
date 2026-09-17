@@ -1,17 +1,22 @@
 # FT-08 PLAN — Timed archive + countdown
 
-Status: **PLAN READY FOR OWNER REVIEW** (docs-only; no execution)
+Status: **PLAN APPROVED** (`FT08_PLAN_OWNER_REVIEW=APPROVED`); execution **FT08_FUNCTIONAL_RESULT=PASS**; closeout status sync only.
 
 ```text
 FT08_TEST_OBJECTIVE=timed_archive_and_countdown
 FT08_USES_FT07_RESULT=YES
-FT08_AUTHORIZED=NO
-FT08_STARTED=NO
+FT08_FUNCTIONAL_RESULT=PASS
+FT08_COMPLETE=YES
+FT08_AUTHORIZED=YES (execution turn)
+FT08_STARTED=YES (execution turn)
+FT08_ACTION_SUBMITTED=YES (execution turn)
 FT07_ORDERING_EVIDENCE=INCONCLUSIVE (unchanged)
 ORDERING_VERIFIED_BY_STEP_LOGS=NO (unchanged)
 PRODUCTION_MUTATION=NO (this document)
 PR165_DEPLOYMENT_IS_NOT_AN_FT08_ENTRY_GATE=YES
 ```
+
+Durable execution evidence: [evidence/ft-08-timed-archive-pass.md](evidence/ft-08-timed-archive-pass.md).
 
 Tracking: Issue [#162](https://github.com/Skyline-Gazer/pastebin-worker/issues/162). Parent
 function-test instruction: owner `START PRODUCTION FUNCTION TEST` (2026-09-12) sequence

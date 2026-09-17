@@ -1,18 +1,20 @@
 # FT-08 SPEC — Timed archive + countdown
 
-Status: **SPEC DRAFT FOR OWNER REVIEW** (docs-only; execution requires a separate owner authorization)
+Status: **SPEC APPROVED**; execution **FT08_FUNCTIONAL_RESULT=PASS**; contract unchanged.
 
 Parent PLAN: [ft-08-plan.md](ft-08-plan.md)
 
 ```text
 FT08_TEST_OBJECTIVE=timed_archive_and_countdown
 FT08_USES_FT07_RESULT=YES
+FT08_FUNCTIONAL_RESULT=PASS
+FT08_COMPLETE=YES
 FT07_ORDERING_EVIDENCE=INCONCLUSIVE (unchanged)
 ORDERING_VERIFIED_BY_STEP_LOGS=NO (unchanged)
-FT08_AUTHORIZED=NO
-FT08_STARTED=NO
 RETROACTIVE_EVIDENCE=NO
 ```
+
+Durable execution evidence: [evidence/ft-08-timed-archive-pass.md](evidence/ft-08-timed-archive-pass.md).
 
 ## 1. Scope
 

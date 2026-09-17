@@ -350,9 +350,19 @@ No mutation.
 
 ### LIVE
 
-- messaging Worker exact live version reconfirmed @100%
-- generic Worker exact live version reconfirmed @100%
+- messaging Worker exact live version = `4c18eccc-0d80-472f-8d33-349047442fde` @100%
+  (`pastebin-feishu-prod`; same pin as FT-06)
+- generic Worker exact live version = `1d84dbbd-fa52-4b5a-a158-d1dab939d32b` @100%
+  (`pastebin-prod`; same pin as FT-06)
 - `SPLIT_TRAFFIC=NO`
+
+If either live version differs from the pins above, or traffic is split:
+
+```text
+FT07_EXECUTION_NOT_ARMED
+```
+
+Do not proceed against an unapproved deployment.
 
 ### TARGET
 

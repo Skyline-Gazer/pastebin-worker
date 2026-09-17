@@ -5,6 +5,7 @@ Status: **PLAN READY FOR OWNER REVIEW** (docs-only; no execution)
 ```text
 FT08_TEST_OBJECTIVE=timed_archive_and_countdown
 FT08_USES_FT07_RESULT=YES
+FT08_AUTHORIZED=NO
 FT08_STARTED=NO
 FT07_ORDERING_EVIDENCE=INCONCLUSIVE (unchanged)
 ORDERING_VERIFIED_BY_STEP_LOGS=NO (unchanged)
@@ -48,8 +49,8 @@ ORDERING_VERIFIED_BY_STEP_LOGS=NO   # FT07 historical evidence gap; NOT an FT08 
 FT07_ORDERING_EVIDENCE=INCONCLUSIVE
 FUTURE_ORDERING_TELEMETRY_IMPLEMENTED=YES
 FUTURE_ORDERING_TELEMETRY_DEPLOYED=NO  # does NOT gate FT08
-FRONTEND_DEPLOYED_CURRENT=YES          # required: deployed Add-on matches downstream/main behavior
 TELEMETRY_DEPLOYMENT_REQUIRED_BEFORE_FT08=NO
+PR165_DEPLOYMENT_IS_NOT_AN_FT08_ENTRY_GATE=YES
 ```
 
 - `FT08_USES_FT07_RESULT=YES` — the FT-07 restored fixture is the FT-08 input.
@@ -57,10 +58,35 @@ TELEMETRY_DEPLOYMENT_REQUIRED_BEFORE_FT08=NO
 - No restore ordering / `RESTORE_STAGE` / FT-09 semantics in the FT-08 gate.
 - Do **not** require `ORDERING_VERIFIED_BY_STEP_LOGS=YES`.
 
-### 3.1 Required code/deployment version
+### 3.1 Planning source baseline vs FT-08 runtime deployment requirement
 
-- `downstream/main` at or after `38b4ff0de33b3bcf0785f99f0eba899ca18d523a` (Merge #165). No `e=max`-path behavior change was introduced there; this pin is a stable baseline anchor.
-- Deployed messaging Worker must reflect the pinned source (version/pin recorded in Pre-ARM). FT-08 does **not** require telemetry deploy (#165), because FT-08 executes `completeEntry` (`archive_expiring`), which emits no restore markers and needs no restore telemetry.
+```text
+PLANNING_SOURCE_BASELINE=38b4ff0de33b3bcf0785f99f0eba899ca18d523a
+FT08_RUNTIME_DEPLOYMENT_REQUIREMENT=version-compatible; NOT identical-to-baseline
+```
+
+- **PLANNING_SOURCE_BASELINE** anchors the reviewed planning source to current
+  `downstream/main` (Merge #165). It defines what the reviewed contract means;
+  it is **not** a production deployment pin and does **not** require deploying
+  the Worker code it contains (including #165 restore telemetry).
+- **FT08_RUNTIME_DEPLOYMENT_REQUIREMENT** is the only deployment gate for FT-08:
+  - the deployed production Add-on Worker is **version-compatible with the
+    known FT-08 `archive_expiring` contract** — `completeEntry`, `archive_expiring`,
+    `e=max` mapping, authoritative `expiresAt` handling;
+  - Phase A records the actual **`WORKER_PIN`** (deployment/version identity) by
+    read-only resolution;
+  - Phase A verifies that deployment contains the FT-08-dependent behavior;
+  - **no** production upgrade is required solely to deploy #165 restore
+    telemetry (FT-08 executes `completeEntry`, not restore).
+- If finite existing docs/evidence identify the exact production pin used for
+  FT-06/FT-07, Phase A may cite it. Otherwise Phase A resolves the actual
+  production pin read-only and verifies compatibility. FT-08 **must not** force
+  `production == PLANNING_SOURCE_BASELINE`.
+
+```text
+TELEMETRY_DEPLOYMENT_REQUIRED_BEFORE_FT08=NO
+PR165_DEPLOYMENT_IS_NOT_AN_FT08_ENTRY_GATE=YES
+```
 
 ### 3.2 Fixture (FT-07 → FT-08 handoff; safe representation)
 
@@ -90,7 +116,8 @@ FT-08 canonical action is the **frontend single-item** lifecycle action with an 
 browser session (per `ft-06-plan.md` §7 surface mapping). Required: browser session cookie,
 exact configured Origin, session-bound CSRF token, server-side principal→scope join to the
 fixture binding; alternate direct API is NOT the canonical surface. Exactly one action
-submission; `<idempotency-key>` opaque 1..256 printable; transport retries collapse by key.
+submission (`FT08_ACTION_SINGLE_SUBMISSION` — an execution invariant, not a precondition);
+`<idempotency-key>` opaque 1..256 printable; transport retries collapse by key.
 
 ## 4. Action (single production mutation permitted by a future owner authorization)
 
@@ -100,6 +127,7 @@ Endpoint surface: POST /api/entries/<id>/complete   body={"action":"archive_expi
 Input: none beyond action + id + session + CSRF (+ Idempotency-Key set by frontend)
 Expected prior state: active / permanent / expires_at NULL / version 3 / task unchecked
 Upstream: PasteClient.update(paste, password, checkedContent, "max") → e=max (deployment MAX_EXPIRATION)
+          (value is a reviewed source contract; runtime evidence asserts the timed-expiring effect)
 D1: reserveCompletion(kind=complete_expiring) → dispatch → finishCompletion(v3→v4)
 ```
 
@@ -112,7 +140,7 @@ refreshes list from authoritative response.
 HTTP/API: 200 {entry:{visibility:archived, retentionMode:timed, expiresAt:<ISO>, version:4}}
 D1 binding: visibility=archived retention_mode=timed expires_at=<ISO> version=4
 feishu_operations: kind=complete_expiring status=succeeded expected_version=3 created_at<=updated_at
-Paste: body `- [x] FT_LIFECYCLE_20260916_01` (managed marker checked; other bytes unchanged); retention e=max
+Paste: body `- [x] FT_LIFECYCLE_20260916_01` (managed marker checked; other bytes unchanged); timed-expiring effect (finite authoritative expireAt)
 lifecycle: ARCHIVED_EXPIRING; expiresAt authoritative from upstream expireAt
 frontend: Active row leaves 进行中; Archive row shows 限期归档：剩余 Nd Nh Nm (role=status aria-label 限期归档，剩余 …)
 frontend countdown ONLY from returned expiresAt (ISO); tolerance: server-expiresAt minus local-now;
@@ -143,6 +171,7 @@ operation result: result JSON of archived public entry (project())
 - HTTP result (status + body entry JSON)
 - Post D1 row: target binding fields + target op row (kind/status/expected_version/created/updated)
 - Upstream Paste: GET 200 body exact `- [x] FT_LIFECYCLE_20260916_01` (HAS_LF expectation), metadata expireAt
+- VALUE of `"max"` mapping: reviewed source contract (`archive_expiring → PasteClient.update(..., "max")`); runtime metadata cannot independently prove the request literal — evidence below asserts the timed-expiring effect
 - Frontend observation: Active tab target absent; Archive tab target present with 限期归档 countdown
   (role=status aria-label `限期归档，剩余 N…`), observation time
 - Correlation: one idempotency key → one complete_expiring op → one HTTP 200
@@ -154,7 +183,7 @@ operation result: result JSON of archived public entry (project())
 - fixture mismatch (visibility/retention/expiresAt/version/body/paste_name)
 - version mismatch at reserve (VERSION_CONFLICT) / unexpected op row
 - auth mismatch (401/403) or CSRF/Origin failure
-- HEAD/deployment mismatch vs pinned baseline
+- HEAD/deployment mismatch vs FT08_RUNTIME_DEPLOYMENT_REQUIREMENT (version compatibility; see §3.1)
 - unexpected HTTP status / non-200 or body not entry JSON
 - upstream update rejected/uncertain; ENTRY_NOT_FOUND; managed task ambiguous
 - unexpected upstream mutation (new paste / wrong body / unrequested retention)
@@ -163,20 +192,31 @@ operation result: result JSON of archived public entry (project())
 ```
 
 On STOP: stop and record; no automatic retry; blind retry forbidden when retry-safety unknown.
+Precondition mismatches discovered before the first action are reported as
+`FT08_EXECUTION_STATUS=BLOCKED_PRECONDITION` / `FT08_FUNCTIONAL_RESULT=NOT_RUN`,
+not as functional FAIL.
 
 ## 9. Owner authorization and boundaries
 
 ```text
 OWNER_AUTHORIZATION_REQUIRED_BEFORE_PHASE_C=YES
+FT08_AUTHORIZED=NO
 FT08_STARTED=NO
+FT08_ACTION_SUBMITTED=NO
 PRODUCTION_MUTATION_THIS_ROUND=NO
 PR165_DEPLOYMENT_IS_NOT_AN_FT08_ENTRY_GATE=YES
 ```
 
-- Owner authorization is a **fresh, explicit** authorization for FT-08 only; it is not
-  implied by FT-07, #164/#165, or any prior step.
-- FT-08 success must NOT be used to retroactively prove FT-07 ordering; `RESTORE_STAGE`
-  markers (post-deploy) are future-evidence only.
-- This PLAN is docs-only; no deploy / production call / timed archive / restore executed now.
+- Owner authorization is a **fresh, explicit** authorization for FT-08 only; it
+  is not implied by FT-07, #164/#165, or any prior step. Authorization sets
+  `FT08_AUTHORIZED=YES`; the FT-08 run is **not** started until Phase C begins
+  (`FT08_STARTED=YES` at Phase C entry), and the single action is recorded
+  separately as `FT08_ACTION_SUBMITTED=YES/NO`.
+- FT-08 success must NOT be used to retroactively prove FT-07 ordering;
+  `RESTORE_STAGE` markers (post-deploy) are future-evidence only.
+- This PLAN is docs-only; no deploy / production call / timed archive /
+  restore executed now. FT-08 PASS does **not** require waiting for the real
+  expiration deadline; deadline-boundary observation is future,
+  separately-authorized scope.
 
 Status: PLAN READY FOR OWNER REVIEW

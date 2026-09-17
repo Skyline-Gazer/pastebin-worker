@@ -1,6 +1,7 @@
 # FT-07 PLAN — Restore permanent archive
 
-Status: **PLAN APPROVED** (`OWNER_APPROVAL: FT07_PLAN`).
+Status: **PLAN APPROVED** (`OWNER_APPROVAL: FT07_PLAN`). Execution:
+**FT07_FUNCTIONAL_RESULT=PASS** (see evidence).
 
 ```text
 PLANNING_CLASSIFICATION=FT06_RESULT_RESTORE_FIXTURE_LOCKED
@@ -8,16 +9,17 @@ FT07_TARGET=DMkerQPTisMNhhp8tdQc5Ech
 FT07_USES_FT06_RESULT=YES
 FT04_PASTE_PRESERVED=YES
 APPROVED_PLAN_HEAD=bdb9d3eb5dfa874d6ed465fcf472a5a380c075b5
-FT07_STARTED=NO
+FT07_FUNCTIONAL_RESULT=PASS
+FT07_STARTED=YES
+FT07_COMPLETE=YES
 FT08_STARTED=NO
-PRODUCTION_MUTATION=NO
 ```
 
-Tracking: [#162](https://github.com/Skyline-Gazer/pastebin-worker/issues/162). Parent Function Test sequence: owner instruction `START PRODUCTION FUNCTION TEST` (2026-09-12). Predecessor [#160](https://github.com/Skyline-Gazer/pastebin-worker/issues/160) **CLOSED** (`FT06_COMPLETE=YES`).
+Tracking: [#162](https://github.com/Skyline-Gazer/pastebin-worker/issues/162) (**Issue**, not a PR). Parent Function Test sequence: owner instruction `START PRODUCTION FUNCTION TEST` (2026-09-12). Predecessor [#160](https://github.com/Skyline-Gazer/pastebin-worker/issues/160) **CLOSED** (`FT06_COMPLETE=YES`).
 
-SPEC: [ft-07-spec.md](ft-07-spec.md) (same planning PR; SPEC approval and later stage-specific execution authorizations still required separately).
+SPEC: [ft-07-spec.md](ft-07-spec.md). Planning PR [#163](https://github.com/Skyline-Gazer/pastebin-worker/pull/163) **MERGED**.
 
-This PLAN does **not** authorize Restore clicks, restore API calls, D1 writes, Paste updates, P2P, deploy, FT-07 execution, or FT-08+.
+Durable execution evidence: [evidence/ft-07-restore-pass.md](evidence/ft-07-restore-pass.md).
 
 ## 1. Canonical source
 
@@ -458,28 +460,14 @@ Do **not** execute FT-08 from this PLAN.
 
 ## 18. Production mutation boundary
 
-Authorized by this planning turn only:
-
-- docs under `docs/planning/`
-- tracking issue / planning PR bookkeeping
-
-Forbidden now:
+Planning turn originally forbade execution. Execution later completed under
+separate owner authorization (single Restore click). Closeout docs turns must
+not perform further production writes.
 
 ```text
-Restore / 恢复 click
-restore API POST
-D1 write
-Paste create/update/delete
-Feishu/Lark P2P
-webhook/queue/DLQ mutation
-Worker deploy/traffic change
-FT-07 execution
-FT-08+
-mutation of 7Zf3ZDjmyj2dQMWpSwfc7CK8
-```
-
-```text
-PRODUCTION_MUTATION=NO
-FT07_STARTED=NO
+FT07_FUNCTIONAL_RESULT=PASS
 FT08_STARTED=NO
+PRODUCTION_MUTATION_THIS_CLOSEOUT=NO
 ```
+
+See [evidence/ft-07-restore-pass.md](evidence/ft-07-restore-pass.md).

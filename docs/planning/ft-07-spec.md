@@ -1,29 +1,24 @@
 # FT-07 SPEC — Restore permanent archive
 
-Status: **SPEC READY FOR OWNER REVIEW**. Not executed.
+Status: **SPEC APPROVED**; execution **FT07_FUNCTIONAL_RESULT=PASS**.
 
 Parent PLAN: [ft-07-plan.md](ft-07-plan.md)
 
 ```text
 APPROVED_PLAN_HEAD=bdb9d3eb5dfa874d6ed465fcf472a5a380c075b5
+APPROVED_SPEC_HEAD=3694155fc5e2f30c6660f1b6d54689de9178db1c
 FT07_USES_FT06_RESULT=YES
 TARGET_PASTE=DMkerQPTisMNhhp8tdQc5Ech
-FT07_TARGET_NOT_RESTORABLE=NO
-FT07_STARTED=NO
+FT07_FUNCTIONAL_RESULT=PASS
+FT07_COMPLETE=YES
 FT08_STARTED=NO
-PRODUCTION_MUTATION=NO
 ```
 
-Tracking: [#162](https://github.com/Skyline-Gazer/pastebin-worker/issues/162)
+Tracking: [#162](https://github.com/Skyline-Gazer/pastebin-worker/issues/162) (**Issue**, not a PR). Planning PR [#163](https://github.com/Skyline-Gazer/pastebin-worker/pull/163) **MERGED**.
 
-This SPEC defines future production execution stages only:
+Durable execution evidence: [evidence/ft-07-restore-pass.md](evidence/ft-07-restore-pass.md).
 
-```text
-FT07_PRE_ARM   (read-only)
-FT07_EXECUTION (exactly one Restore click; separate owner authorization)
-```
-
-They MUST NOT be collapsed. This document does **not** authorize Restore clicks, restore API calls, D1 writes, Paste mutation, P2P, replay, deploy, or FT-08.
+This SPEC remains the behavioral contract for the completed execution. It does **not** authorize a second Restore, FT-08, deploy, or further production mutation.
 
 ## 1. Objective
 
@@ -564,6 +559,10 @@ FT08_STARTED=NO
 
 No new lifecycle fixture. Do not auto-start FT-08.
 
+**Handoff status after execution:** satisfied. See
+[evidence/ft-07-restore-pass.md](evidence/ft-07-restore-pass.md) §7 for
+execution-time vs closeout re-observation timestamps.
+
 ## 21. Production authorization boundary
 
 This SPEC defines future execution only.
@@ -655,9 +654,8 @@ Any later ambiguity during Pre-ARM or execution → STOP / `FT07_FAIL_UNRESOLVED
 ---
 
 ```text
-Status: SPEC READY FOR OWNER REVIEW
-Implementation has NOT started.
-PRODUCTION_MUTATION=NO
-FT07_STARTED=NO
+Status: SPEC APPROVED; FT07_FUNCTIONAL_RESULT=PASS
+Evidence: docs/planning/evidence/ft-07-restore-pass.md
 FT08_STARTED=NO
+PRODUCTION_MUTATION_THIS_CLOSEOUT=NO
 ```

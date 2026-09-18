@@ -624,6 +624,178 @@ describe("persistent internal entry services", () => {
     expect(await store.pending(created.entry.id)).toMatchObject({ status: "reconciliation_required" })
   })
 
+  it("defect170 T4/T5: post-cancel Stage 2 deterministic failure forces reconciliation_required", async () => {
+    const cases: [string, Response, string][] = [
+      ["t4-stage2-rejected", new Response(null, { status: 403 }), "upstream_update_failed"],
+      ["t5-stage2-notfound", new Response(null, { status: 404 }), "upstream_update_failed"],
+    ]
+    for (const [requestId, failureResponse, expectedStage] of cases) {
+      const { service, transport, store } = await setup()
+      const created = await service.createEntry(context, {
+        recordKey: `record-${requestId}`,
+        requestId: `create-${requestId}`,
+        content: "- [ ] timed",
+      })
+      if (!created.ok) throw new Error("create failed")
+      const archived = await service.completeEntry(context, {
+        entryId: created.entry.id,
+        requestId: `archive-${requestId}`,
+        action: "archive_expiring",
+      })
+      if (!archived.ok || !("entry" in archived)) throw new Error("archive failed")
+      const initial = await store.get(context.scopeId, created.entry.id)
+      expect(initial).toMatchObject({
+        visibility: "archived",
+        retention_mode: "timed",
+        version: archived.entry.version,
+      })
+      transport.mockClear()
+
+      const logs: string[] = []
+      const log = vi.spyOn(console, "log").mockImplementation((message: unknown) => {
+        logs.push(String(message))
+      })
+      const originalTransport = transport.getMockImplementation()!
+      transport.mockImplementation((url, init) => {
+        if (init?.method === "PUT") {
+          const puts = transport.mock.calls.filter(([, i]) => i?.method === "PUT")
+          if (puts.length === 2) return Promise.resolve(failureResponse)
+        }
+        return originalTransport(url, init)
+      })
+
+      const result = await service.restoreEntry(context, { entryId: created.entry.id, requestId })
+      expect(result).toMatchObject({ ok: false, code: "RECONCILIATION_REQUIRED" })
+
+      const writes = transport.mock.calls.filter(([, init]) => init?.method === "PUT")
+      expect(writes).toHaveLength(2)
+      expect((writes[0][1]!.body as FormData).get("c")).toBe("- [x] timed")
+      expect((writes[1][1]!.body as FormData).get("c")).toBe("- [ ] timed")
+
+      expect(await store.get(context.scopeId, created.entry.id)).toMatchObject({
+        visibility: "archived",
+        retention_mode: "timed",
+        expires_at: archived.entry.expiresAt,
+        version: archived.entry.version,
+      })
+      expect(await store.pending(created.entry.id)).toMatchObject({ status: "reconciliation_required" })
+      expect((await store.pending(created.entry.id))?.status).not.toBe("failed")
+
+      const stages = logs.filter((l) => l.startsWith("RESTORE_STAGE=expiry_cancel_completed"))
+      expect(stages.length).toBeGreaterThan(0)
+      expect(logs.some((l) => l.startsWith("RESTORE_STAGE=upstream_update_started"))).toBe(true)
+      expect(logs.some((l) => l.startsWith(`RESTORE_STAGE=${expectedStage}`))).toBe(true)
+      expect(logs.some((l) => l.startsWith("RESTORE_STAGE=upstream_update_completed"))).toBe(false)
+      expect(logs.some((l) => l.startsWith("RESTORE_STAGE=finish_completed"))).toBe(false)
+      log.mockRestore()
+    }
+  })
+
+  it("defect170 T8: same-request replay after post-cancel failure stays fail-closed with no second mutation", async () => {
+    const { service, transport, store } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] timed" })
+    if (!created.ok) throw new Error("create failed")
+    const archived = await service.completeEntry(context, {
+      entryId: created.entry.id,
+      requestId: "archive-t8",
+      action: "archive_expiring",
+    })
+    if (!archived.ok || !("entry" in archived)) throw new Error("archive failed")
+    transport.mockClear()
+
+    // First attempt: Stage 1 succeeds (200 on first PUT), Stage 2 fails with 403 on second PUT.
+    let put = 0
+    transport.mockImplementation((_, init) => {
+      if (init?.method === "PUT") {
+        put += 1
+        if (put <= 1) {
+          return Promise.resolve(
+            Response.json({ url: "https://paste.example/abcd", expireAt: null, expirationSeconds: null }),
+          )
+        }
+        return Promise.resolve(new Response(null, { status: 403 }))
+      }
+      return Promise.resolve(new Response("- [x] timed"))
+    })
+
+    const result = await service.restoreEntry(context, { entryId: created.entry.id, requestId: "t8-restore" })
+    expect(result).toMatchObject({ ok: false, code: "RECONCILIATION_REQUIRED" })
+    expect(await store.pending(created.entry.id)).toMatchObject({ status: "reconciliation_required" })
+    const afterFirst = transport.mock.calls.filter(([, init]) => init?.method === "PUT").length
+    expect(afterFirst).toBe(2)
+
+    // Replay with the same idempotency key: must NOT re-run Stage 1/Stage 2.
+    transport.mockClear()
+    put = 0
+    const replay = await service.restoreEntry(context, { entryId: created.entry.id, requestId: "t8-restore" })
+    expect(replay).toMatchObject({ ok: false, code: "RECONCILIATION_REQUIRED" })
+    expect(transport.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(0)
+    expect(await store.pending(created.entry.id)).toMatchObject({ status: "reconciliation_required" })
+
+    // A fresh request against the same binding must not bypass the outstanding claim.
+    const fresh = await service.restoreEntry(context, { entryId: created.entry.id, requestId: "t8-fresh" })
+    expect(fresh.ok).toBe(false)
+  })
+
+  it("defect170 T9: permanent restore deterministic upstream failure remains clean failed", async () => {
+    const { service, transport, store } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] one" })
+    if (!created.ok) throw new Error("create failed")
+    await service.completeEntry(context, {
+      entryId: created.entry.id,
+      requestId: "archive-permanent-t9",
+      action: "archive_permanent",
+    })
+    transport.mockImplementation((_, init) =>
+      init?.method === "PUT"
+        ? Promise.resolve(new Response(null, { status: 403 }))
+        : Promise.resolve(new Response("- [x] one")),
+    )
+    const result = await service.restorePermanentEntry(context, { entryId: created.entry.id, requestId: "t9-perm" })
+    expect(result).toMatchObject({ ok: false, code: "UPSTREAM_REJECTED" })
+    expect(await store.get(context.scopeId, created.entry.id)).toMatchObject({
+      visibility: "archived",
+      retention_mode: "permanent",
+    })
+    // permanent deterministic failure stays a clean terminal `failed` (NOT reconciliation_required)
+    expect(await store.pending(created.entry.id)).toBeNull()
+    const op = await store.operation(context.scopeId, "t9-perm")
+    expect(op?.status).toBe("failed")
+  })
+
+  it("defect170 T9b: permanent deterministic failure keeps original API code when store.fail persistence throws", async () => {
+    const { service, transport, store } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] one" })
+    if (!created.ok) throw new Error("create failed")
+    await service.completeEntry(context, {
+      entryId: created.entry.id,
+      requestId: "archive-permanent-t9b",
+      action: "archive_permanent",
+    })
+    transport.mockClear()
+    transport.mockImplementation((_, init) =>
+      init?.method === "PUT"
+        ? Promise.resolve(new Response(null, { status: 403 }))
+        : Promise.resolve(new Response("- [x] one")),
+    )
+    // Simulate fail-state persistence failure: store.fail throws.
+    vi.spyOn(store, "fail").mockRejectedValueOnce(new Error("storage unavailable"))
+
+    const result = await service.restorePermanentEntry(context, { entryId: created.entry.id, requestId: "t9b-perm" })
+    // Must keep the original deterministic error (not STORAGE_OR_CREDENTIAL_UNAVAILABLE),
+    // and must NOT introduce post-cancel reconciliation semantics for permanent restore.
+    expect(result).toMatchObject({ ok: false, code: "UPSTREAM_REJECTED" })
+    expect(await store.get(context.scopeId, created.entry.id)).toMatchObject({
+      visibility: "archived",
+      retention_mode: "permanent",
+    })
+    // No reconciliation_required introduced solely by #170. store.fail was mocked to throw,
+    // so the op may remain dispatched (pre-existing fail-closed behavior) — acceptable evidence.
+    expect((await store.pending(created.entry.id))?.status).not.toBe("reconciliation_required")
+    const writes = transport.mock.calls.filter(([, init]) => init?.method === "PUT")
+    expect(writes).toHaveLength(1)
+  })
+
   it("reads timed archived bindings when upstream metadata matches their authoritative expiry", async () => {
     const { service, store, credentials } = await setup()
     const created = await service.createEntry(context, { ...input, content: "- [ ] timed" })

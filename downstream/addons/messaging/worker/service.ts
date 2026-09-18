@@ -253,7 +253,11 @@ export class EntryService {
             }
             return this.error("RECONCILIATION_REQUIRED", op.id)
           }
-          await this.store.fail(op.id)
+          try {
+            await this.store.fail(op.id)
+          } catch {
+            /* retain fail-closed evidence */
+          }
           return this.error(error.code, op.id)
         }
         // Finish/persistence failures after a confirmed upstream update remain

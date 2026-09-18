@@ -763,6 +763,39 @@ describe("persistent internal entry services", () => {
     expect(op?.status).toBe("failed")
   })
 
+  it("defect170 T9b: permanent deterministic failure keeps original API code when store.fail persistence throws", async () => {
+    const { service, transport, store } = await setup()
+    const created = await service.createEntry(context, { ...input, content: "- [ ] one" })
+    if (!created.ok) throw new Error("create failed")
+    await service.completeEntry(context, {
+      entryId: created.entry.id,
+      requestId: "archive-permanent-t9b",
+      action: "archive_permanent",
+    })
+    transport.mockClear()
+    transport.mockImplementation((_, init) =>
+      init?.method === "PUT"
+        ? Promise.resolve(new Response(null, { status: 403 }))
+        : Promise.resolve(new Response("- [x] one")),
+    )
+    // Simulate fail-state persistence failure: store.fail throws.
+    vi.spyOn(store, "fail").mockRejectedValueOnce(new Error("storage unavailable"))
+
+    const result = await service.restorePermanentEntry(context, { entryId: created.entry.id, requestId: "t9b-perm" })
+    // Must keep the original deterministic error (not STORAGE_OR_CREDENTIAL_UNAVAILABLE),
+    // and must NOT introduce post-cancel reconciliation semantics for permanent restore.
+    expect(result).toMatchObject({ ok: false, code: "UPSTREAM_REJECTED" })
+    expect(await store.get(context.scopeId, created.entry.id)).toMatchObject({
+      visibility: "archived",
+      retention_mode: "permanent",
+    })
+    // No reconciliation_required introduced solely by #170. store.fail was mocked to throw,
+    // so the op may remain dispatched (pre-existing fail-closed behavior) — acceptable evidence.
+    expect((await store.pending(created.entry.id))?.status).not.toBe("reconciliation_required")
+    const writes = transport.mock.calls.filter(([, init]) => init?.method === "PUT")
+    expect(writes).toHaveLength(1)
+  })
+
   it("reads timed archived bindings when upstream metadata matches their authoritative expiry", async () => {
     const { service, store, credentials } = await setup()
     const created = await service.createEntry(context, { ...input, content: "- [ ] timed" })

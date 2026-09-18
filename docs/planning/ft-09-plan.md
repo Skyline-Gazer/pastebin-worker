@@ -1,15 +1,16 @@
 # FT-09 PLAN — Restore timed archive / cancel expiry
 
-Status: **PLAN READY FOR OWNER REVIEW** (docs-only; no execution)
+Status: **PLAN COMPLETE — FT-09 executed PASS** (evidence: [ft-09-timed-restore-pass.md](evidence/ft-09-timed-restore-pass.md); historical blocked attempt: [ft-09-timed-restore-blocked-precondition.md](evidence/ft-09-timed-restore-blocked-precondition.md))
 
 ```text
 FT09_TEST_OBJECTIVE=timed_restore_and_expiry_cancellation
 FT09_CANONICAL_TRANSITION=ARCHIVED_EXPIRING -> ACTIVE_PERMANENT
 FT09_USES_FT08_RESULT=YES
-FT09_AUTHORIZED=NO
-FT09_STARTED=NO
-FT09_ACTION_SUBMITTED=NO
-FT09_FUNCTIONAL_RESULT=NOT_RUN
+FT09_AUTHORIZED=YES
+FT09_STARTED=YES
+FT09_ACTION_SUBMITTED=YES
+FT09_FUNCTIONAL_RESULT=PASS
+FT09_COMPLETE=YES
 PRODUCTION_MUTATION=NO (this document)
 FT07_ORDERING_EVIDENCE=INCONCLUSIVE (unchanged)
 ORDERING_VERIFIED_BY_STEP_LOGS=NO (unchanged)
@@ -161,6 +162,20 @@ but also:
 owner-authorized deployment AND post-deploy fresh Phase A PASS. Telemetry
 deployment alone does NOT grant FT-09 execution compatibility.
 
+> **Post-execution settlement (2026-09-18):**
+>
+> ```text
+> FT09_KNOWN_SOURCE_BLOCKER_POST_CANCEL_COMPENSATION=RESOLVED
+> DEFECT170_DEPLOYED=YES
+> FT09_EXECUTION_ALLOWED=YES
+> FT09_FUNCTIONAL_RESULT=PASS
+> FT09_COMPLETE=YES
+> ```
+>
+> Any `OPEN` / `FT09_EXECUTION_ALLOWED=NO` / `BLOCKER...COMPENSATION=OPEN`
+> token retained in this document above/below belongs to the **frozen
+> pre-execution planning contract/gate**, not the current project state.
+
 ### 5.3 Revalidation after deployment (Phase B)
 
 ```text
@@ -261,4 +276,4 @@ deploy (incl. #165), production logs for execution preflight, restore, click 恢
 POST restore, D1/Paste mutation, fixture recreation, expiry-cancel test, FT-09
 execution, or FT-07/FT-08 evidence modification.
 
-Status: PLAN READY FOR OWNER REVIEW
+Status: PLAN COMPLETE — FT-09 executed PASS

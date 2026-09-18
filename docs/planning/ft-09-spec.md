@@ -1,6 +1,6 @@
 # FT-09 SPEC — Restore timed archive / cancel expiry
 
-Status: **SPEC DRAFT FOR OWNER REVIEW** (docs-only; execution requires a separate owner authorization)
+Status: **SPEC SETTLED — FT-09 executed PASS** (execution evidence: [ft-09-timed-restore-pass.md](evidence/ft-09-timed-restore-pass.md); historical blocked attempt: [ft-09-timed-restore-blocked-precondition.md](evidence/ft-09-timed-restore-blocked-precondition.md)). Frozen behavioral contract below is **unchanged**; this is a status/evidence sync only.
 
 Parent PLAN: [ft-09-plan.md](ft-09-plan.md)
 
@@ -8,10 +8,11 @@ Parent PLAN: [ft-09-plan.md](ft-09-plan.md)
 FT09_TEST_OBJECTIVE=timed_restore_and_expiry_cancellation
 FT09_CANONICAL_TRANSITION=ARCHIVED_EXPIRING -> ACTIVE_PERMANENT
 FT09_USES_FT08_RESULT=YES
-FT09_AUTHORIZED=NO
-FT09_STARTED=NO
-FT09_ACTION_SUBMITTED=NO
-FT09_FUNCTIONAL_RESULT=NOT_RUN
+FT09_AUTHORIZED=YES
+FT09_STARTED=YES
+FT09_ACTION_SUBMITTED=YES
+FT09_FUNCTIONAL_RESULT=PASS
+FT09_COMPLETE=YES
 RETROACTIVE_EVIDENCE=NO
 ```
 
@@ -80,6 +81,20 @@ FT09_RUNTIME_DEPLOYMENT_REQUIREMENT=version-compatible-with-timed-restore-and-RE
 FT09_EXECUTION_ALLOWED=NO   # until blocker fix deployed + fresh Phase A PASS
 FT09_KNOWN_SOURCE_BLOCKER_POST_CANCEL_COMPENSATION=OPEN
 ```
+
+> **Post-execution settlement (2026-09-18):**
+>
+> ```text
+> FT09_KNOWN_SOURCE_BLOCKER_POST_CANCEL_COMPENSATION=RESOLVED
+> DEFECT170_DEPLOYED=YES
+> FT09_EXECUTION_ALLOWED=YES
+> FT09_FUNCTIONAL_RESULT=PASS
+> FT09_COMPLETE=YES
+> ```
+>
+> Any `OPEN` / `FT09_EXECUTION_ALLOWED=NO` token retained above/below belongs
+> to the **frozen pre-execution planning contract/gate**, not the current
+> project state.
 
 - Production Worker must contain the equivalent of merged #165 `RESTORE_STAGE`
   telemetry (timed-stage markers; safe correlation by request/op id).
@@ -243,9 +258,12 @@ FT-10 markdown rendering of archive, FT-11 delete, batch, permanent restore,
 replay of FT-07/FT-08, deploy, telemetry deploy, adding production behavior.
 
 ```text
-Status: SPEC DRAFT
-FT09_STARTED=NO
-PRODUCTION_MUTATION_THIS_ROUND=NO
+Status: SPEC SETTLED — FT-09 executed PASS
+FT09_STARTED=YES
+FT09_ACTION_SUBMITTED=YES
+FT09_FUNCTIONAL_RESULT=PASS
+FT09_COMPLETE=YES
+PRODUCTION_MUTATION_THIS_PR=NO
 ORDERING_VERIFIED_BY_STEP_LOGS=NO
 FT07_ORDERING_EVIDENCE=INCONCLUSIVE
 ```

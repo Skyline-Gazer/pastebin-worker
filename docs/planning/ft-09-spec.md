@@ -1,6 +1,6 @@
 # FT-09 SPEC — Restore timed archive / cancel expiry
 
-Status: **SPEC DRAFT FOR OWNER REVIEW** (docs-only; execution requires a separate owner authorization)
+Status: **SPEC SETTLED — FT-09 executed PASS** (execution evidence: [ft-09-timed-restore-pass.md](evidence/ft-09-timed-restore-pass.md); historical blocked attempt: [ft-09-timed-restore-blocked-precondition.md](evidence/ft-09-timed-restore-blocked-precondition.md)). Frozen behavioral contract below is **unchanged**; this is a status/evidence sync only.
 
 Parent PLAN: [ft-09-plan.md](ft-09-plan.md)
 
@@ -8,10 +8,11 @@ Parent PLAN: [ft-09-plan.md](ft-09-plan.md)
 FT09_TEST_OBJECTIVE=timed_restore_and_expiry_cancellation
 FT09_CANONICAL_TRANSITION=ARCHIVED_EXPIRING -> ACTIVE_PERMANENT
 FT09_USES_FT08_RESULT=YES
-FT09_AUTHORIZED=NO
-FT09_STARTED=NO
-FT09_ACTION_SUBMITTED=NO
-FT09_FUNCTIONAL_RESULT=NOT_RUN
+FT09_AUTHORIZED=YES
+FT09_STARTED=YES
+FT09_ACTION_SUBMITTED=YES
+FT09_FUNCTIONAL_RESULT=PASS
+FT09_COMPLETE=YES
 RETROACTIVE_EVIDENCE=NO
 ```
 

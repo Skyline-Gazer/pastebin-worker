@@ -1,15 +1,16 @@
 # FT-09 PLAN — Restore timed archive / cancel expiry
 
-Status: **PLAN READY FOR OWNER REVIEW** (docs-only; no execution)
+Status: **PLAN COMPLETE — FT-09 executed PASS** (evidence: [ft-09-timed-restore-pass.md](evidence/ft-09-timed-restore-pass.md); historical blocked attempt: [ft-09-timed-restore-blocked-precondition.md](evidence/ft-09-timed-restore-blocked-precondition.md))
 
 ```text
 FT09_TEST_OBJECTIVE=timed_restore_and_expiry_cancellation
 FT09_CANONICAL_TRANSITION=ARCHIVED_EXPIRING -> ACTIVE_PERMANENT
 FT09_USES_FT08_RESULT=YES
-FT09_AUTHORIZED=NO
-FT09_STARTED=NO
-FT09_ACTION_SUBMITTED=NO
-FT09_FUNCTIONAL_RESULT=NOT_RUN
+FT09_AUTHORIZED=YES
+FT09_STARTED=YES
+FT09_ACTION_SUBMITTED=YES
+FT09_FUNCTIONAL_RESULT=PASS
+FT09_COMPLETE=YES
 PRODUCTION_MUTATION=NO (this document)
 FT07_ORDERING_EVIDENCE=INCONCLUSIVE (unchanged)
 ORDERING_VERIFIED_BY_STEP_LOGS=NO (unchanged)

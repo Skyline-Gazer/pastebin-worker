@@ -361,3 +361,60 @@ RESTORE_CLICK=NO
 
 No restore submission, no lifecycle mutation, no deployment change occurred in
 this round.
+
+---
+
+## Post-hoc governance clarification
+
+The body above preserves the **contemporaneous** blocked-run report as
+historical evidence. The original event chronology and tokens are **not**
+modified. Later owner governance clarified two semantics after this report was
+written; the authoritative later settlement is:
+
+### Owner authorization after drift
+
+The historical report recorded `FT09_PRECONDITION_8_OWNER=YES`. The later
+authoritative governance interpretation is:
+
+```text
+FT09_PRECONDITION_8_OWNER=EXPIRED_BY_DRIFT
+FT09_AUTHORIZED=NO
+```
+
+because owner authorization did not survive the mandatory drift failure.
+
+### Result gates when no action occurred
+
+The historical report recorded result gates as `INCONCLUSIVE`. The later
+authoritative interpretation is `NOT_EVALUATED`, because Phase D never began
+and no action was submitted (`INCONCLUSIVE` is reserved for a mutation that
+occurred but whose required evidence could not be proven):
+
+```text
+FT09_RESULT_1..11=NOT_EVALUATED
+NO_RETRY=NOT_APPLICABLE
+```
+
+### Authoritative blocked-round settlement
+
+```text
+FT09_PRECONDITION_8_OWNER=EXPIRED_BY_DRIFT
+FT09_AUTHORIZED=NO
+
+FT09_RESULT_1..11=NOT_EVALUATED
+NO_RETRY=NOT_APPLICABLE
+
+FT09_FUNCTIONAL_RESULT=NOT_RUN
+FT09_EXECUTION_STATUS=BLOCKED_PRECONDITION
+```
+
+This clarification does not alter the fact that:
+
+```text
+FT09_ACTION_SUBMITTED=NO
+FT09_CANONICAL_RESTORE_CLICK_COUNT=0
+PRODUCTION_MUTATION_THIS_ROUND=NO
+```
+
+The subsequent successful run is separately documented in
+[`ft-09-timed-restore-pass.md`](ft-09-timed-restore-pass.md).

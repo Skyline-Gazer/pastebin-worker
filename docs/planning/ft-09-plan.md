@@ -162,6 +162,20 @@ but also:
 owner-authorized deployment AND post-deploy fresh Phase A PASS. Telemetry
 deployment alone does NOT grant FT-09 execution compatibility.
 
+> **Post-execution settlement (2026-09-18):**
+>
+> ```text
+> FT09_KNOWN_SOURCE_BLOCKER_POST_CANCEL_COMPENSATION=RESOLVED
+> DEFECT170_DEPLOYED=YES
+> FT09_EXECUTION_ALLOWED=YES
+> FT09_FUNCTIONAL_RESULT=PASS
+> FT09_COMPLETE=YES
+> ```
+>
+> Any `OPEN` / `FT09_EXECUTION_ALLOWED=NO` / `BLOCKER...COMPENSATION=OPEN`
+> token retained in this document above/below belongs to the **frozen
+> pre-execution planning contract/gate**, not the current project state.
+
 ### 5.3 Revalidation after deployment (Phase B)
 
 ```text
@@ -262,4 +276,4 @@ deploy (incl. #165), production logs for execution preflight, restore, click 恢
 POST restore, D1/Paste mutation, fixture recreation, expiry-cancel test, FT-09
 execution, or FT-07/FT-08 evidence modification.
 
-Status: PLAN READY FOR OWNER REVIEW
+Status: PLAN COMPLETE — FT-09 executed PASS

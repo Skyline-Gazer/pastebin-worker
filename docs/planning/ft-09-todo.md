@@ -99,17 +99,23 @@ Do NOT carry any pre-deployment `FT09_PRECONDITION_*` forward after a deployment
 ## Persistent invariants
 
 ```text
-NO deploy (incl. #165) triggered by this TODO
-NO production mutation before Phase D without owner authorization
+NO deploy (incl. #165) triggered by this TODO                       # runbook invariant
+NO production mutation before Phase D without owner authorization   # runbook invariant
 NO FT-07/FT-08 replay or restore (beyond the one authorized timed restore)
-FT09_EXECUTION_ALLOWED=NO until blocker fix deployed + fresh Phase A PASS
-FT09_KNOWN_SOURCE_BLOCKER_POST_CANCEL_COMPENSATION=OPEN (separate defect tracker)
-FT09_PREFLIGHT_REVALIDATION_AFTER_DEPLOY=REQUIRED
-FT09_AUTHORIZED=NO
-FT09_STARTED=NO
-FT09_ACTION_SUBMITTED=NO
-FT09_FUNCTIONAL_RESULT=NOT_RUN
+NO automatic retry
+
+# Current settlement (post-execution):
+FT09_EXECUTION_ALLOWED=YES
+# technical execution gate was satisfied before the successful execution
+FT09_KNOWN_SOURCE_BLOCKER_POST_CANCEL_COMPENSATION=RESOLVED
+FT09_PREFLIGHT_REVALIDATION_AFTER_DEPLOY=REQUIRED   # runbook rule; no deployment occurred
+FT09_AUTHORIZED=YES
+FT09_STARTED=YES
+FT09_ACTION_SUBMITTED=YES
+FT09_FUNCTIONAL_RESULT=PASS
+FT09_COMPLETE=YES
 ORDERING_VERIFIED_BY_STEP_LOGS=NO
 FT07_ORDERING_EVIDENCE=INCONCLUSIVE
-PRODUCTION_MUTATION_THIS_ROUND=NO
+FT10_STARTED=NO
+PRODUCTION_MUTATION_THIS_PR=NO
 ```

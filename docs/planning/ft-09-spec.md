@@ -82,6 +82,20 @@ FT09_EXECUTION_ALLOWED=NO   # until blocker fix deployed + fresh Phase A PASS
 FT09_KNOWN_SOURCE_BLOCKER_POST_CANCEL_COMPENSATION=OPEN
 ```
 
+> **Post-execution settlement (2026-09-18):**
+>
+> ```text
+> FT09_KNOWN_SOURCE_BLOCKER_POST_CANCEL_COMPENSATION=RESOLVED
+> DEFECT170_DEPLOYED=YES
+> FT09_EXECUTION_ALLOWED=YES
+> FT09_FUNCTIONAL_RESULT=PASS
+> FT09_COMPLETE=YES
+> ```
+>
+> Any `OPEN` / `FT09_EXECUTION_ALLOWED=NO` token retained above/below belongs
+> to the **frozen pre-execution planning contract/gate**, not the current
+> project state.
+
 - Production Worker must contain the equivalent of merged #165 `RESTORE_STAGE`
   telemetry (timed-stage markers; safe correlation by request/op id).
 - Do **not** require production SHA == planning baseline; require runtime
@@ -244,9 +258,12 @@ FT-10 markdown rendering of archive, FT-11 delete, batch, permanent restore,
 replay of FT-07/FT-08, deploy, telemetry deploy, adding production behavior.
 
 ```text
-Status: SPEC DRAFT
-FT09_STARTED=NO
-PRODUCTION_MUTATION_THIS_ROUND=NO
+Status: SPEC SETTLED — FT-09 executed PASS
+FT09_STARTED=YES
+FT09_ACTION_SUBMITTED=YES
+FT09_FUNCTIONAL_RESULT=PASS
+FT09_COMPLETE=YES
+PRODUCTION_MUTATION_THIS_PR=NO
 ORDERING_VERIFIED_BY_STEP_LOGS=NO
 FT07_ORDERING_EVIDENCE=INCONCLUSIVE
 ```

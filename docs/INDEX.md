@@ -29,6 +29,7 @@
 - [`planning/ft-08-plan.md`](planning/ft-08-plan.md) / [`ft-08-spec.md`](planning/ft-08-spec.md) / [`ft-08-todo.md`](planning/ft-08-todo.md) — FT-08 PLAN/SPEC/TODO: timed archive + countdown (approved; `FT08_FUNCTIONAL_RESULT=PASS`).
 - [`planning/evidence/ft-08-timed-archive-pass.md`](planning/evidence/ft-08-timed-archive-pass.md) — FT-08 functional PASS evidence + FT-09 handoff baseline.
 - [`planning/ft-09-plan.md`](planning/ft-09-plan.md) / [`ft-09-spec.md`](planning/ft-09-spec.md) / [`ft-09-todo.md`](planning/ft-09-todo.md) — FT-09 PLAN/SPEC/TODO: restore timed archive / cancel expiry ([#168](https://github.com/Skyline-Gazer/pastebin-worker/issues/168); planning only).
+- [`planning/ft09-post-cancel-reconciliation-plan.md`](planning/ft09-post-cancel-reconciliation-plan.md) / [`ft09-post-cancel-reconciliation-spec.md`](planning/ft09-post-cancel-reconciliation-spec.md) / [`ft09-post-cancel-reconciliation-todo.md`](planning/ft09-post-cancel-reconciliation-todo.md) — Defect #170 remediation planning: timed restore post-cancel failure MUST reconcile (planning only).
 
 ## Operational scaffold
 

@@ -142,6 +142,6 @@ ORDERING_VERIFIED_BY_STEP_LOGS=NO
 FT07_ORDERING_EVIDENCE=INCONCLUSIVE
 ```
 
-HT-07/FT-08 historical evidence unchanged.
+FT-07/FT-08 historical evidence unchanged.
 
 Status: SPEC DRAFT

@@ -239,11 +239,21 @@ export class EntryService {
       } catch (error) {
         if (error instanceof PasteError && (error.code === "UPSTREAM_REJECTED" || error.code === "ENTRY_NOT_FOUND")) {
           stages.emit("upstream_update_failed", error.code)
-          try {
-            await this.store.fail(op.id)
-          } catch {
-            /* retain fail-closed evidence */
+          if (timed) {
+            // Defect #170: reaching here for a timed restore proves Stage 1
+            // expiry cancellation already completed (otherwise we returned from
+            // the Stage-1 catch). Upstream is now non-expiring/absent while the
+            // binding still shows archived/timed/old expires_at. A clean
+            // terminal `failed` would mask this partial mutation, so the claim
+            // must fail closed as reconciliation_required.
+            try {
+              await this.store.uncertain(op.id)
+            } catch {
+              /* retain dispatched claim */
+            }
+            return this.error("RECONCILIATION_REQUIRED", op.id)
           }
+          await this.store.fail(op.id)
           return this.error(error.code, op.id)
         }
         // Finish/persistence failures after a confirmed upstream update remain

@@ -8,6 +8,12 @@ FT10_STARTED=NO
 FT10_AUTHORIZED=NO
 FT10_ACTION_SUBMITTED=NO
 FT10_FUNCTIONAL_RESULT=NOT_RUN
+FT10_FIXTURE_PROVISIONING_REQUIRED=YES
+FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_CREATED=NO
+FT10_FIXTURE_CREATE_SUBMITTED=NO
+FT10_ARCHIVE_ACTION_SUBMITTED=NO
+FT10_ARCHIVE_SUBMISSION_COUNT=0
 PREDECESSOR_FT09=PASS
 PREDECESSOR_ISSUE168=CLOSED
 PRODUCTION_MUTATION_THIS_ROUND=NO
@@ -43,7 +49,7 @@ At minimum verify:
 - archived Markdown task is non-interactive / disabled;
 - ordinary GFM formatting (bold, inline code) renders semantically;
 - raw `- [x] ...` marker is **not** shown as literal source in the default Archive view;
-- Archive lifecycle status/countdown remains separate from Markdown rendering;
+- Archive lifecycle status (`永久归档` for the canonical permanent scenario) remains separate from Markdown rendering;
 - rendering does not mutate Paste/D1;
 - arbitrary nested Markdown checkboxes do not gain entry-level lifecycle semantics.
 
@@ -151,22 +157,52 @@ FT10_EXISTING_TEST_COVERAGE=PARTIAL
 
 Existing unit/integration tests are **not** production functional evidence.
 
-## 4. Fixture strategy
+## 4. Frozen fixture (exact bytes; no template)
 
 Do **not** reuse or mutate the historical FT-09 target
 `DMkerQPTisMNhhp8tdQc5Ech` (frozen evidence).
 
-FT-10 uses a **dedicated new fixture** produced through a later owner-authorized
-canonical lifecycle action. Recommended deterministic content (to be frozen by
-SPEC before execution authorization):
+FT-10 uses a **dedicated new fixture**. The exact fixture is frozen here and in
+SPEC §3; no `<unique-id>` placeholder remains.
+
+```text
+FT10_FIXTURE_MARKER=FT_MARKDOWN_RENDER_20260918_01
+```
+
+Exact active source (frozen):
 
 ```markdown
-- [ ] FT_MARKDOWN_RENDER_<unique-id>
+- [ ] FT_MARKDOWN_RENDER_20260918_01
 
 **bold-render-check**
 
 `inline-code-render-check`
 ```
+
+Exact archived source (after canonical archive action):
+
+```markdown
+- [x] FT_MARKDOWN_RENDER_20260918_01
+
+**bold-render-check**
+
+`inline-code-render-check`
+```
+
+Byte-level properties (frozen):
+
+```text
+ENCODING=UTF-8
+LINE_ENDING=LF
+HAS_CR=NO
+HAS_FINAL_LF=NO
+ACTIVE_BODY_BYTES=87
+ARCHIVED_BODY_BYTES=87
+```
+
+The only expected source-byte difference produced by the archive lifecycle
+action is `[ ] -> [x]`. No later execution may substitute another marker
+without a new owner planning decision.
 
 Constraints:
 
@@ -174,29 +210,44 @@ Constraints:
 - avoid multiple task checkboxes in the production fixture;
 - avoid links/external fetches unless needed;
 - no HTML/XSS payload in the production functional test (XSS remains
-  source/test evidence; never attack production);
-- expected archived source after canonical archive action:
-
-```markdown
-- [x] FT_MARKDOWN_RENDER_<unique-id>
-
-**bold-render-check**
-
-`inline-code-render-check`
-```
-
-SPEC must freeze the **exact fixture bytes** (including `<unique-id>`) before
-any later execution authorization.
+  source/test evidence; never attack production).
 
 ## 5. Candidate production flow (planning only)
 
+Fixture provisioning is a production mutation and must be split from the
+read-only preflight:
+
 ```text
-Phase A: create/identify dedicated FT-10 active fixture
-         verify source bytes + D1 identity + live Worker pin + auth
-Phase C: owner authorization
-Phase D: one canonical archive action (永久归档)
-Phase E: inspect Archive view read-only
+Phase 0 — dedicated fixture provisioning (future separate owner authorization)
+Phase A — fresh read-only preflight
+Phase B — deployment/capability gate if required
+Phase C — owner archive authorization
+Phase D — one archive submission
+Phase E — read-only rendering evidence
+Phase F/G — settlement/evidence
 ```
+
+```text
+FT10_FIXTURE_PROVISIONING_REQUIRED=YES
+FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_CREATED=NO
+```
+
+**Planning PR #175 does NOT authorize Phase 0.** After a future authorized
+fixture creation (`FT10_FIXTURE_CREATED=YES`), STOP and perform a fresh
+read-only Phase A against the created fixture.
+
+Phase A may only:
+
+- identify the dedicated fixture;
+- read Paste bytes;
+- read D1 binding/operations;
+- verify active state;
+- resolve Worker/frontend capability;
+- verify auth/session;
+- verify no pending/uncertain operation.
+
+Phase A must **not** create or repair anything.
 
 Phase E verifies **DOM/semantic presentation**, not merely screenshot
 appearance.
@@ -217,6 +268,20 @@ FT10_RESULT_8_ARCHIVE_STATUS_PRESENT
 FT10_RESULT_9_SOURCE_BYTES_UNCHANGED_BY_VIEWING
 FT10_RESULT_10_NO_UNEXPECTED_LIFECYCLE_MUTATION
 ```
+
+Clarifications (see SPEC §6 for the full mechanical definitions):
+
+- `FT10_RESULT_8_ARCHIVE_STATUS_PRESENT`: canonical scenario is
+  `archive_permanent`; expected `role=status` with `text=永久归档`. A countdown
+  belongs to timed archive, which FT-10 is **not** testing.
+- `FT10_RESULT_9_SOURCE_BYTES_UNCHANGED_BY_VIEWING`: compare
+  `POST_VIEW_SOURCE_BYTES == POST_ARCHIVE_SOURCE_BYTES` (two after-action
+  snapshots). Do NOT compare pre-action bytes (the archive action legitimately
+  changes `[ ]`→`[x]`).
+- `FT10_RESULT_10_NO_UNEXPECTED_LIFECYCLE_MUTATION`: D1 lifecycle/op snapshot
+  immediately after archive must equal the D1 snapshot after rendering
+  inspection (except no expected read-only metadata changes). No new lifecycle
+  operation may be created by Archive rendering/viewing.
 
 Equivalent gates may be renumbered if the source audit reveals a better
 mechanical decomposition; the semantics must be preserved.
@@ -297,10 +362,20 @@ branch/commit/PR, normal docs CI.
 
 ```text
 PRODUCTION_MUTATION_THIS_ROUND=NO
+FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_CREATED=NO
+FT10_FIXTURE_CREATE_SUBMITTED=NO
+FT10_ARCHIVE_ACTION_SUBMITTED=NO
+FT10_ARCHIVE_SUBMISSION_COUNT=0
 FT10_STARTED=NO
+FT10_AUTHORIZED=NO
 FT10_ACTION_SUBMITTED=NO
 FT10_FUNCTIONAL_RESULT=NOT_RUN
 ```
+
+`FT10_STARTED` continues to mean the actual functional verification
+execution / Phase D lifecycle action, **not** merely fixture provisioning.
+Fixture creation is setup evidence, not FT-10 PASS by itself.
 
 ## 12. Non-retroactivity / historical invariants
 

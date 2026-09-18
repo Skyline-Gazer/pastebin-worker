@@ -5,21 +5,35 @@ Status: **TODO DRAFT** (planning only; `FT10_AUTHORIZED=NO` / `FT10_STARTED=NO`)
 Parent PLAN/SPEC: [ft-10-plan.md](ft-10-plan.md), [ft-10-spec.md](ft-10-spec.md)
 
 ```text
-OWNER_AUTHORIZATION_REQUIRED_BEFORE_PHASE_D=YES
+OWNER_AUTHORIZATION_REQUIRED_BEFORE_PHASE_0=YES   # fixture provisioning
+OWNER_AUTHORIZATION_REQUIRED_BEFORE_PHASE_D=YES   # archive submission
 FT10_AUTHORIZED=NO
 FT10_STARTED=NO
 FT10_ACTION_SUBMITTED=NO
 FT10_FUNCTIONAL_RESULT=NOT_RUN
+FT10_FIXTURE_PROVISIONING_REQUIRED=YES
+FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_CREATED=NO
+FT10_FIXTURE_CREATE_SUBMITTED=NO
+FT10_ARCHIVE_ACTION_SUBMITTED=NO
+FT10_ARCHIVE_SUBMISSION_COUNT=0
 ORDERING_VERIFIED_BY_STEP_LOGS=NO
 FT07_ORDERING_EVIDENCE=INCONCLUSIVE
 ```
 
-## Phase A — read-only preflight
+## Phase 0 — dedicated fixture provisioning (future separate owner authorization)
+
+- [ ] STOP — present frozen fixture contract (SPEC §3) to owner; obtain a **separate explicit owner authorization** to create the FT-10 fixture.
+- [ ] Provision the dedicated active fixture with the frozen exact bytes (`FT10_FIXTURE_MARKER=FT_MARKDOWN_RENDER_20260918_01`; active bytes = 87, UTF-8, LF, no CR, no final LF).
+- [ ] Record `FT10_FIXTURE_CREATE_SUBMITTED=YES` and after success `FT10_FIXTURE_CREATED=YES`.
+- [ ] STOP and perform a fresh read-only Phase A against the created fixture.
+
+## Phase A — read-only preflight (no creation/repair)
 
 - [ ] Confirm `downstream/main` planning source and Issue #174 tracker baseline.
 - [ ] Resolve live production `WORKER_PIN` read-only.
 - [ ] Verify deployed frontend matches the audited GFM contract (`RenderedMarkdown` GFM + sanitize + `disabled` on non-interactive; `TextEntryCard` archived → `interactive=false`).
-- [ ] Create/identify the **dedicated FT-10 active fixture** (deterministic content; `- [ ] FT_MARKDOWN_RENDER_<unique-id>` + bold + inline code). Record source bytes + D1 identity.
+- [ ] **Identify** the dedicated FT-10 fixture (already created in Phase 0); read Paste bytes + D1 identity. Must NOT create or repair anything.
 - [ ] Verify fixture body exact bytes; no pending/uncertain op; session/auth valid.
 - [ ] Record `FT10_FIXTURE_VALID=YES/NO`; if NO → STOP.
 
@@ -37,20 +51,27 @@ If any deployment occurs: re-enter Phase A; re-resolve Worker pin; form fresh Pr
 ## Phase D — single production action
 
 - [ ] **Final drift check immediately before submit:** Worker pin unchanged; fixture still active with exact bytes; no pending op; session valid.
-- [ ] Exactly one canonical archive action (`永久归档` chooser → `确认归档`) → `FT10_ACTION_SUBMITTED=YES`, `FT10_CANONICAL_CLICK_COUNT=1`, `FT10_ACTION_SINGLE_SUBMISSION=YES`. No double-click / replay / direct API secondary submit / retry after terminal success.
+- [ ] Canonical permanent-archive UI path (not single-click):
+  1. click the active managed Markdown checkbox → completion chooser opens (`archive_permanent` already selected);
+  2. click `确认归档` exactly once;
+  3. exactly one lifecycle HTTP submission `POST /api/entries/<id>/complete {"action":"archive_permanent"}`.
+     → `FT10_ARCHIVE_ACTION_SUBMITTED=YES`, `FT10_ARCHIVE_SUBMISSION_COUNT=1`, `FT10_ACTION_SINGLE_SUBMISSION=YES`. No direct API secondary submit; no duplicate confirm; no replay; no retry after terminal success.
 
 ## Phase E — immediate evidence collection (read-only)
 
+- [ ] (A) Immediately after confirmed archive success: GET Paste; record `POST_ARCHIVE_SOURCE_BYTES`; expect exact archived fixture bytes (`- [x] FT_MARKDOWN_RENDER_20260918_01` + bold + inline code).
 - [ ] HTTP status + entry JSON.
-- [ ] D1 after: binding `archived` + op (`complete_permanent` succeeded) + no-anomaly.
-- [ ] Upstream Paste: public GET body = `- [x] FT_MARKDOWN_RENDER_<unique-id>` + bold + inline code (unchanged except managed task marker); metadata.
+- [ ] D1 after-archive snapshot: binding `archived` + op (`complete_permanent` succeeded) + no-anomaly (record snapshot R1).
 - [ ] **Archive view DOM/semantic evidence** (canonical authenticated frontend):
   - target article present; `checkbox(name="Markdown task")` present; **checked=true**; **disabled=true**;
   - literal `- [x]` marker NOT rendered as source text;
   - `<strong>bold-render-check</strong>` present;
   - `<code>inline-code-render-check</code>` present;
-  - ArchiveStatus/countdown present and separate;
+  - `role=status` `text=永久归档` present and separate (no countdown required for permanent);
   - `OBSERVED_AT_UTC`.
+- [ ] (C) After Archive inspection: GET Paste again; record `POST_VIEW_SOURCE_BYTES`.
+- [ ] (D) Compare `POST_VIEW_SOURCE_BYTES == POST_ARCHIVE_SOURCE_BYTES` (`FT10_RESULT_9`).
+- [ ] D1 after-view snapshot: compare with after-archive snapshot; no new lifecycle op created by rendering/viewing (`FT10_RESULT_10`).
 - [ ] **No-click proof: do not click the archived checkbox**; rely on DOM `disabled=true` semantic evidence.
 - [ ] Correlation: one request identity → one op → one HTTP 200.
 
@@ -76,12 +97,19 @@ If any deployment occurs: re-enter Phase A; re-resolve Worker pin; form fresh Pr
 
 ```text
 NO deploy triggered by this TODO
-NO production mutation before Phase D without owner authorization
+NO production mutation except:
+  1. separately owner-authorized FT-10 fixture provisioning (Phase 0); and
+  2. separately owner-authorized Phase D archive submission.
+NO other production mutation.
 NO FT-07/FT-08/FT-09 replay or fixture reuse
 NO click of the archived Markdown checkbox in production
+FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_CREATED=NO
+FT10_FIXTURE_CREATE_SUBMITTED=NO
+FT10_ARCHIVE_ACTION_SUBMITTED=NO
+FT10_ARCHIVE_SUBMISSION_COUNT=0
 FT10_AUTHORIZED=NO
 FT10_STARTED=NO
-FT10_ACTION_SUBMITTED=NO
 FT10_FUNCTIONAL_RESULT=NOT_RUN
 PRODUCTION_MUTATION_THIS_ROUND=NO
 ```

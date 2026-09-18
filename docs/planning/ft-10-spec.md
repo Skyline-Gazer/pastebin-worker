@@ -8,6 +8,12 @@ FT10_STARTED=NO
 FT10_AUTHORIZED=NO
 FT10_ACTION_SUBMITTED=NO
 FT10_FUNCTIONAL_RESULT=NOT_RUN
+FT10_FIXTURE_PROVISIONING_REQUIRED=YES
+FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_CREATED=NO
+FT10_FIXTURE_CREATE_SUBMITTED=NO
+FT10_ARCHIVE_ACTION_SUBMITTED=NO
+FT10_ARCHIVE_SUBMISSION_COUNT=0
 RETROACTIVE_EVIDENCE=NO
 ```
 
@@ -44,30 +50,53 @@ archived row in Archive view
 GFM-rendered, checked, disabled task control + semantic bold/code
 ```
 
-## 3. Fixture (must be frozen before execution)
+## 3. Frozen fixture (exact bytes; no template)
 
-The SPEC freezes the exact fixture below; a later execution may not alter it.
+The SPEC freezes the exact fixture below. A later execution may **not** alter
+it; no `<unique-id>` placeholder exists. Any substitution of another marker
+requires a new owner planning decision.
+
+```text
+FT10_FIXTURE_MARKER=FT_MARKDOWN_RENDER_20260918_01
+```
+
+Exact active source (frozen):
 
 ```markdown
-- [ ] FT_MARKDOWN_RENDER_<unique-id>
+- [ ] FT_MARKDOWN_RENDER_20260918_01
 
 **bold-render-check**
 
 `inline-code-render-check`
 ```
 
-Expected archived source after the canonical archive action:
+Exact archived source (after canonical archive action):
 
 ```markdown
-- [x] FT_MARKDOWN_RENDER_<unique-id>
+- [x] FT_MARKDOWN_RENDER_20260918_01
 
 **bold-render-check**
 
 `inline-code-render-check`
 ```
 
-`<unique-id>` is chosen deterministically before execution (e.g.
-`20260918`-style) and recorded in the execution evidence.
+Byte-level properties (frozen):
+
+```text
+ENCODING=UTF-8
+LINE_ENDING=LF
+HAS_CR=NO
+HAS_FINAL_LF=NO
+ACTIVE_BODY_BYTES=87
+ARCHIVED_BODY_BYTES=87
+```
+
+The only expected source-byte difference produced by the archive lifecycle
+action is:
+
+```text
+[ ] -> [x]
+```
 
 ## 4. Precondition gates
 
@@ -87,18 +116,40 @@ any action.
 ## 5. Canonical action (later authorized)
 
 ```text
-FT10_ACTION_1_SURFACE=canonical frontend Active 永久归档 (chooser -> confirm)
-FT10_ACTION_2_SINGLE=exactly one submission
+FT10_ACTION_1_SURFACE=canonical frontend Active permanent archive flow
+FT10_ACTION_2_SINGLE=exactly one lifecycle HTTP submission
 FT10_ACTION_3_IDEMPOTENCY=frontend-generated Idempotency-Key
 ```
+
+The permanent-archive UI is **not** a single click (unlike FT-09 Restore).
+For the current baseline the canonical minimal UI path is:
+
+```text
+1. click the active managed Markdown checkbox  -> completion chooser opens
+   (archive_permanent is already the selected action)
+2. click 确认归档 exactly once
+3. exactly one lifecycle HTTP submission
+   POST /api/entries/<id>/complete {"action":"archive_permanent"}
+```
+
+It is **not** necessary to click the `永久归档` chooser button again when it is
+already the selected action.
 
 Execution-time invariants (Phase D) — not preconditions:
 
 ```text
-FT10_ACTION_SINGLE_SUBMISSION
-FT10_CANONICAL_CLICK_COUNT=1
+FT10_ARCHIVE_SUBMISSION_COUNT=1
+FT10_ACTION_SINGLE_SUBMISSION=YES
 NO_RETRY=YES
+
+# optional interaction counters (explicit, not single-click semantics):
+FT10_MANAGED_TASK_TRIGGER_CLICK_COUNT=1
+FT10_CONFIRM_ARCHIVE_CLICK_COUNT=1
 ```
+
+The critical safety property is **one network mutation submission**, not "one
+total UI click". No direct API secondary submit; no duplicate confirm; no
+replay.
 
 ## 6. Result gates (measured after the one action + read-only Archive inspection)
 
@@ -127,14 +178,31 @@ FT10_RESULT_7_INLINE_CODE_RENDERED
     <code>inline-code-render-check</code> semantic element present
 
 FT10_RESULT_8_ARCHIVE_STATUS_PRESENT
-    Archive lifecycle status/countdown separate from and adjacent to Markdown
+    lifecycle status rendered separately from Markdown content.
+    Expected for the canonical permanent scenario:
+      role=status
+      text=永久归档
+    (a countdown belongs to timed archive, which FT-10 is NOT testing)
 
 FT10_RESULT_9_SOURCE_BYTES_UNCHANGED_BY_VIEWING
-    Paste bytes unchanged by viewing (GET-only; no mutation)
+    mechanical sequence (frozen):
+      A. immediately after confirmed archive success: GET Paste
+         record POST_ARCHIVE_SOURCE_BYTES; expect exact archived fixture bytes
+      B. inspect canonical Archive DOM read-only
+      C. after Archive inspection: GET Paste again
+         record POST_VIEW_SOURCE_BYTES
+      D. compare POST_VIEW_SOURCE_BYTES == POST_ARCHIVE_SOURCE_BYTES
+    PASS only when the two after-action byte snapshots are identical.
+    (The pre-action vs post-view comparison is intentionally NOT used: the
+    archive action legitimately changes `[ ]` -> `[x]`.)
 
 FT10_RESULT_10_NO_UNEXPECTED_LIFECYCLE_MUTATION
-    no D1 op / lifecycle state change caused by rendering/viewing;
-    no unexpected second Paste/binding
+    D1 lifecycle/op snapshot immediately after archive
+      ==
+    D1 lifecycle/op snapshot after rendering inspection
+    (except no expected read-only metadata changes).
+    No new lifecycle operation may be created by Archive rendering/viewing;
+    no unexpected second Paste/binding.
 ```
 
 ## 7. Evidence requirements
@@ -241,7 +309,11 @@ changes.
 Status: SPEC DRAFT
 FT10_STARTED=NO
 FT10_AUTHORIZED=NO
-FT10_ACTION_SUBMITTED=NO
+FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_CREATED=NO
+FT10_FIXTURE_CREATE_SUBMITTED=NO
+FT10_ARCHIVE_ACTION_SUBMITTED=NO
+FT10_ARCHIVE_SUBMISSION_COUNT=0
 FT10_FUNCTIONAL_RESULT=NOT_RUN
 PRODUCTION_MUTATION_THIS_ROUND=NO
 ORDERING_VERIFIED_BY_STEP_LOGS=NO

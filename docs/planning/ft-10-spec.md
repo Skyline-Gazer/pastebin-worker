@@ -6,12 +6,13 @@ Status: **SPEC DRAFT FOR OWNER REVIEW** (docs-only; execution requires a separat
 FT10_TEST_OBJECTIVE=archive_markdown_gfm_rendering
 FT10_STARTED=NO
 FT10_AUTHORIZED=NO
-FT10_ACTION_SUBMITTED=NO
 FT10_FUNCTIONAL_RESULT=NOT_RUN
 FT10_FIXTURE_PROVISIONING_REQUIRED=YES
 FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_P2P_SENT=NO
 FT10_FIXTURE_CREATED=NO
 FT10_FIXTURE_CREATE_SUBMITTED=NO
+FT10_FIXTURE_PROVISIONING_RESULT=NOT_RUN
 FT10_ARCHIVE_ACTION_SUBMITTED=NO
 FT10_ARCHIVE_SUBMISSION_COUNT=0
 RETROACTIVE_EVIDENCE=NO
@@ -98,7 +99,205 @@ action is:
 [ ] -> [x]
 ```
 
-## 4. Precondition gates
+## 3.1 Phase 0 — fixture provisioning contract (future separate owner authorization)
+
+### 3.1.1 Canonical provisioning surface (frozen)
+
+Historical repository contract (see `docs/planning/ft04-markdown-inbound-plan.md`
+and webhook inbound docs):
+
+```text
+plain Feishu P2P text
+  -> MarkdownSource = decoded text exactly
+
+native Feishu Code Block
+  -> MarkdownSource = provider code_block.text exactly
+  -> provider MAY supply terminal LF
+  -> terminal LF MUST NOT be stripped
+```
+
+Because this fixture's contract requires `HAS_FINAL_LF=NO` with exact 87-byte
+active body, FT-10 **MUST NOT** use Feishu native Code Block as the canonical
+provisioning surface (a provider-supplied terminal LF would violate the frozen
+bytes). Freeze:
+
+```text
+FT10_FIXTURE_PROVISIONING_SURFACE=FEISHU_P2P_PLAIN_TEXT
+FT10_FIXTURE_PROVISIONING_PROVIDER=FEISHU
+FT10_FIXTURE_PROVISIONING_MESSAGE_COUNT=1
+FT10_FIXTURE_SYNTHETIC_WEBHOOK_ALLOWED=NO
+FT10_FIXTURE_DIRECT_API_CREATE_ALLOWED=NO
+FT10_FIXTURE_NATIVE_CODE_BLOCK_ALLOWED=NO
+```
+
+The action must be: **exactly one real owner-originated Feishu P2P plain-text
+message** carrying the frozen multiline fixture.
+
+Exact intended MarkdownSource (frozen):
+
+```markdown
+- [ ] FT_MARKDOWN_RENDER_20260918_01
+
+**bold-render-check**
+
+`inline-code-render-check`
+```
+
+Expected stored body acceptance contract:
+
+```text
+ENCODING=UTF-8
+LINE_ENDING=LF
+HAS_CR=NO
+HAS_FINAL_LF=NO
+ACTIVE_BODY_BYTES=87
+```
+
+### 3.1.2 Phase 0 pre-send guard (read-only)
+
+Before the owner sends the one P2P, perform read-only setup checks:
+
+```text
+FT10_FIXTURE_MARKER=FT_MARKDOWN_RENDER_20260918_01
+
+no existing live binding/Paste attributable to this marker
+no existing succeeded create for this dedicated FT-10 fixture
+no ambiguous pending/reconciliation create state relevant to provisioning
+Feishu ingress/create path available
+```
+
+Do **not** mutate anything during this guard. Only after a separate future
+owner fixture authorization may the one P2P be sent.
+
+### 3.1.3 Phase 0 submission semantics
+
+Future Phase 0 authorization distinguishes the owner message from the
+downstream create result:
+
+```text
+FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_P2P_SENT=NO
+FT10_FIXTURE_CREATE_SUBMITTED=NO
+FT10_FIXTURE_CREATED=NO
+FT10_FIXTURE_PROVISIONING_RESULT=NOT_RUN
+```
+
+After the future single owner P2P sent:
+
+```text
+FT10_FIXTURE_P2P_SENT=YES
+```
+
+After ingress actually creates the entry:
+
+```text
+FT10_FIXTURE_CREATE_SUBMITTED=YES
+```
+
+Only after all setup acceptance checks pass:
+
+```text
+FT10_FIXTURE_CREATED=YES
+FT10_FIXTURE_PROVISIONING_RESULT=PASS
+```
+
+Do **not** set `FT10_STARTED=YES` during fixture provisioning.
+
+### 3.1.4 Phase 0 acceptance
+
+Successful setup requires mechanically verifying:
+
+```text
+exactly one new dedicated Active entry
+exactly one corresponding new Paste
+exactly one succeeded create operation
+binding visibility=active
+retention_mode=permanent
+managed task unchecked
+Paste body exactly equals frozen 87-byte active body
+HAS_CR=NO
+HAS_FINAL_LF=NO
+no duplicate Paste
+no reconciliation_required
+no unexpected pending create
+```
+
+Record (no credentials/secrets in durable docs):
+
+```text
+FT10_FIXTURE_BINDING_ID=<actual>
+FT10_FIXTURE_PASTE_NAME=<actual>
+FT10_FIXTURE_CREATE_OP_ID=<actual>
+```
+
+### 3.1.5 Provider-byte mismatch rule
+
+If the real Feishu plain-text message produces bytes that do NOT equal the
+frozen 87-byte contract — including unexpected terminal LF, CRLF,
+prefix/suffix, or Markdown transformation — then:
+
+```text
+FT10_FIXTURE_PROVISIONING_RESULT=FAIL
+FT10_FIXTURE_CREATED=NO
+FT10_STARTED=NO
+FT10_ARCHIVE_ACTION_SUBMITTED=NO
+```
+
+STOP. Do **NOT**:
+
+- trim or normalize the Paste;
+- edit D1;
+- send a second P2P;
+- create a second fixture;
+- archive the mismatched fixture;
+- delete/clean up the mismatched fixture automatically.
+
+Any retry or cleanup requires a new explicit owner decision. This preserves
+the provider-source contract instead of altering production data to satisfy
+the test fixture.
+
+### 3.1.6 Phase 0 no-retry rule
+
+```text
+FT10_FIXTURE_PROVISIONING_SEND_COUNT_MAX=1
+FT10_FIXTURE_PROVISIONING_NO_AUTOMATIC_RETRY=YES
+```
+
+If the network/provider/create outcome is ambiguous after the message was
+sent, do not resend. Inspect read-only state and settle the setup as
+PASS/FAIL/INCONCLUSIVE. A second owner P2P requires new explicit
+authorization and a new planning decision if fixture identity/body must
+change.
+
+### 3.1.7 Fresh Phase A after successful provisioning
+
+Only when:
+
+```text
+FT10_FIXTURE_PROVISIONING_RESULT=PASS
+FT10_FIXTURE_CREATED=YES
+```
+
+may execution proceed to a completely **fresh read-only Phase A**. Phase A then
+verifies:
+
+```text
+actual binding identity
+actual Paste name
+active/permanent state
+version
+exact 87-byte active body
+no pending/uncertain/reconciliation operation
+authenticated frontend
+deployed GFM frontend compatibility
+live Worker pin
+```
+
+Phase A must not inherit mutable-state observations from Phase 0. Then STOP
+for Phase C owner authorization. No archive action is authorized merely
+because fixture provisioning succeeded.
+
+## 4. Phase-D archive-execution preconditions
 
 ```text
 FT10_PRECONDITION_1_PLAN_APPROVED
@@ -110,8 +309,30 @@ FT10_PRECONDITION_6_NO_PENDING_OP
 FT10_PRECONDITION_7_OWNER
 ```
 
-Evaluated before the first production action. Any false gate → do not submit
-any action.
+`FT10_PRECONDITION_1..7` are **Phase-D archive-execution preconditions**.
+They authorize eligibility for the canonical archive action under test.
+They are **NOT** prerequisites for fixture provisioning, and **NOT**
+"before the first production action" gates: Phase 0 fixture provisioning is
+itself a production mutation that must complete first.
+
+They are evaluated:
+
+```text
+AFTER successful Phase 0 fixture provisioning
+AND AFTER fresh read-only Phase A
+AND BEFORE the Phase D archive submission.
+```
+
+Phase 0 has its own separate setup guard and authorization (SPEC §3.1).
+
+Any false gate immediately before Phase D:
+
+```text
+FT10_EXECUTION_STATUS=BLOCKED_PRECONDITION
+FT10_FUNCTIONAL_RESULT=NOT_RUN
+FT10_ARCHIVE_ACTION_SUBMITTED=NO
+STOP
+```
 
 ## 5. Canonical action (later authorized)
 
@@ -234,10 +455,10 @@ FT10_PASS_GATE =
 Distinct states:
 
 ```text
-Before action, precondition false:
+Before archive action, precondition false:
   FT10_EXECUTION_STATUS=BLOCKED_PRECONDITION
   FT10_FUNCTIONAL_RESULT=NOT_RUN
-  FT10_ACTION_SUBMITTED=NO
+  FT10_ARCHIVE_ACTION_SUBMITTED=NO
 
 Executed + contract satisfied:    FT10_FUNCTIONAL_RESULT=PASS
 Executed + contract violated:     FT10_FUNCTIONAL_RESULT=FAIL
@@ -310,8 +531,10 @@ Status: SPEC DRAFT
 FT10_STARTED=NO
 FT10_AUTHORIZED=NO
 FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_P2P_SENT=NO
 FT10_FIXTURE_CREATED=NO
 FT10_FIXTURE_CREATE_SUBMITTED=NO
+FT10_FIXTURE_PROVISIONING_RESULT=NOT_RUN
 FT10_ARCHIVE_ACTION_SUBMITTED=NO
 FT10_ARCHIVE_SUBMISSION_COUNT=0
 FT10_FUNCTIONAL_RESULT=NOT_RUN

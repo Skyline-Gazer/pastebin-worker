@@ -6,12 +6,13 @@ Status: **PLAN READY FOR OWNER REVIEW** (planning only; `FT10_AUTHORIZED=NO` / `
 FT10_TEST_OBJECTIVE=archive_markdown_gfm_rendering
 FT10_STARTED=NO
 FT10_AUTHORIZED=NO
-FT10_ACTION_SUBMITTED=NO
 FT10_FUNCTIONAL_RESULT=NOT_RUN
 FT10_FIXTURE_PROVISIONING_REQUIRED=YES
 FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_P2P_SENT=NO
 FT10_FIXTURE_CREATED=NO
 FT10_FIXTURE_CREATE_SUBMITTED=NO
+FT10_FIXTURE_PROVISIONING_RESULT=NOT_RUN
 FT10_ARCHIVE_ACTION_SUBMITTED=NO
 FT10_ARCHIVE_SUBMISSION_COUNT=0
 PREDECESSOR_FT09=PASS
@@ -230,12 +231,25 @@ Phase F/G — settlement/evidence
 ```text
 FT10_FIXTURE_PROVISIONING_REQUIRED=YES
 FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_P2P_SENT=NO
+FT10_FIXTURE_CREATE_SUBMITTED=NO
 FT10_FIXTURE_CREATED=NO
+FT10_FIXTURE_PROVISIONING_RESULT=NOT_RUN
 ```
 
-**Planning PR #175 does NOT authorize Phase 0.** After a future authorized
-fixture creation (`FT10_FIXTURE_CREATED=YES`), STOP and perform a fresh
-read-only Phase A against the created fixture.
+**Planning PR #175 does NOT authorize Phase 0.** The canonical provisioning
+surface is **exactly one real owner-originated Feishu P2P plain-text message**
+carrying the frozen multiline fixture (see SPEC §3.1; frozen surface
+`FEISHU_P2P_PLAIN_TEXT`; native Code Block / synthetic webhook / direct API
+create are all disallowed because the frozen 87-byte contract requires
+`HAS_FINAL_LF=NO` and a provider Code Block may supply a terminal LF that must
+not be stripped). After a future authorized fixture creation
+(`FT10_FIXTURE_CREATED=YES`, `FT10_FIXTURE_PROVISIONING_RESULT=PASS`), STOP and
+perform a fresh read-only Phase A against the created fixture.
+
+Phase 0 carries its own separate setup guard + authorization, one-P2P
+no-retry contract, acceptance and provider-byte mismatch FAIL semantics
+(SPEC §3.1.2–§3.1.6).
 
 Phase A may only:
 
@@ -363,13 +377,14 @@ branch/commit/PR, normal docs CI.
 ```text
 PRODUCTION_MUTATION_THIS_ROUND=NO
 FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_P2P_SENT=NO
 FT10_FIXTURE_CREATED=NO
 FT10_FIXTURE_CREATE_SUBMITTED=NO
+FT10_FIXTURE_PROVISIONING_RESULT=NOT_RUN
 FT10_ARCHIVE_ACTION_SUBMITTED=NO
 FT10_ARCHIVE_SUBMISSION_COUNT=0
 FT10_STARTED=NO
 FT10_AUTHORIZED=NO
-FT10_ACTION_SUBMITTED=NO
 FT10_FUNCTIONAL_RESULT=NOT_RUN
 ```
 

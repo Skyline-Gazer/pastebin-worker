@@ -9,12 +9,13 @@ OWNER_AUTHORIZATION_REQUIRED_BEFORE_PHASE_0=YES   # fixture provisioning
 OWNER_AUTHORIZATION_REQUIRED_BEFORE_PHASE_D=YES   # archive submission
 FT10_AUTHORIZED=NO
 FT10_STARTED=NO
-FT10_ACTION_SUBMITTED=NO
 FT10_FUNCTIONAL_RESULT=NOT_RUN
 FT10_FIXTURE_PROVISIONING_REQUIRED=YES
 FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_P2P_SENT=NO
 FT10_FIXTURE_CREATED=NO
 FT10_FIXTURE_CREATE_SUBMITTED=NO
+FT10_FIXTURE_PROVISIONING_RESULT=NOT_RUN
 FT10_ARCHIVE_ACTION_SUBMITTED=NO
 FT10_ARCHIVE_SUBMISSION_COUNT=0
 ORDERING_VERIFIED_BY_STEP_LOGS=NO
@@ -23,9 +24,14 @@ FT07_ORDERING_EVIDENCE=INCONCLUSIVE
 
 ## Phase 0 — dedicated fixture provisioning (future separate owner authorization)
 
-- [ ] STOP — present frozen fixture contract (SPEC §3) to owner; obtain a **separate explicit owner authorization** to create the FT-10 fixture.
-- [ ] Provision the dedicated active fixture with the frozen exact bytes (`FT10_FIXTURE_MARKER=FT_MARKDOWN_RENDER_20260918_01`; active bytes = 87, UTF-8, LF, no CR, no final LF).
-- [ ] Record `FT10_FIXTURE_CREATE_SUBMITTED=YES` and after success `FT10_FIXTURE_CREATED=YES`.
+- [ ] STOP — present frozen fixture contract (SPEC §3) + canonical provisioning surface (SPEC §3.1) to owner; obtain a **separate explicit owner authorization** to create the FT-10 fixture.
+- [ ] **Pre-send guard (read-only):** confirm `FT10_FIXTURE_MARKER=FT_MARKDOWN_RENDER_20260918_01` has no existing live binding/Paste, no existing succeeded create, no ambiguous pending/reconciliation create state; Feishu ingress/create path available. Do NOT mutate during the guard.
+- [ ] Owner sends **exactly one real Feishu P2P plain-text message** carrying the frozen multiline fixture (surface `FEISHU_P2P_PLAIN_TEXT`; provider=FEISHU; native Code Block / synthetic webhook / direct API create disallowed) → `FT10_FIXTURE_P2P_SENT=YES`.
+- [ ] Ingress creates the entry → `FT10_FIXTURE_CREATE_SUBMITTED=YES`.
+- [ ] **Phase 0 acceptance (read-only):** exactly one new Active entry, one new Paste, one succeeded create op; binding active/permanent, managed task unchecked; Paste body exactly equals frozen 87-byte active body (HAS_CR=NO, HAS_FINAL_LF=NO); no duplicate Paste; no reconciliation_required; no unexpected pending create. Record `FT10_FIXTURE_BINDING_ID` / `FT10_FIXTURE_PASTE_NAME` / `FT10_FIXTURE_CREATE_OP_ID` (no secrets).
+- [ ] Success → `FT10_FIXTURE_CREATED=YES`, `FT10_FIXTURE_PROVISIONING_RESULT=PASS`. Do NOT set `FT10_STARTED=YES`.
+- [ ] **No-retry:** `FT10_FIXTURE_PROVISIONING_SEND_COUNT_MAX=1`, `FT10_FIXTURE_PROVISIONING_NO_AUTOMATIC_RETRY=YES`. If outcome ambiguous, do not resend; settle PASS/FAIL/INCONCLUSIVE read-only.
+- [ ] **Mismatch FAIL:** if provider bytes ≠ frozen 87-byte contract (terminal LF / CRLF / prefix/suffix / transformation) → `FT10_FIXTURE_PROVISIONING_RESULT=FAIL`, `FT10_FIXTURE_CREATED=NO`, `FT10_STARTED=NO`, `FT10_ARCHIVE_ACTION_SUBMITTED=NO`; STOP. Do NOT trim/normalize, edit D1, resend, create a second fixture, archive or auto-clean; retry/cleanup requires a new explicit owner decision.
 - [ ] STOP and perform a fresh read-only Phase A against the created fixture.
 
 ## Phase A — read-only preflight (no creation/repair)
@@ -50,7 +56,7 @@ If any deployment occurs: re-enter Phase A; re-resolve Worker pin; form fresh Pr
 
 ## Phase D — single production action
 
-- [ ] **Final drift check immediately before submit:** Worker pin unchanged; fixture still active with exact bytes; no pending op; session valid.
+- [ ] **Final drift check immediately before submit** (Phase-D archive-execution preconditions `FT10_PRECONDITION_1..7`, evaluated only AFTER successful Phase 0 provisioning + fresh read-only Phase A): Worker pin unchanged; fixture still active with exact bytes; no pending op; session valid. Any false gate → `FT10_EXECUTION_STATUS=BLOCKED_PRECONDITION`, `FT10_FUNCTIONAL_RESULT=NOT_RUN`, `FT10_ARCHIVE_ACTION_SUBMITTED=NO`, STOP.
 - [ ] Canonical permanent-archive UI path (not single-click):
   1. click the active managed Markdown checkbox → completion chooser opens (`archive_permanent` already selected);
   2. click `确认归档` exactly once;
@@ -104,8 +110,10 @@ NO other production mutation.
 NO FT-07/FT-08/FT-09 replay or fixture reuse
 NO click of the archived Markdown checkbox in production
 FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO
+FT10_FIXTURE_P2P_SENT=NO
 FT10_FIXTURE_CREATED=NO
 FT10_FIXTURE_CREATE_SUBMITTED=NO
+FT10_FIXTURE_PROVISIONING_RESULT=NOT_RUN
 FT10_ARCHIVE_ACTION_SUBMITTED=NO
 FT10_ARCHIVE_SUBMISSION_COUNT=0
 FT10_AUTHORIZED=NO

@@ -1,6 +1,6 @@
 # FT-10 SPEC — Archive Markdown/GFM rendering verification
 
-Status: **SPEC DRAFT FOR OWNER REVIEW** (docs-only; execution requires a separate owner authorization)
+Status: **SPEC APPROVED** — production execution requires separate Phase 0 and Phase D owner gates
 
 ```text
 FT10_TEST_OBJECTIVE=archive_markdown_gfm_rendering
@@ -54,7 +54,7 @@ GFM-rendered, checked, disabled task control + semantic bold/code
 ## 3. Frozen fixture (exact bytes; no template)
 
 The SPEC freezes the exact fixture below. A later execution may **not** alter
-it; no `<unique-id>` placeholder exists. Any substitution of another marker
+it; no template placeholder exists. Any substitution of another marker
 requires a new owner planning decision.
 
 ```text
@@ -527,7 +527,7 @@ batch, delete, restore lifecycle re-test, FT-09/FT-08 replay, source code
 changes.
 
 ```text
-Status: SPEC DRAFT
+Status: SPEC APPROVED
 FT10_STARTED=NO
 FT10_AUTHORIZED=NO
 FT10_FIXTURE_PROVISIONING_AUTHORIZED=NO

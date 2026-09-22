@@ -1,6 +1,6 @@
 # FT-10 PLAN — Archive Markdown/GFM rendering verification
 
-Status: **PLAN READY FOR OWNER REVIEW** (planning only; `FT10_AUTHORIZED=NO` / `FT10_STARTED=NO`)
+Status: **PLAN APPROVED** — FT-10 execution not authorized (`FT10_AUTHORIZED=NO` / `FT10_STARTED=NO`)
 
 ```text
 FT10_TEST_OBJECTIVE=archive_markdown_gfm_rendering
@@ -164,7 +164,7 @@ Do **not** reuse or mutate the historical FT-09 target
 `DMkerQPTisMNhhp8tdQc5Ech` (frozen evidence).
 
 FT-10 uses a **dedicated new fixture**. The exact fixture is frozen here and in
-SPEC §3; no `<unique-id>` placeholder remains.
+SPEC §3; no template placeholder remains.
 
 ```text
 FT10_FIXTURE_MARKER=FT_MARKDOWN_RENDER_20260918_01

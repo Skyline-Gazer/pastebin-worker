@@ -1,6 +1,6 @@
 # FT-10 TODO — Archive Markdown/GFM rendering execution runbook
 
-Status: **TODO DRAFT** (planning only; `FT10_AUTHORIZED=NO` / `FT10_STARTED=NO`)
+Status: **TODO READY** — no production execution authorized (`FT10_AUTHORIZED=NO` / `FT10_STARTED=NO`)
 
 Parent PLAN/SPEC: [ft-10-plan.md](ft-10-plan.md), [ft-10-spec.md](ft-10-spec.md)
 

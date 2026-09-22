@@ -183,6 +183,16 @@ describe("persistent internal entry services", () => {
     expect(JSON.stringify(first)).not.toContain("manageUrl")
   })
 
+  it("rejects changed content for a reused request without a second POST", async () => {
+    const { service, transport } = await setup()
+    const first = await service.createEntry(context, input)
+    expect(first).toMatchObject({ ok: true })
+
+    const conflict = await service.createEntry(context, { ...input, content: "changed" })
+    expect(conflict).toMatchObject({ ok: false, code: "REQUEST_CONFLICT" })
+    expect(transport.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1)
+  })
+
   it("updates the same Paste and preserves known-success request identity across later updates", async () => {
     const { service, transport } = await setup()
     const created = await service.createEntry(context, input)
@@ -200,7 +210,10 @@ describe("persistent internal entry services", () => {
 
   it("reserves concurrent duplicate creates only once", async () => {
     const { service, transport } = await setup()
-    await Promise.all([service.createEntry(context, input), service.createEntry(context, input)])
+    const results = await Promise.all([service.createEntry(context, input), service.createEntry(context, input)])
+    expect(results).toHaveLength(2)
+    expect(results.some((result) => result.ok)).toBe(true)
+    expect(results.every((result) => result.ok || result.code === "RECONCILIATION_REQUIRED")).toBe(true)
     expect(transport.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1)
     expect((await db.prepare("SELECT count(*) AS n FROM feishu_bindings").first<{ n: number }>())!.n).toBe(1)
   })

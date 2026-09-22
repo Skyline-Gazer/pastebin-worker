@@ -268,3 +268,46 @@ No Kody channel may be triggered, polled, waited on, classified, included in rev
 ### Consequences
 
 Review settlement and persistent status records contain no Kody field or state. No retry, timeout, non-vote, override, or other merge-gate handling applies because Kody is outside the workflow entirely.
+
+## D-032 — Project #3 delegated development queue
+
+### Decision
+
+The owner explicitly authorizes `PROJECT_DRIVEN_DELEGATED_EXECUTION` for
+prospective repository work after the governance migration merges. GitHub
+Project #3 is the canonical dynamic queue; `/docs` remains the durable
+contract layer, Issues are concrete work units, PRs are delivery units, GitHub
+Actions is deterministic validation, and evidence documents record settlement.
+
+Normal owner-gated execution remains valid. In delegated mode, routine PLAN,
+SPEC, and PHASE/TODO approval pauses are replaced by internal consistency
+review, but the durable artifacts, TDD, branch isolation, exact-HEAD CI,
+reviewer settlement/quorum, finding rules, security rules, release rules, and
+SPEC change control remain mandatory.
+
+### Boundary
+
+Delegated mode is not standing authorization for production deployment or
+lifecycle/data mutation, Cloudflare/provider-console changes, credentials,
+destructive cleanup, irreversible migrations, unspecified security/trust or
+architecture changes, unresolved semantic/API choices, legal decisions,
+ambiguous retries, blocking-finding dispositions, or reviewer-quorum
+overrides. A hard-gated item is marked Blocked with an exact owner decision and
+the agent continues another independent Ready item when available. Execution
+stops only when no independent executable work remains, all remaining work is
+blocked, a global decision blocks the queue, or Project truth/review governance
+cannot be maintained.
+
+### Consequences
+
+- Project status is kept synchronized through In Progress → In Review → Done,
+  or Blocked at an owner gate.
+- Closed historical Issues are not recreated; no FT number is invented to fill
+  the queue.
+- Project fields use existing semantics plus only the minimum missing Phase,
+  Work Type (GitHub-compatible Type equivalent), and Priority fields.
+- Governance changes do not receive an automatic reviewer-quorum override.
+
+Details and operational requirements are canonical in
+`docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.1.2 and
+`docs/planning/project3-delegated-development-{plan,spec,phases,todo}.md`.

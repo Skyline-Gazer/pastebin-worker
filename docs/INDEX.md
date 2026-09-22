@@ -14,7 +14,8 @@
 - [`BUILD_DEPLOY.md`](BUILD_DEPLOY.md) — pinned release inputs, ephemeral assembly, tip vs assembled Worker (`e=never`/`e=max`), and `deploy.yml` `goshujin` trigger.
 - [`REPO_AND_GIT.md`](REPO_AND_GIT.md) — branch roles, patch promotion, release refs, commit/PR workflow.
 - [`CHANGE_CONTEXT_AND_REVIEW.md`](CHANGE_CONTEXT_AND_REVIEW.md) — business context, acceptance criteria, commit-body and AI-review requirements; canonical home of the mandatory Phase Review Gate and the PLAN/SPEC/PHASE/TODO development workflow.
-- [`IMPLEMENTATION_ORDER.md`](IMPLEMENTATION_ORDER.md) — TDD-oriented implementation order.
+- [`IMPLEMENTATION_ORDER.md`](IMPLEMENTATION_ORDER.md) — historical TDD-oriented implementation order; Project #3 is the active queue after the governance migration.
+- [`planning/project3-delegated-development-plan.md`](planning/project3-delegated-development-plan.md) / [`project3-delegated-development-spec.md`](planning/project3-delegated-development-spec.md) / [`project3-delegated-development-phases.md`](planning/project3-delegated-development-phases.md) / [`project3-delegated-development-todo.md`](planning/project3-delegated-development-todo.md) — durable Project #3 delegated-development governance artifacts.
 - [`planning/m3-feishu-production.md`](planning/m3-feishu-production.md) — M3 Feishu production wiring PLAN/SPEC.
 - [`planning/m3-platform-endpoints.md`](planning/m3-platform-endpoints.md) — Feishu/Lark `PLATFORM` endpoint selection (historical single-provider design).
 - [`planning/ft-defect-remediation.md`](planning/ft-defect-remediation.md) — Umbrella: FT remediation before lifecycle function testing ([#132](https://github.com/Skyline-Gazer/pastebin-worker/issues/132)).

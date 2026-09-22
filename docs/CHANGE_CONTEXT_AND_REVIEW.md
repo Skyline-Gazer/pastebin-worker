@@ -588,6 +588,91 @@ Continuous execution MUST STOP and obtain a real owner decision; it MUST NOT aut
 
 The owner message authorizing Owner Delegated Continuous Execution for Phases 5–10 is also the authorizing decision for this governance documentation change. That bootstrap authorization applies only to this policy change; after it merges, this subsection governs prospective delegated execution.
 
+### 10.1.2 Project-Driven Delegated Execution (active owner-authorized mode)
+
+Normal mode in §10.1 remains valid. The historical Phases 5–10 exception in
+§10.1.1 is retained for traceability and is not the active queue. The owner
+Master Execution Authorization for Project #3 explicitly activates
+`PROJECT_DRIVEN_DELEGATED_EXECUTION` prospectively after the governance PR
+merges.
+
+Project #3 (`https://github.com/orgs/Skyline-Gazer/projects/3`) is the canonical
+dynamic work queue. Responsibilities are deliberately split:
+
+```text
+/docs                         durable product/technical/governance contracts
+GitHub Project #3             dynamic queue/status/phase/type/priority
+GitHub Issues                 concrete work units and blocker/closure record
+Pull Requests                 reviewable delivery units
+GitHub Actions                deterministic CI
+Evidence documents            durable implementation/functional/release settlement
+```
+
+After the queue audit, the delegated sequence is:
+
+```text
+select existing executable Project item
+→ repository inspection
+→ PLAN + internal consistency review
+→ SPEC + internal consistency review
+→ PHASE/TODO + internal consistency review
+→ TDD implementation (or documented TDD exception)
+→ PR
+→ exact-HEAD CI
+→ exact-HEAD reviewer settlement and quorum
+→ fix findings and re-review as required
+→ merge
+→ durable evidence/docs
+→ Issue closure
+→ Project item Done
+→ refresh Project #3 and select the next item
+```
+
+There is no routine owner pause inside this sequence. This mode does not
+weaken §9, TDD, durable-artifact persistence, branch isolation, latest-HEAD
+review, reviewer quorum, finding disposition, security, release, or SPEC
+change-control requirements. A new PR HEAD requires new CI and review.
+
+Queue selection is deterministic: (1) an existing unblocked In Progress item;
+(2) a Ready item with highest explicit Priority; (3) the item unblocking the
+most explicit dependencies; (4) the smallest coherent deliverable with the
+clearest acceptance criteria. Never select Blocked items, recreate closed
+history, or invent work merely to fill the queue. If no Ready item exists,
+refine only from existing Issues, durable TODO ledgers, approved docs, and
+known release debt; do not invent product requirements.
+
+The Project schema uses existing Status semantics where available: Todo is
+Ready/Backlog, In Progress is active execution, In Review is PR/CI/review,
+Blocked is a hard-gate wait, and Done is settled. Phase, Work Type (the
+GitHub-compatible equivalent of the reserved custom name `Type`), and Priority
+are the minimum added queue fields. Do not create duplicate cards for a
+canonical Issue.
+
+#### Hard owner gates
+
+Delegated mode MUST STOP before production deployment or lifecycle/data
+mutation; Cloudflare control-plane or provider-console mutation; new or
+rotated credentials; destructive cleanup; irreversible migration; an
+unspecified security/trust-boundary change; an externally observable/API
+semantic choice with multiple reasonable alternatives; an undefined
+architecture change; an unresolved CRITICAL/BLOCKING finding requiring owner
+disposition; a reviewer-quorum override; an ambiguous production retry; or a
+legal/licensing/ownership decision. This Master Authorization is not standing
+production authorization.
+
+When one item reaches a hard gate, set its Project status to Blocked, record
+`OWNER_GATE_REQUIRED=<exact decision>` plus the current state, exact action,
+risk, and post-approval plan in the Issue, and do not perform the gated action.
+Then continue with another independent Ready item. Stop the entire delegated
+session only when no independent executable item remains, all remaining items
+are blocked, a global semantic/architecture decision blocks the queue, Project
+truth cannot be maintained, or governance/review is fundamentally broken.
+
+Project-driven mode does not provide a standing reviewer-quorum override.
+Governance changes must settle all reviewer channels and meet the normal
+2-of-3 quorum; if quota/unavailability prevents quorum, mark the governance
+item Blocked and wait for owner authorization.
+
 ### 10.2 PLAN requirements
 
 The first substantive output for a new development request is an execution PLAN. Do NOT edit files, create branches, or write production code yet. The PLAN MUST contain:

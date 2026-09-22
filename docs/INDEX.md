@@ -32,7 +32,8 @@
 - [`planning/evidence/ft-09-timed-restore-pass.md`](planning/evidence/ft-09-timed-restore-pass.md) — **FT-09 functional PASS evidence** (single authorized timed restore; RESTORE_STAGE ordering; expiry cancellation; `FT09_FUNCTIONAL_RESULT=PASS`).
 - [`planning/evidence/ft-09-timed-restore-blocked-precondition.md`](planning/evidence/ft-09-timed-restore-blocked-precondition.md) — FT-09 **historical blocked attempt** (drift-check stop on auth; no submission) — preserved for the record; superseded by the PASS evidence above.
 - [`planning/ft09-post-cancel-reconciliation-plan.md`](planning/ft09-post-cancel-reconciliation-plan.md) / [`ft09-post-cancel-reconciliation-spec.md`](planning/ft09-post-cancel-reconciliation-spec.md) / [`ft09-post-cancel-reconciliation-todo.md`](planning/ft09-post-cancel-reconciliation-todo.md) — Defect #170 remediation planning: timed restore post-cancel failure MUST reconcile (planning only).
-- [`planning/ft-10-plan.md`](planning/ft-10-plan.md) / [`ft-10-spec.md`](planning/ft-10-spec.md) / [`ft-10-todo.md`](planning/ft-10-todo.md) — FT-10 PLAN/SPEC/TODO: verify Archive Markdown/GFM rendering ([#174](https://github.com/Skyline-Gazer/pastebin-worker/issues/174); planning approved; execution not started; `FT10_STARTED=NO`).
+- [`planning/ft-10-plan.md`](planning/ft-10-plan.md) / [`ft-10-spec.md`](planning/ft-10-spec.md) / [`ft-10-todo.md`](planning/ft-10-todo.md) — FT-10 PLAN/SPEC/TODO: verify Archive Markdown/GFM rendering ([#174](https://github.com/Skyline-Gazer/pastebin-worker/issues/174); planning approved; execution PASS settled; `FT10_COMPLETE=YES`).
+- [`planning/evidence/ft-10-archive-markdown-pass.md`](planning/evidence/ft-10-archive-markdown-pass.md) — FT-10 Phase 0 + Archive Markdown/GFM functional PASS evidence.
 
 ## Operational scaffold
 

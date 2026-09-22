@@ -96,14 +96,14 @@ exact decision required before any gated action.
 
 The canonical state is split by responsibility:
 
-| Surface | Authority |
-| --- | --- |
-| Project #3 | dynamic queue/status/phase/type/priority |
-| GitHub Issue | concrete scope, acceptance, blocker, closure |
-| `/docs` | durable product/technical/governance contracts |
-| Pull request | reviewable delivery and exact-head evidence |
-| GitHub Actions | deterministic CI result |
-| Evidence docs | durable implementation/functional/release settlement |
+| Surface        | Authority                                            |
+| -------------- | ---------------------------------------------------- |
+| Project #3     | dynamic queue/status/phase/type/priority             |
+| GitHub Issue   | concrete scope, acceptance, blocker, closure         |
+| `/docs`        | durable product/technical/governance contracts       |
+| Pull request   | reviewable delivery and exact-head evidence          |
+| GitHub Actions | deterministic CI result                              |
+| Evidence docs  | durable implementation/functional/release settlement |
 
 No new application storage or data migration is introduced.
 

@@ -20,20 +20,20 @@ Phase: [`issue159-idempotency-tests-phases.md`](issue159-idempotency-tests-phase
 - [x] Strengthen concurrent duplicate race terminal-result assertions.
 - [x] RED: baseline command was attempted:
       `pnpm exec vitest run downstream/addons/messaging/tests/service.spec.ts
-    --config downstream/addons/messaging/vitest.config.js`; Vitest did not
+--config downstream/addons/messaging/vitest.config.js`; Vitest did not
       start because pnpm attempted dependency installation and registry access
       returned `EBADF`. No RED failure is claimed; this is assertion-only
       hardening against an already implemented contract.
 - [x] GREEN: `./node_modules/.bin/vitest run
-    downstream/addons/messaging/tests/service.spec.ts --config
-    downstream/addons/messaging/vitest.config.js` — 34/34 passed.
+downstream/addons/messaging/tests/service.spec.ts --config
+downstream/addons/messaging/vitest.config.js` — 34/34 passed.
 - [x] REFACTOR: kept the existing setup/fixtures and reran the focused suite;
       34/34 passed.
 - [x] REGRESSION: `./node_modules/.bin/vitest run --config
-    downstream/addons/messaging/vitest.config.js` — 22 files / 170 tests
+downstream/addons/messaging/vitest.config.js` — 22 files / 170 tests
       passed.
 - [x] TypeScript check attempted with `./node_modules/.bin/tsc --noEmit -p
-    downstream/addons/messaging/tsconfig.json`; it is blocked by the
+downstream/addons/messaging/tsconfig.json`; it is blocked by the
       pre-existing missing generated `dist/frontend/.vite/ssr-manifest.json`
       imports in `worker/pages` (no test-change diagnostic).
 

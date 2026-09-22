@@ -21,14 +21,14 @@ Phase: [`project3-delegated-development-phases.md`](project3-delegated-developme
 
 ## Documentation implementation
 
-- [ ] Update `docs/CHANGE_CONTEXT_AND_REVIEW.md` with the new delegated mode,
+- [x] Update `docs/CHANGE_CONTEXT_AND_REVIEW.md` with the new delegated mode,
       hard gates, queue selection, blocked continuation, and Project #3 roles.
-- [ ] Update `docs/IMPLEMENTATION_ORDER.md` to identify historical Phases 1–10
+- [x] Update `docs/IMPLEMENTATION_ORDER.md` to identify historical Phases 1–10
       and Project #3 as the active queue.
-- [ ] Append the corresponding locked decision to `DECISIONS.md`.
-- [ ] Align `AGENTS.md` §18 with the new mode and preserve the normal mode.
-- [ ] Link governance PLAN/SPEC/PHASE/TODO from `docs/INDEX.md`.
-- [ ] Run contradiction scan, `git diff --check`, and secret scan.
+- [x] Append the corresponding locked decision to `DECISIONS.md`.
+- [x] Align `AGENTS.md` §18 with the new mode and preserve the normal mode.
+- [x] Link governance PLAN/SPEC/PHASE/TODO from `docs/INDEX.md`.
+- [x] Run contradiction scan, `git diff --check`, and secret scan.
 
 ## PR/review/settlement
 

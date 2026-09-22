@@ -4,6 +4,20 @@ Status: **Phases 1–10 and M3 production wiring are completed.** This document 
 
 The next real `downstream-v*` release cycle still requires rollback rehearsal against an actual immutable prior tag (Phase 10 first-cycle fixture exception). That is future release work, not an open implementation phase.
 
+## Active execution queue
+
+The historical Phase 1–10 roadmap above is retained for traceability and is
+not the active work queue. GitHub Project #3
+([@markd3ng's untitled project](https://github.com/orgs/Skyline-Gazer/projects/3))
+is the canonical dynamic queue for prospective work under
+`PROJECT_DRIVEN_DELEGATED_EXECUTION`, once the governance migration PR merges.
+
+Project status, Phase, Work Type, and Priority select the next concrete Issue;
+the PLAN/SPEC/PHASE/TODO documents in this repository remain the durable
+technical and governance contracts. Queue selection, hard owner gates,
+blocked-item continuation, and review invariants are defined canonically in
+`docs/CHANGE_CONTEXT_AND_REVIEW.md` §10.1.2.
+
 ## Pre-implementation artifacts (required before any phase starts)
 
 Every phase starts from approved planning artifacts; implementation MUST NOT begin before they are approved:

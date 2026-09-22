@@ -411,3 +411,29 @@ Do not reopen #168 or #170.
 Planning PR is docs-only; normal CI and reviewer rules unchanged
 (`quota/unavailable != PASS`; old-HEAD review does not transfer; owner approval
 binds exact HEAD). No auto-merge; no automatic reviewer override.
+
+## 14. Execution settlement (2026-09-22)
+
+The planning-only state above is historical. The owner subsequently authorized
+Phase 0 fixture provisioning and Phase C/D execution. The resulting durable
+functional evidence is [`evidence/ft-10-archive-markdown-pass.md`](evidence/ft-10-archive-markdown-pass.md).
+
+```text
+FT10_STARTED=YES
+FT10_AUTHORIZED=YES
+FT10_FIXTURE_PROVISIONING_AUTHORIZED=YES
+FT10_FIXTURE_CREATED=YES
+FT10_FIXTURE_PROVISIONING_RESULT=PASS
+FT10_ARCHIVE_ACTION_SUBMITTED=YES
+FT10_ARCHIVE_SUBMISSION_COUNT=1
+FT10_ACTION_SINGLE_SUBMISSION=YES
+FT10_FUNCTIONAL_RESULT=PASS
+FT10_COMPLETE=YES
+FT10_IMPLEMENTATION_REQUIRED=NO
+PRODUCTION_MUTATION_THIS_ROUND=YES
+PRODUCTION_MUTATION_SCOPE=FT10_FIXTURE_PROVISIONING_AND_SINGLE_PERMANENT_ARCHIVE
+```
+
+No deployment, code change, repair, retry, restore, delete, or archived-checkbox
+click occurred. Historical blocked-attempt comments and the Phase 0 wrong-target
+send remain preserved in Issue #174.

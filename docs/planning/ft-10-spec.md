@@ -542,3 +542,27 @@ PRODUCTION_MUTATION_THIS_ROUND=NO
 ORDERING_VERIFIED_BY_STEP_LOGS=NO
 FT07_ORDERING_EVIDENCE=INCONCLUSIVE
 ```
+
+## 15. Execution settlement (2026-09-22)
+
+The approved SPEC was executed under the separate Phase 0 and Phase C owner
+authorizations. See [`evidence/ft-10-archive-markdown-pass.md`](evidence/ft-10-archive-markdown-pass.md)
+for the complete read-only correlation and DOM evidence.
+
+```text
+FT10_FINAL_DRIFT_CHECK=PASS
+FT10_PRECONDITION_7_OWNER=YES
+FT10_STARTED=YES
+FT10_ARCHIVE_ACTION_SUBMITTED=YES
+FT10_ARCHIVE_SUBMISSION_COUNT=1
+FT10_ACTION_SINGLE_SUBMISSION=YES
+NO_RETRY=YES
+FT10_FUNCTIONAL_RESULT=PASS
+FT10_COMPLETE=YES
+FT10_IMPLEMENTATION_REQUIRED=NO
+```
+
+The exact fixture was archived permanently through the canonical frontend path.
+The resulting binding is `archived`, `permanent`, `expires_at=NULL`, version 2;
+the single `complete_permanent` operation succeeded with expected version 1.
+No code or deployment change was required.

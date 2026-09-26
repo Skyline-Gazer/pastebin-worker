@@ -32,30 +32,30 @@ This matrix summarizes the durable repository evidence available at this
 planning baseline. “PASS” describes the accepted functional result; it does
 not imply every internal ordering or edge case was verified.
 
-| Test | Completed coverage | Result and evidence limit |
-| --- | --- | --- |
-| FT-01 | Exact objective and steps are not recoverable from the current durable FT records. | PASS is recorded in `docs/planning/ft-auth-origin-fix.md`; no narrower objective is inferred here. |
-| FT-02 | Browser OAuth callback/session on canonical Add-on origin. | Initially found an origin defect; after correction, accepted as PASS in the later FT-04/05 prerequisites. This does not erase the historical failure. |
-| FT-03 | Add-on data-path checkpoint. | `FT-03_DATA_PATH=PASS` is recorded in `docs/planning/ft-defect-remediation.md`; the exact original test steps are not fully restated there. |
-| FT-04 | Real Feishu P2P create through ingress, queue, Add-on, Paste, and public read. | PASS; the created Paste remains historical evidence and was not a lifecycle target. |
-| FT-05 | Create idempotency/duplicate-delivery contract using production state and implementation evidence. | Accepted as `PASS_BY_PRODUCTION_STATE_AND_IDEMPOTENCY_CONTRACT`; no live duplicate event replay by design. |
-| FT-06 | Single-entry permanent archive. | PASS; established the purpose-built lifecycle fixture used by later lifecycle tests. |
-| FT-07 | Restore permanent archive. | Functional PASS. Historical operation-order proof remains `INCONCLUSIVE`; later telemetry is explicitly non-retroactive. |
-| FT-08 | Single-entry timed archive and authoritative expiry countdown. | PASS; expiration metadata and Archive presentation were checked. |
-| FT-09 | Restore timed archive and cancel expiry. | PASS; a prior blocked precondition attempt is retained separately and is not the PASS run. |
-| FT-10 | Archive Markdown/GFM rendering. | PASS; rendering observation only, with no lifecycle mutation in that test. |
-| FT-11 | Single-entry delete. | PASS; one exact disposable fixture was deleted and reconciled. |
-| FT-12 | Batch Mode all-success delete. | PASS; two entries, one batch request, two succeeded, zero failed. The original Fixture A was terminally not created, never retried, and not included. |
+| Test  | Completed coverage                                                                                 | Result and evidence limit                                                                                                                             |
+| ----- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FT-01 | Exact objective and steps are not recoverable from the current durable FT records.                 | PASS is recorded in `docs/planning/ft-auth-origin-fix.md`; no narrower objective is inferred here.                                                    |
+| FT-02 | Browser OAuth callback/session on canonical Add-on origin.                                         | Initially found an origin defect; after correction, accepted as PASS in the later FT-04/05 prerequisites. This does not erase the historical failure. |
+| FT-03 | Add-on data-path checkpoint.                                                                       | `FT-03_DATA_PATH=PASS` is recorded in `docs/planning/ft-defect-remediation.md`; the exact original test steps are not fully restated there.           |
+| FT-04 | Real Feishu P2P create through ingress, queue, Add-on, Paste, and public read.                     | PASS; the created Paste remains historical evidence and was not a lifecycle target.                                                                   |
+| FT-05 | Create idempotency/duplicate-delivery contract using production state and implementation evidence. | Accepted as `PASS_BY_PRODUCTION_STATE_AND_IDEMPOTENCY_CONTRACT`; no live duplicate event replay by design.                                            |
+| FT-06 | Single-entry permanent archive.                                                                    | PASS; established the purpose-built lifecycle fixture used by later lifecycle tests.                                                                  |
+| FT-07 | Restore permanent archive.                                                                         | Functional PASS. Historical operation-order proof remains `INCONCLUSIVE`; later telemetry is explicitly non-retroactive.                              |
+| FT-08 | Single-entry timed archive and authoritative expiry countdown.                                     | PASS; expiration metadata and Archive presentation were checked.                                                                                      |
+| FT-09 | Restore timed archive and cancel expiry.                                                           | PASS; a prior blocked precondition attempt is retained separately and is not the PASS run.                                                            |
+| FT-10 | Archive Markdown/GFM rendering.                                                                    | PASS; rendering observation only, with no lifecycle mutation in that test.                                                                            |
+| FT-11 | Single-entry delete.                                                                               | PASS; one exact disposable fixture was deleted and reconciled.                                                                                        |
+| FT-12 | Batch Mode all-success delete.                                                                     | PASS; two entries, one batch request, two succeeded, zero failed. The original Fixture A was terminally not created, never retried, and not included. |
 
 ## Remaining candidates
 
-| Candidate | Production evidence gap | Existing coverage / reason to defer |
-| --- | --- | --- |
-| Batch `archive_permanent` | Not exercised by FT-12; proposed FT-13. | Single-entry permanent archive passed in FT-06; automated Batch Mode coverage exists. A one-entry batch checks the distinct selection/request path with one fixture. |
-| Batch `archive_expiring` | Not exercised by FT-12. | Single-entry timed archive and restore passed in FT-08/09 and automated batch coverage exists. It adds authoritative expiry/countdown and later cancellation concerns, so it is not the smallest next check. |
-| Deliberate batch partial failure | FT-12 deliberately covered only all-success. | Mixed results are covered in automated tests. A safe, representative production failure fixture and bounded impact have not been specified; do not manufacture a failure or use a guessed/cross-scope ID in this PLAN. |
-| Batch replay/idempotency | No production replay was needed in FT-12. | Automated coverage exists. A production replay adds little to the next functional action and is not authorized here. |
-| FT-07 restore ordering | Historical step-order evidence remains inconclusive. | `docs/planning/restore-ordering-telemetry-plan.md` and its SPEC track this separate observability/evidence issue; current telemetry does not retroactively close it. It is not a reason to redefine FT-13. |
+| Candidate                        | Production evidence gap                              | Existing coverage / reason to defer                                                                                                                                                                                    |
+| -------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Batch `archive_permanent`        | Not exercised by FT-12; proposed FT-13.              | Single-entry permanent archive passed in FT-06; automated Batch Mode coverage exists. A one-entry batch checks the distinct selection/request path with one fixture.                                                   |
+| Batch `archive_expiring`         | Not exercised by FT-12.                              | Single-entry timed archive and restore passed in FT-08/09 and automated batch coverage exists. It adds authoritative expiry/countdown and later cancellation concerns, so it is not the smallest next check.           |
+| Deliberate batch partial failure | FT-12 deliberately covered only all-success.         | Mixed results are covered in automated tests. A safe, representative production failure fixture and bounded impact have not been specified; do not manufacture a failure or use a guessed/cross-scope ID in this PLAN. |
+| Batch replay/idempotency         | No production replay was needed in FT-12.            | Automated coverage exists. A production replay adds little to the next functional action and is not authorized here.                                                                                                   |
+| FT-07 restore ordering           | Historical step-order evidence remains inconclusive. | `docs/planning/restore-ordering-telemetry-plan.md` and its SPEC track this separate observability/evidence issue; current telemetry does not retroactively close it. It is not a reason to redefine FT-13.             |
 
 No documentation reviewed defines FT-13 in advance. FT-12 SPEC explicitly left
 the other batch actions and deliberate partial failure outside its execution.

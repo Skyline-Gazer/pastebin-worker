@@ -71,11 +71,12 @@ owner to 12 before execution; the original stop comment was not rewritten.
 
 ## PR and issue settlement
 
-- [ ] Commit this secret-free evidence with full review context.
-- [ ] Open evidence PR against `downstream/main`, referencing Issue #183.
-- [ ] Set Project #183 to In Review after PR creation.
-- [ ] Complete exact-HEAD CI and the normal AI Review Bot gate; do not override
-      reviewer quorum or unresolved blocking findings.
+- [x] Commit this secret-free evidence with full review context.
+- [x] Open evidence PR against `downstream/main`, referencing Issue #183.
+- [x] Complete exact-HEAD required CI; all four required checks passed.
+- [x] Keep Project #183 Blocked while reviewer quorum is unmet.
+- [ ] Complete the exact-HEAD AI Review Bot gate; do not override reviewer
+      quorum or unresolved blocking findings.
 - [ ] Merge only after the complete gate passes.
 - [ ] Refresh `downstream/main`, add closure evidence, close Issue #183 as
       completed, and set its Project item Done.

@@ -97,9 +97,18 @@ Read-only checks must establish and record:
    Origin protections are present. Authentication or scope uncertainty is a
    hard stop.
 4. The normal Feishu ingress queue and configured consumer/DLQ identity and
-   current read-only backlog/health metrics are captured. Do not replay,
-   acknowledge, purge, or reconfigure any queue or DLQ message. If identity,
-   health, or baseline is unavailable or anomalous, stop.
+   current read-only backlog/health metrics are captured. Use the Cloudflare
+   Queues dashboard metrics or the read-only
+   `GET /accounts/{account_id}/queues/{queue_id}/metrics` endpoint for both the
+   ingress and DLQ; record the UTC observation time,
+   `backlog_count`/`backlog_bytes`/`oldest_message_timestamp_ms`, and source.
+   Cloudflare documents these metrics as best-effort and approximate, so do
+   not describe them as an exact message inventory. A dashboard message
+   preview or the non-acknowledging Queue `peek` operation may be used to
+   identify the exact fixture marker in the DLQ; never acknowledge, purge,
+   replay, or reconfigure a message. If identity, health, a comparable
+   baseline, or exact evidence that the fixture is absent from the DLQ is
+   unavailable or anomalous, stop.
 5. The marker has zero existing matching binding/Paste records. Record the
    read-only Active/Archive inventory and current D1 operation, batch,
    reconciliation-required, and in-flight baselines. Global and target
@@ -112,7 +121,11 @@ After the separately authorized create, reconcile read-only and require all of:
 - exactly one Owner-originated P2P event and one successful create operation;
 - the one expected fixture message is normally consumed through ingress; no
   replay or unrelated event is introduced, no test event reaches the DLQ, and
-  the queue returns to its captured baseline before the batch gate;
+  the post-create reported ingress and DLQ metric fields match their captured
+  baselines before the batch gate. Because these are best-effort metrics, do
+  not claim exact underlying queue parity from metric equality alone; if the
+  fixture's successful ingress outcome or its absence from the DLQ cannot be
+  established read-only, stop without the batch gate;
 - exactly one new binding and one Paste with the frozen marker and explicit
   disposable provenance;
 - one exact entry ID and Paste ID, carried forward verbatim; no guessed or
@@ -230,11 +243,20 @@ read-only. All must hold:
 - its Markdown task is checked; visibility is `archived`; retention is
   permanent (Archive label `永久保留`); `expiresAt=NULL`;
 - the same public Paste remains readable and non-expiring;
-- exactly one new successful target lifecycle operation exists, with kind
-  `complete_permanent`; the target version advances once from the captured
-  pre-action version;
-- exactly one completed batch record/result matches the single request and
-  exact ID; no duplicate operation or replay exists;
+- exactly one new target lifecycle operation exists with
+  `kind=complete_permanent`, `status=succeeded`, and
+  `expected_version=<captured pre-action binding version>`; the post-action
+  binding version equals that captured version plus exactly one;
+- one `feishu_batch_operations` row matches the request/action and has
+  `status=dispatched` (the schema has no `completed` status); completion is
+  represented by exactly one matching `feishu_batch_results` row whose
+  sanitized JSON equals the HTTP result, plus exactly one
+  `feishu_batch_items` row for the target with `outcome=succeeded` and
+  `code=NULL`. Its item/lifecycle request ID is
+  `<batch_id>:0:<exact entry ID>`. Treat a dispatched batch row with a
+  matching result row as completed; batch in-flight count is dispatched rows
+  without a result row and must be zero. No duplicate operation or replay
+  exists;
 - target and global reconciliation-required and in-flight counts remain zero;
 - no unrelated/historical entry, binding, or Paste changed; the batch action
   caused no queue/DLQ activity, replay, or configuration change; no Worker
@@ -280,7 +302,8 @@ Evidence must include:
   evidence, and pre/post D1 counts (no passwords, tokens, cookies, CSRF values,
   or unrelated Paste contents);
 - selected count, action, confirmation count, request count, HTTP status,
-  sanitized ordered response, operation ID/kind/status, and version delta;
+  sanitized ordered response, target operation ID/kind/status/expected_version,
+  captured pre/post binding versions, and version delta;
 - one post-action Active/Archive refresh, public Paste readability/expiry,
   reconciliation/in-flight state, and comparison showing no unrelated change;
 - final functional classification and confirmation that no retry, replay,
@@ -309,6 +332,9 @@ fixture, batch action, cleanup, deployment, or execution.
 - [FT-12 SPEC](ft-12-spec.md) and [FT-12 production evidence](evidence/ft-12-batch-delete-pass.md).
 - [FT-06 SPEC](ft-06-spec.md) for the normal native Feishu Code Block P2P fixture path.
 - [`API_CONTRACT.md`](../API_CONTRACT.md) and [`RETENTION_LIFECYCLE.md`](../RETENTION_LIFECYCLE.md).
+- [Cloudflare Queue metrics](https://developers.cloudflare.com/api/resources/queues/methods/get_metrics/)
+  and [non-acknowledging dashboard message preview](https://developers.cloudflare.com/queues/examples/list-messages-from-dash/)
+  for read-only Queue/DLQ evidence surfaces.
 - `downstream/addons/messaging/worker/batch.ts`, `worker/service.ts`,
   `frontend/App.tsx`, and `tests/batch.spec.ts` for the reviewed request and
   outcome semantics.

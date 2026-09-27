@@ -1,14 +1,21 @@
 # FT-13 PLAN — Batch permanent archive
 
-Status: **PROPOSED_FOR_OWNER_REVIEW**. Tracking issue:
+Status: **APPROVED_FOR_SPEC_PREPARATION**. Tracking issue:
 [#186](https://github.com/Skyline-Gazer/pastebin-worker/issues/186), Project #3
-item [FT-13: Batch permanent archive (planning)](https://github.com/orgs/Skyline-Gazer/projects/3).
+item [FT-13: Batch permanent archive (SPEC preparation)](https://github.com/orgs/Skyline-Gazer/projects/3).
 Planning baseline: `downstream/main` at
 `496d6c93e97646cf4feac8e030204260558296af` (FT-12 merge).
 
-This PLAN requests review of one narrowly scoped production Function Test. It
-does not approve a SPEC, create a fixture, authorize a production mutation, or
-start FT-13.
+Settlement: PR [#187](https://github.com/Skyline-Gazer/pastebin-worker/pull/187)
+was reviewed at HEAD `3d1fe72a9e7612ce6d4a2de77161b48a1f98b382` and merged at
+`d0d73cbe6564f1cb496349e6012368c11751419a`. Required CI passed. Cursor
+Bugbot, Greptile, and Codex Final Verify remained
+`NO_RESPONSE_AFTER_BOUNDED_WAIT`, not PASS; the Owner authorized and recorded
+a reviewer-quorum-only override. See the [Issue #186 settlement
+record](https://github.com/Skyline-Gazer/pastebin-worker/issues/186#issuecomment-5854318064).
+
+This PLAN is approved for SPEC preparation only. It does not approve the SPEC,
+create a fixture, authorize a production mutation, or start FT-13.
 
 ## Context and objective
 
@@ -16,7 +23,7 @@ FT-12 passed the two-entry Batch Mode `delete` all-success path with one
 `POST /api/batch`, two successful results, and no failed results. The Batch
 Mode contract also supports `archive_permanent` and `archive_expiring`, but the
 completed production evidence reviewed here does not show either batch action
-being exercised. The proposed objective is to verify one eligible entry can be
+being exercised. The approved objective is to verify one eligible entry can be
 permanently archived through Batch Mode.
 
 This is a production verification gap, not a known product-functionality gap:
@@ -200,7 +207,7 @@ no implementation or speculative follow-up tasks are created.
 
 Required, separate gates before any execution:
 
-1. Owner approves this PLAN scope. Until then the SPEC remains not started.
+1. PLAN scope approval — complete through PR #187 settlement.
 2. Owner reviews and approves the detailed SPEC before any execution
    authorization is considered.
 3. Owner explicitly authorizes exactly one fixture create through the SPEC's
@@ -215,11 +222,13 @@ delete, deployment, Worker/configuration change, application-code change, or
 FT-14 planning is part of this PLAN.
 
 ```text
-FT13_SCOPE_STATUS=PROPOSED_FOR_OWNER_REVIEW
-FT13_PLAN_APPROVAL=REQUIRED
-FT13_SPEC=NOT_STARTED
+FT13_SCOPE_STATUS=PLAN_APPROVED_SPEC_PREPARATION
+FT13_PLAN_APPROVAL=SETTLED_PR187_MERGED
+FT13_SPEC=IN_PREPARATION_NOT_APPROVED
+FT13_SPEC_APPROVAL=REQUIRED_NOT_GRANTED
 FT13_FIXTURE_CREATE_AUTHORIZED=NO
 FT13_BATCH_ARCHIVE_AUTHORIZED=NO
+FT13_CLEANUP_AUTHORIZED=NO
 FT13_EXECUTION_AUTHORIZED=NO
 FT13_EXECUTION_STARTED=NO
 ```

@@ -109,6 +109,20 @@ Read-only checks must establish and record:
    replay, or reconfigure a message. If identity, health, a comparable
    baseline, or exact evidence that the fixture is absent from the DLQ is
    unavailable or anomalous, stop.
+
+   For this metric alone, the
+   [Cloudflare Queue Metrics API](https://developers.cloudflare.com/api/resources/queues/methods/get_metrics/)
+   defines `oldest_message_timestamp_ms=0` as **UNKNOWN**, not a known empty
+   queue or an oldest-message time. Its UNKNOWN value does not independently
+   block preflight only when both ingress and DLQ report `backlog_count=0` and
+   `backlog_bytes=0` in fresh responses, the non-acknowledging DLQ preview
+   finds no unacknowledged messages, the consumer/retry/DLQ configuration is
+   verified, global and target reconciliation-required/in-flight counts are
+   zero, and every other precondition passes. Record the raw `0`, its UNKNOWN
+   meaning, both response times, and the independent evidence. A missing
+   metric, failed request, nonzero or anomalous backlog, or any other UNKNOWN
+   still blocks; approximate metrics never prove exact Queue inventory.
+
 5. The marker has zero existing matching binding/Paste records. Record the
    read-only Active/Archive inventory and current D1 operation, batch,
    reconciliation-required, and in-flight baselines. Global and target
@@ -126,6 +140,10 @@ After the separately authorized create, reconcile read-only and require all of:
   not claim exact underlying queue parity from metric equality alone; if the
   fixture's successful ingress outcome or its absence from the DLQ cannot be
   established read-only, stop without the batch gate;
+- when the post-create `oldest_message_timestamp_ms` is `0`, apply the same
+  narrow rule in §3.1. Equality of two UNKNOWN timestamps is not evidence of
+  message delivery or DLQ absence; establish those lifecycle facts separately
+  as required above;
 - exactly one new binding and one Paste with the frozen marker and explicit
   disposable provenance;
 - one exact entry ID and Paste ID, carried forward verbatim; no guessed or

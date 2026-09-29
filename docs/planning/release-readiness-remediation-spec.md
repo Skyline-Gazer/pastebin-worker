@@ -51,7 +51,7 @@ and version checks, and final read-only health checks.
 - Preserve useful, sanitized stage failure evidence.
 - Retain provenance and checksums with verifiable GitHub Actions artifact and
   run identity.
-- Rehearse against an existing immutable production tag and explain what a
+- Rehearse against the named existing production source tag and explain what a
   source tag can and cannot prove about a deployed Worker.
 - Require `observability.redact_query_string=true` in tracked configuration,
   test overlays for drift, and define read-only live verification.
@@ -61,9 +61,19 @@ and version checks, and final read-only health checks.
 ## 3.3 Non-goals
 
 - No implementation, production configuration edit, Cloudflare API mutation,
-  deployment, rollback, production request, tag creation/movement/deletion,
-  GitHub Release, artifact publication, merge, cleanup, D1 write, or Queue
-  operation is authorized by this SPEC.
+  deployment, rollback, tag creation/movement/deletion, GitHub Release, public
+  release-artifact publication, merge, cleanup, D1 write, or Queue mutation is
+  authorized by this SPEC. After the required implementation PRs merge, the
+  Owner explicitly authorizes the bounded, read-only Phase 4 production health
+  audit described in §3.5. It may perform only the listed reads and approved
+  safe public probes; it cannot change production state, call OAuth/login
+  routes, or bypass access controls. A post-deployment synthetic log probe
+  remains deferred until a separate deployment authorization.
+- GitHub Actions CI evidence-artifact upload and retention of sanitized
+  candidate provenance/checksum are in scope after the required SPEC/PHASE
+  approvals. That non-public CI artifact is distinct from a GitHub Release or
+  public release artifact publication. Final release provenance has the
+  separate lifetime requirement in §3.5.
 - Do not remove or rewrite historical logs. Query redaction protects future
   records; it does not remediate already-retained records.
 - Do not rotate credentials or invalidate sessions based only on the known
@@ -154,18 +164,22 @@ and version checks, and final read-only health checks.
   `GET /repos/Skyline-Gazer/pastebin-worker/rulesets?includes_parents=true&targets=tag&per_page=100`.
   It returned HTTP 200 with body `[]` under repository-admin access and a
   classic token with `repo` scope. No repository-scoped or inherited rulesets
-  were returned by that query. The classic
+  were returned by that query. GitHub documents that `includes_parents=true`
+  includes applicable higher-level rulesets, so the current effective tag
+  enforcement status is `FAIL/NOT_PROTECTED`. The classic
   `GET /repos/Skyline-Gazer/pastebin-worker/tags/protection` endpoint returned
   HTTP 404. A separate organization-level ruleset listing could not be read
-  because the token lacks `admin:org`; effective inherited tag protection is
-  therefore UNKNOWN, not PASS or a claim of NOT_PROTECTED. Tag existence alone
-  does not establish protection. This result does not show that the tag was
-  historically moved or tampered with. The current remote annotated ref matches
-  the observed tag-object and peeled-commit identities, and no evidence of
-  retargeting was found; historical tag immutability/integrity nevertheless
-  remains UNKNOWN without trusted release-time identity/history evidence. Tag
-  eligibility stays fail-closed until effective protection is verifiable and
-  exact source identity passes its checks. No tag-policy mutation is authorized.
+  because the token lacks `admin:org`, but the repository rules endpoint's
+  parent-inclusive result is the effective evidence for this repository/tag
+  query. Tag existence alone does not establish protection. This result does
+  not show that the tag was historically moved or tampered with. The current
+  remote annotated ref matches the observed tag-object and peeled-commit
+  identities, and no evidence of retargeting was found; historical tag
+  immutability/integrity nevertheless remains UNKNOWN without trusted
+  release-time identity/history evidence. Tag
+  eligibility stays fail-closed until the protection gap is resolved and exact
+  source identity passes its checks. Creating or changing a ruleset requires a
+  separate Owner decision; none is authorized here.
 
 Evidence: [Wrangler configuration reference](https://developers.cloudflare.com/workers/wrangler/configuration/),
 [Cloudflare Workers API](https://developers.cloudflare.com/api/resources/workers/),
@@ -269,21 +283,36 @@ and [GitHub repository rules API](https://docs.github.com/en/rest/repos/rules).
 error`, and retention of at least 30 days. The workflow records the returned
    artifact ID, browser URL, archive SHA-256 digest, creation/expiry times, and
    exact name in the run summary, alongside candidate SHA, run ID/attempt, and
-   provenance-file SHA-256. A read-only GitHub Actions API lookup verifies the
-   exact run attempt and candidate `head_sha`, artifact ID/name, non-expired
-   state, archive digest, and an expiry at least 30 days after creation. A
-   read-only artifact download recomputes the provenance JSON SHA-256 and
-   matches it to the sidecar and summary. Missing or contradictory fields,
-   lookup/download errors, or retention below 30 days prevent `retained` and
-   tag eligibility. The summary is a convenience record; API-linked artifact
-   metadata and the downloaded checksum are the verification evidence.
-4. The summary and artifact distinguish candidate validation from release
+   provenance-file SHA-256. A read-only workflow-runs API lookup verifies the
+   exact `(run_id, run_attempt)` and candidate `head_sha`. A read-only artifacts
+   API lookup verifies artifact ID/name/digest/expiry and its `workflow_run.id`
+   and `head_sha`. The artifact API does not expose `run_attempt`; therefore
+   the producer constructs a unique non-overwritten artifact name containing
+   run ID, attempt, and candidate SHA, and the provenance/receipt inside the
+   artifact records those same values from the workflow attempt context. The
+   workflow-attempt response, artifact API metadata, unique name, and downloaded
+   receipt must agree. A read-only artifact download recomputes the provenance
+   JSON SHA-256 and matches it to the sidecar and summary. Missing or
+   contradictory fields, lookup/download errors, or retention below 30 days
+   prevent `retained` and tag eligibility.
+4. The CI candidate artifact and its provenance JSON/sidecar are retained for
+   at least 30 days. This is candidate-evidence retention only. The final
+   provenance record for an approved immutable release tag must be retained
+   with that tagged release record for the life of the release, as required by
+   the existing Phase 10 contract; a 30-day Actions artifact alone does not
+   meet that final-release lifetime. No tag or public release record is created
+   in this work.
+5. The summary and artifact distinguish candidate validation from release
    authorization, deployment, and publication. Candidate generation is
    non-deploying and does not create a tag or Release.
 
 GitHub's upload action exposes artifact ID, URL, and SHA-256 digest after
 upload; its artifact digest is the archive identity, distinct from the
-provenance file checksum. See [upload-artifact action metadata](https://github.com/actions/upload-artifact/blob/main/action.yml)
+provenance file checksum. The Artifacts API exposes workflow-run ID and head
+SHA but not the attempt number; the Workflow Runs API exposes the run attempt.
+See [upload-artifact action metadata](https://github.com/actions/upload-artifact/blob/main/action.yml),
+[GitHub artifact API](https://docs.github.com/en/rest/actions/artifacts),
+[GitHub workflow runs API](https://docs.github.com/en/rest/actions/workflow-runs),
 and [GitHub artifact documentation](https://docs.github.com/en/actions/tutorials/store-and-share-data).
 
 ### Production-tag rollback procedure
@@ -317,14 +346,15 @@ and [GitHub artifact documentation](https://docs.github.com/en/actions/tutorials
    incomplete inherited-rule visibility is `UNKNOWN`. Tag existence and a
    successful historical build do not prove protection. The 2026-09-29
    repository-scoped lookup described in §3.4 returned HTTP 200 and an empty
-   result, while the available token could not read the separate org-level
-   ruleset listing. Effective tag protection is therefore `UNKNOWN`; do not
-   report rollback PASS. This status is separate from historical tag integrity,
-   which also remains `UNKNOWN` absent sufficient trusted evidence. The empty
-   repository-scoped result alone does not demonstrate past tag tampering.
-   Tag eligibility remains fail-closed until effective protection is
-   verifiable and exact source identity checks pass. Rehearsal never moves,
-   creates, or deletes a tag.
+   result with `includes_parents=true`; GitHub documents that this includes
+   applicable higher-level rulesets. Current tag enforcement is therefore
+   `FAIL/NOT_PROTECTED`; do not report rollback PASS. The unavailable separate
+   org-level listing does not change the repository endpoint's result. This
+   current control failure is separate from historical tag integrity, which
+   remains `UNKNOWN`; neither the empty result nor current failure demonstrates
+   past tag tampering. Tag eligibility remains fail-closed. Any ruleset change
+   requires a separate Owner decision. Rehearsal never moves, creates, or
+   deletes a tag.
 4. Rehearsal checks out the exact peeled commit in a disposable worktree,
    installs from that tag's own committed lockfile with frozen resolution, and
    runs its own release inputs. Any compatibility harness or tool added after
@@ -443,8 +473,9 @@ performs no request against production.
 
 ### Final read-only production health checks
 
-Following deployment verification, the final health report uses one UTC
-window `[window_start, window_end]` of at most 15 minutes. Each point-in-time
+After all required implementation PRs merge, the Owner-authorized pre-release
+health audit uses one UTC window `[window_start, window_end]` of at most 15
+minutes. It is read-only and independent of post-deployment verification. Each point-in-time
 API read must complete during the last five minutes of that window; historical
 queries include only events within the declared window. It records observation
 time, source, target, and freshness for each result. Each check is `PASS` only
@@ -475,6 +506,13 @@ if any required check is unknown, else `PASS`. It checks:
   source is `PASS`; one or more is `FAIL`; incomplete sampling, unavailable
   logs, or uncertain query coverage is `UNKNOWN`.
 
+The two historical Paste records previously excluded by the Owner remain
+excluded from verified historical-integrity claims. The health audit does not
+inspect, mutate, or clean them up and does not require a new exclusion approval.
+The post-deployment synthetic query-marker check in the preceding section is
+not part of this pre-release audit and remains gated on separate deployment
+authorization.
+
 Queue/DLQ names and D1 counts are reported as aggregate values only; no
 unapproved threshold is inferred for batch or in-flight counts. A D1 check is
 `PASS` when the SELECT-only read is complete, counts are valid nonnegative
@@ -486,11 +524,10 @@ reported, not interpreted as empty or failed. A zero
 `oldest_message_timestamp_ms` makes the Queue age/emptiness check `UNKNOWN`,
 never proof that a Queue is empty. Unavailable or ambiguous evidence remains
 `UNKNOWN`. A healthy 15-minute window does not establish a historical absence
-of errors or unauthorized log access. The two retained inventory entries
-without reconstructible expected hashes remain `UNKNOWN` until the Owner
-supplies identifiers and sources or explicitly authorizes their exclusion from
-that inventory scope. IP, geolocation, and user-agent retention remains a
-separate privacy decision.
+of errors or unauthorized log access. The two historical Paste records
+previously excluded by the Owner remain outside verified historical-integrity
+claims; that scope decision stands without another approval request. IP,
+geolocation, and user-agent retention remains a separate privacy decision.
 
 ## 3.6 User/operator flows
 
@@ -503,7 +540,9 @@ separate privacy decision.
    retained evidence or tag eligibility.
 3. A separate owner-triggered candidate workflow runs the same gate on that
    exact SHA. It generates provenance and checksum, uploads them, and writes
-   the post-upload artifact identity to the durable run summary.
+   the post-upload artifact identity to the durable run summary. This is a
+   private CI evidence artifact with at least 30-day retention, not a GitHub
+   Release or public release publication.
 4. A maintainer verifies the run, artifact metadata/digest, file checksum,
    candidate SHA, and patch hashes through read-only GitHub evidence.
 5. A separate read-only tag-eligibility check reports eligible only after
@@ -512,9 +551,12 @@ separate privacy decision.
 6. A read-only source-tag reconstruction validates the exact existing
    production tag identity and its own 30-entry patch series. It makes no
    Cloudflare changes and cannot prove runtime rollback readiness.
-7. A separately approved deployment may run later. Post-deployment API reads,
-   redaction check, safe synthetic probe, and final health checks follow only
-   after that authorization. Their results are not implied by candidate PASS.
+7. After all required implementation PRs merge, the bounded, read-only Phase 4
+   production health audit runs under the Owner's current sprint authorization.
+   It performs only the listed reads and approved safe public probes and leaves
+   unavailable evidence UNKNOWN. A separately approved deployment may occur
+   later; only then may post-deployment version/config reads and the synthetic
+   log-redaction probe run. Neither result is implied by candidate PASS.
 
 ## 3.7 Data/state model
 
@@ -524,7 +566,10 @@ hashes; it does not contain production secrets, invocation URLs, OAuth values,
 cookies, full Paste bodies, or a claim of deployment. The detached checksum
 identifies the provenance file. GitHub's upload artifact ID/URL/archive digest
 identify the uploaded archive and are recorded by the workflow run after
-upload. Cloudflare Worker version and deployment IDs are separate runtime
+upload. Candidate provenance and its sidecar are retained with the Actions
+evidence artifact for at least 30 days. Final release provenance is a distinct
+record retained with its approved immutable tagged release for the life of that
+release. Cloudflare Worker version and deployment IDs are separate runtime
 identities recorded only by a separately authorized post-deployment verifier.
 
 ## 3.8 Security and trust boundaries
@@ -571,19 +616,26 @@ identities recorded only by a separately authorized post-deployment verifier.
   protection reports `TAG_ELIGIBILITY=refused`; no candidate script may
   convert those statuses to eligible.
 - Rollback source mismatch or failed target is `FAIL`; unavailable expected
-  identity, tag protection, runtime deployment identity, or historical input
-  is `UNKNOWN`. Either blocks rollback readiness and reports
-  `DEPLOY_CLAIM=no`; never substitute current source or claim runtime rollback
-  success from a source reconstruction.
+  identity, runtime deployment identity, or historical input is `UNKNOWN`. A
+  complete effective tag-protection lookup with no matching enforced rule, or
+  a rule that permits tag mutation, is `FAIL/NOT_PROTECTED`; incomplete or
+  unavailable protection evidence is `UNKNOWN`. Historical tag integrity
+  remains a separate `UNKNOWN` absent trusted release-time identity/history
+  evidence. Neither FAIL nor UNKNOWN establishes past tampering. Either status
+  blocks rollback readiness and reports `DEPLOY_CLAIM=no`; never substitute
+  current source or claim runtime rollback success from a source
+  reconstruction.
 - A target failure emits the §3.5 bounded stderr envelope before temporary
   output is deleted. Raw command output is never included in artifacts or
   summaries.
 - Redaction schema mismatch or live drift result other than exactly true
   reports FAIL/UNKNOWN and blocks release readiness. Do not change production
   configuration automatically.
-- Post-deployment version/config/log evidence or final health-check evidence
-  that is absent, stale, ambiguous, or unauthorized remains UNKNOWN and cannot
-  be represented as PASS.
+- Post-deployment version/config/log evidence that is absent, stale, ambiguous,
+  or unauthorized remains UNKNOWN and cannot be represented as PASS. Missing,
+  stale, ambiguous, or incomplete Phase 4 pre-release health-audit evidence is
+  also UNKNOWN; the audit runs only after the required PRs merge under the
+  current Owner authorization.
 - Final health status is `FAIL` if any required check has a trusted in-window
   failure, otherwise `UNKNOWN` if any required check is missing, stale,
   ambiguous, or out of window, and `PASS` only when every required check passes
@@ -612,20 +664,28 @@ identities recorded only by a separately authorized post-deployment verifier.
       workflow invokes no `true` target override.
 - [ ] Provenance records source, patch, assembly, lockfile, gate, workflow run,
       and target identities and includes no deployment claim.
-- [ ] Artifact upload fails closed on missing files; retention is at least 30
-      days; a read-only API lookup verifies run/attempt, candidate SHA, artifact
-      ID/name/digest/expiry, and a downloaded provenance SHA-256 match.
+- [ ] Artifact upload fails closed on missing files; the candidate CI artifact
+      and provenance sidecar are retained at least 30 days, and final release
+      provenance is retained for the life of its approved release. The
+      Workflow Runs API verifies exact `(run_id, run_attempt)` and candidate
+      `head_sha`; the Artifacts API verifies ID/name/digest/expiry and
+      `workflow_run.id/head_sha` (the artifact response has no `run_attempt`).
+      A unique non-overwritten artifact name and an in-artifact receipt bind the
+      artifact to that attempt and candidate SHA. A downloaded provenance
+      SHA-256 must match its sidecar and run summary.
 - [ ] Rollback rehearsal records tag-object and peeled-commit identities,
       release manifest, upstream pin, lockfiles, full ordered patch hashes,
       both build targets, tag-protection status, and separate Cloudflare runtime
       version/deployment identities. Historical reconstruction uses exactly the
       selected tag's 30-entry series, never the current 33-entry series.
-- [ ] A complete tag-protection lookup with no matching enforced rule fails as
-      `NOT_PROTECTED`; incomplete or unavailable protection evidence is
-      `UNKNOWN`. Historical immutability/integrity is reported separately and
-      stays `UNKNOWN` when trusted expected identity/history evidence is
-      missing; no-ruleset evidence alone is not evidence of past tampering.
-      Neither state permits rollback readiness PASS.
+- [ ] The current complete parent-inclusive tag-rules lookup with no matching
+      enforced rule reports `FAIL/NOT_PROTECTED`; incomplete or unavailable
+      protection evidence is `UNKNOWN`. Historical tag integrity is reported
+      separately and stays `UNKNOWN` when trusted expected identity/history
+      evidence is missing. Neither the current protection failure nor the
+      historical UNKNOWN is evidence of past tampering. Any ruleset change
+      requires a separate Owner decision. Neither status permits rollback
+      readiness PASS.
 - [ ] Locked Wrangler schema fixtures assert the exact observability values in
       §3.5 for every tracked overlay; live drift fixtures distinguish explicit
       mismatches (`FAIL`) from missing/unavailable evidence (`UNKNOWN`).
@@ -637,9 +697,14 @@ identities recorded only by a separately authorized post-deployment verifier.
 - [ ] Final read-only health checks use a maximum 15-minute UTC window and
       five-minute point-read freshness, report PASS/FAIL/UNKNOWN per §3.5, and
       perform no D1/Queue/Paste writes.
-- [ ] No production configuration, deployment, tag, release, publication,
-      Project, Issue, historical-log, or cleanup mutation occurs in the approved
-      implementation scope without its own required authorization.
+- [ ] No production configuration, deployment, tag, GitHub Release, public
+      release publication, Project, Issue, historical-log, or cleanup mutation
+      occurs in the approved implementation scope. The separately authorized
+      private GitHub Actions CI evidence-artifact upload is allowed after the
+      planning approvals. The bounded Phase 4 read-only health audit runs only
+      after the required PRs merge under the current Owner authorization;
+      post-deployment verification remains gated on separate deployment
+      authorization.
 
 ## 3.12 Test specification
 
@@ -664,15 +729,21 @@ identities recorded only by a separately authorized post-deployment verifier.
   cannot create `PROVENANCE_STATUS=retained` or tag eligibility.
 - Workflow fixtures: pinned action references, run SHA propagation, no
   credentials with PR source, no `true` override, fail-closed artifact upload,
-  retention input, post-upload ID/URL/digest, artifact expiry, API run/attempt
-  and `head_sha` match, non-expired state, downloaded checksum, and
-  tamper/missing-metadata rejection.
+  at-least-30-day candidate evidence retention, post-upload ID/URL/digest,
+  artifact expiry, Workflow Runs API exact `(run_id, run_attempt)` and
+  `head_sha` match, Artifacts API ID/name/digest/expiry and
+  `workflow_run.id/head_sha` match, unique non-overwritten name and downloaded
+  receipt binding the exact attempt and candidate SHA, non-expired state,
+  downloaded provenance checksum, final provenance lifetime requirement, and
+  tamper/missing-metadata rejection. Confirm the artifact response is not
+  treated as exposing `run_attempt`; reject GitHub Release/publication steps.
 - Tag-eligibility fixtures: no eligibility before artifact verification;
   reject candidate/artifact SHA mismatch, missing review/CI result, unaligned
   baseline, missing protection, and incomplete evidence; pass only on exact
   retained evidence without creating a tag.
 - Rollback fixtures: annotated tag object and peeled commit identity,
-  missing/moved tag, protection pass/no-rule/API-unknown cases, exact tag
+  missing/moved tag, protection pass, complete no-rule `FAIL/NOT_PROTECTED`,
+  incomplete/API-unknown cases, exact tag
   worktree/lockfile, the tag's 30-entry patch series versus the current
   33-entry series, per-patch hash mismatch, current-vs-historical tooling,
   upstream and both target outcomes, provenance match/mismatch, distinct
@@ -700,15 +771,17 @@ of this SPEC drafting step.
 ## 3.13 Remaining questions and evidence unknowns
 
 - The 2026-09-29 repository-scoped ruleset lookup with
-  `includes_parents=true` returned HTTP 200 and `[]`; the legacy tag-protection
-  endpoint returned 404. The separate org-level ruleset listing was unavailable
-  without `admin:org`, so effective tag protection is `UNKNOWN`. The remote
-  annotated tag currently matches the observed tag-object and peeled-commit
-  identities, but historical immutability/integrity remains `UNKNOWN`; no
-  evidence of retargeting was found. The empty repository-scoped response does
-  not prove past mutation or establish effective org-level policy. Tag
-  eligibility stays refused until protection is verifiable and trusted
-  source-identity checks pass. No tag policy change is authorized here.
+  `includes_parents=true&targets=tag` returned HTTP 200 and `[]`; GitHub
+  documents that parent-inclusive lookup includes applicable higher-level
+  rulesets. The legacy tag-protection endpoint returned 404. Current tag
+  enforcement is therefore `FAIL/NOT_PROTECTED`. The separate org-level
+  listing was unavailable without `admin:org`, but that does not change the
+  complete parent-inclusive repository result. The remote annotated tag
+  currently matches the observed tag-object and peeled-commit identities; no
+  evidence of retargeting was found. Historical tag integrity/tampering remains
+  `UNKNOWN`; the current protection gap does not establish past mutation. Tag
+  eligibility stays refused. Any new or changed ruleset requires a separate
+  Owner decision; none is authorized here.
 - Which tracked deployment overlays besides `downstream/addons/messaging/wrangler.toml`
   exist in the eventual implementation checkout, and what must be tested for
   each? Inventory them before coding; absence of a verified production overlay
@@ -720,10 +793,10 @@ of this SPEC drafting step.
 - The current live redaction setting, current retained OAuth log inventory,
   access history, and retention tier were not available during SPEC preparation.
   Keep each UNKNOWN; no log deletion or production edit is authorized.
-- Two retained inventory entries lack identifiers/expected hashes in available
-  durable evidence. The Owner must provide exact identifiers and verifiable
-  source/hash evidence, or explicitly authorize excluding those entries from
-  that inventory scope while integrity remains UNKNOWN.
+- The two historical Paste records already excluded by the Owner remain
+  excluded from verified historical-integrity claims. No additional Owner
+  decision is required to preserve that scope, and this SPEC authorizes no
+  inspection, mutation, or cleanup of those records.
 - IP/geolocation/user-agent retention minimization needs its own Owner
   decision and does not determine OAuth credential or session compromise.
 - The run summary is a convenience index, not the sole artifact identity
@@ -738,8 +811,11 @@ configuration/security docs, and `docs/TESTING.md` in the same PR as the
 behavior they describe. It must test the locked Wrangler config contract and
 Cloudflare API drift client without production credentials, then run the full
 default candidate command, applicable repository CI, rollback fixtures, and
-exact-HEAD review settlement. Cloudflare API reads and any harmless production
-probe remain gated behind separate deployment/production-read authorization.
+exact-HEAD review settlement. After the required PRs merge, the bounded Phase 4
+read-only production health audit is authorized by the current Owner decision
+as specified in §3.5. Post-deployment Cloudflare version/config reads and the
+synthetic log-redaction probe remain gated behind separate deployment
+authorization.
 
 Status: **DRAFT — OWNER SPEC APPROVAL REQUIRED**.
 Implementation has **NOT** started. SPEC approval has **NOT** been granted.

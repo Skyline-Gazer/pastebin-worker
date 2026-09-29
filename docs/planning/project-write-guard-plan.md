@@ -17,13 +17,14 @@ separate administrative execution gate.
 
 ## Context
 
-`AGENTS.md` requires GitHub write automation to target
-`Skyline-Gazer/pastebin-worker` explicitly through `gh-write.sh`. The audited
-`downstream/main` baseline `e300500d0cba6dd486035d33ed304bb409448bd3`
-contains that policy but does not track the wrapper. A historical local
-untracked wrapper exists in another checkout; it validates `--repo` and then
-passes all arguments to `gh`. It is user-owned untracked state, is not a release
-input, and cannot be assumed to implement the approved Project restriction.
+The owner-supplied working instructions require GitHub write automation to
+target `Skyline-Gazer/pastebin-worker` explicitly through `gh-write.sh`. The
+audited `downstream/main` baseline
+`e300500d0cba6dd486035d33ed304bb409448bd3` tracks neither that rule nor the
+wrapper, so this PR must make both durable. A historical local untracked wrapper
+exists in another checkout; it validates `--repo` and then passes all arguments
+to `gh`. It is user-owned untracked state, is not a release input, and cannot be
+assumed to implement the approved Project restriction.
 
 Installed `gh project item-edit` supports direct item, project, field, and
 single-select option IDs. It does not accept `--repo`, so the guarded Project
@@ -45,13 +46,13 @@ source or the exported patch series.
 
 ## Assumptions and verification
 
-| Assumption | Verification |
-| --- | --- |
-| The baseline lacks a tracked wrapper. | `git cat-file -e e300500d:downstream/scripts/gh-write.sh` must fail. |
-| The local untracked wrapper is not authoritative. | Confirm `git status --short -- downstream/scripts/gh-write.sh` reports `??` in the original checkout and no Git history owns the path. |
-| Issue #186 has exactly one Project #3 item. | Read `gh project item-list 3 --owner Skyline-Gazer --format json` and match repository plus issue number. |
-| The pinned field and option still mean `Status` and `Done`. | Read `gh project field-list 3 --owner Skyline-Gazer --format json`; do not write on mismatch. |
-| Direct-ID `item-edit` is supported. | Inspect the installed `gh project item-edit --help`; exercise the final argv through a stub `gh`. |
+| Assumption                                                  | Verification                                                                                                                           |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| The baseline lacks a tracked wrapper.                       | `git cat-file -e e300500d:downstream/scripts/gh-write.sh` must fail.                                                                   |
+| The local untracked wrapper is not authoritative.           | Confirm `git status --short -- downstream/scripts/gh-write.sh` reports `??` in the original checkout and no Git history owns the path. |
+| Issue #186 has exactly one Project #3 item.                 | Read `gh project item-list 3 --owner Skyline-Gazer --format json` and match repository plus issue number.                              |
+| The pinned field and option still mean `Status` and `Done`. | Read `gh project field-list 3 --owner Skyline-Gazer --format json`; do not write on mismatch.                                          |
+| Direct-ID `item-edit` is supported.                         | Inspect the installed `gh project item-edit --help`; exercise the final argv through a stub `gh`.                                      |
 
 ## Non-goals
 

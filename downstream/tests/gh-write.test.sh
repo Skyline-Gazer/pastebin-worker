@@ -99,6 +99,14 @@ expect_reject project item-edit --repo "$REPO" --owner Skyline-Gazer --url https
 expect_reject api graphql --repo "$REPO" -f query=mutation
 expect_reject api --method POST graphql --repo "$REPO" -f query=mutation
 expect_reject api https://api.github.com/graphql --repo "$REPO" -f query=mutation
+expect_reject api repos/Skyline-Gazer/pastebin-worker/issues --repo "$REPO" --method POST
+expect_reject repo archive other/repository --repo "$REPO"
+expect_reject issue close https://github.com/cli/cli/issues/1 --repo "$REPO"
+expect_reject issue close https://GitHub.com/cli/cli/issues/1 --repo "$REPO"
+expect_reject issue close https://www.github.com/cli/cli/issues/1 --repo "$REPO"
+expect_reject issue close http://github.com/Skyline-Gazer/pastebin-worker/issues/186 --repo "$REPO"
+expect_reject issue close https://github.com/Skyline-Gazer/pastebin-worker/issues/186 --repo "$REPO"
+expect_reject issue comment 186 --repo "$REPO" --body https://example.invalid
 expect_reject --repo "$REPO"
 
 SENTINEL="AUDIT_MUST_NOT_ECHO_CALLER_ARGUMENTS"

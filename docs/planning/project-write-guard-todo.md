@@ -26,15 +26,15 @@ Phase: [`project-write-guard-phases.md`](project-write-guard-phases.md)
 - [x] Add the PATH-stubbed shell contract test without contacting GitHub.
 - [x] RED: `bash downstream/tests/gh-write.test.sh` exited `1` before the
       tracked wrapper existed with `Expected executable wrapper:
-      .../downstream/scripts/gh-write.sh`. The test stopped before creating or
+.../downstream/scripts/gh-write.sh`. The test stopped before creating or
       invoking its stub and made no network request.
 - [x] Implement the minimal exact-vector Project route and ordinary repository
       allowlist behavior in `downstream/scripts/gh-write.sh`.
 - [x] GREEN: `bash downstream/tests/gh-write.test.sh` — PASS (`gh write guard
-      fixtures passed`).
+fixtures passed`).
 - [x] REFACTOR: retained direct exact-vector comparison instead of adding a
-      general parser; expanded GraphQL endpoint rejection and reran the focused
-      test — PASS.
+      general parser; rejected the generic `api`/`repo` families and foreign
+      positional repository URLs, then reran the focused test — PASS.
 
 ## Validation
 
@@ -44,12 +44,23 @@ Phase: [`project-write-guard-phases.md`](project-write-guard-phases.md)
       passed. Three unrelated release fixtures assume `git init` creates
       `master`; rerunning with that fixture setting made provenance and rollback
       pass, while release-candidate then reached its pre-existing GNU/BSD `sed
-      -i` incompatibility on macOS. No failure involved the new wrapper.
+-i` incompatibility on macOS. No failure involved the new wrapper.
 - [x] Run repository formatting checks available in the isolated checkout —
-      Prettier and ShellCheck are unavailable; shell syntax and manual Markdown
-      inspection passed.
+      cached Prettier 3.5.3 check PASS; ShellCheck unavailable; shell syntax
+      PASS.
 - [x] Run `git diff --check` — PASS.
 - [x] Confirm the PATH stub made no network or live GitHub mutation.
+
+## Pre-bot implementation review
+
+- [x] Fix P1 foreign positional URL bypass by rejecting URL-bearing arguments
+      and all generic `repo` commands; add lower/upper/`www` host fixtures.
+- [x] Fix P1 GraphQL normalization bypass by rejecting the generic `api`
+      command family; add spelling/order/URL and REST fixtures.
+- [x] Fix P2 missing durable write policy by adding the owner-approved GitHub
+      write boundary to tracked `AGENTS.md` and correcting the PLAN baseline
+      description.
+- [x] Rerun focused test, shell syntax, and `git diff --check` — PASS.
 
 ## Delivery
 

@@ -42,9 +42,13 @@ repository selectors fail with exit status `2` before `gh` runs.
 
 ### Ordinary repository route
 
-Commands whose first argument is neither `project` nor the `api graphql`
-command pair retain their original argument vector, including the authorized
-`--repo` pair, when passed to `gh`.
+Commands whose first argument is neither `project`, `api`, nor `repo` retain
+their original argument vector, including the authorized `--repo` pair, when
+passed to `gh`. The wrapper rejects the generic `api` and `repo` command
+families because their positional target can bypass repository metadata. A
+caller argument containing a URL scheme is rejected because URL targets can
+override repository metadata or hide in case/host aliases. Callers use numeric
+Issue/PR targets and body files instead.
 
 The wrapper rejects an empty command. It emits only a fixed audit header with
 the authorized owner, repository, and `repository_write` action; it does not
@@ -82,11 +86,12 @@ project number/ID, issue number/item ID, field ID, and option ID. After `gh`
 returns, it emits `RESULT=success` or `RESULT=failure` plus the numeric child
 exit status and returns that same status.
 
-### GraphQL
+### API and GraphQL
 
-An `api` route containing the endpoint token `graphql` or a URL/path ending in
-`/graphql` is always rejected with exit status `2` before `gh` runs, regardless
-of flag order. No GraphQL query or mutation text is inspected or forwarded.
+Every generic `api` route is rejected with exit status `2` before `gh` runs.
+This prevents GraphQL endpoint spelling/ordering bypasses and REST endpoints
+whose target is independent of `--repo`. A future API write requires its own
+pinned, reviewed route.
 
 ## Failure behavior
 
@@ -111,8 +116,9 @@ It must prove:
    without calling the stub;
 3. wrong project, item, field, or option IDs and extra/reordered arguments fail
    without calling the stub;
-4. other Project operations, name-based Project selectors, and `api graphql`
-   fail without calling the stub;
+4. other Project operations, name-based Project selectors, generic `api` and
+   `repo` commands, and foreign positional repository URLs fail without calling
+   the stub;
 5. an ordinary repository command keeps its original arguments;
 6. Project child failure is reported without a success record and its exit
    status is propagated; and

@@ -39,11 +39,11 @@ done
 
 [[ "$repo_count" -eq 1 && "$repo" == "$REPO" && ${#route_args[@]} -gt 0 ]] || refuse
 
-if [[ "${route_args[0]}" == "api" ]]; then
-  for arg in "${route_args[@]:1}"; do
-    [[ "$arg" == "graphql" || "$arg" == */graphql ]] && refuse
-  done
-fi
+[[ "${route_args[0]}" != "api" && "${route_args[0]}" != "repo" ]] || refuse
+
+for arg in "${route_args[@]}"; do
+  [[ "$arg" != *://* ]] || refuse
+done
 
 if [[ "${route_args[0]}" == "project" ]]; then
   expected=(

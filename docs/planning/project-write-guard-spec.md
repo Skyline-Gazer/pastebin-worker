@@ -1,6 +1,6 @@
 # Narrow Project write guard SPEC
 
-Status: **INTERNALLY REVIEWED; DURABLY PERSISTED IN PR #190**.
+Status: **OWNER AUTHORIZED IMPLEMENTATION; EXACT-HEAD VALIDATION PENDING**.
 
 PLAN: [`project-write-guard-plan.md`](project-write-guard-plan.md)
 
@@ -34,11 +34,27 @@ configuration. Changing any value requires a reviewed source change.
 Every invocation must contain exactly one two-argument repository selector:
 
 ```text
---repo Skyline-Gazer/pastebin-worker
+--repo github.com/Skyline-Gazer/pastebin-worker
 ```
 
-Missing, duplicate, empty, aliased (`-R`), joined (`--repo=...`), or different
-repository selectors fail with exit status `2` before `gh` runs.
+The logical allowlist remains exactly `Skyline-Gazer/pastebin-worker`. The
+canonical full selector binds ordinary `gh` operations to public GitHub.
+Missing, duplicate, empty, attached (`-R<repo>` or `-R=<repo>`), joined
+(`--repo=...`), malformed `--repo*`, hostless, alternate-host, or different
+repository selectors fail with exit status `2` before `gh` runs, including
+when a valid selector is also present.
+
+### Host resolution
+
+Every child process receives `GH_HOST=github.com`. The wrapper unsets
+`GH_REPO`, `GIT_DIR`, `GIT_WORK_TREE`, and `GIT_COMMON_DIR`, then runs from
+`/` to prevent the caller's environment or Git remote from choosing a host.
+It rejects `-h`, `--hostname*`, and `--host*` selectors.
+
+GitHub's CLI contract says `GH_HOST` is used when a host is not provided or
+cannot be inferred from local Git context, and `GH_REPO` supplies an implicit
+`[HOST/]OWNER/REPO` target. The wrapper does not assume `GH_HOST` overrides a
+repository remote. See <https://cli.github.com/manual/gh_help_environment>.
 
 ### Ordinary repository route
 
@@ -48,7 +64,8 @@ passed to `gh`. The wrapper rejects the generic `api` and `repo` command
 families because their positional target can bypass repository metadata. A
 caller argument containing a URL scheme is rejected because URL targets can
 override repository metadata or hide in case/host aliases. Callers use numeric
-Issue/PR targets and body files instead.
+Issue/PR targets and body files instead. Host selectors and root options that
+could alter command routing are rejected before dispatch.
 
 The wrapper rejects an empty command. It emits only a fixed audit header with
 the authorized owner, repository, and `repository_write` action; it does not
@@ -105,24 +122,28 @@ pinned, reviewed route.
 ## Test contract
 
 `downstream/tests/gh-write.test.sh` prepends a temporary stub named `gh` to
-`PATH`. The test records child arguments and controls the child exit status
-without network access.
+`PATH`. It calls the wrapper from a temporary Git repository with a foreign
+remote and hostile `GH_HOST`, `GH_REPO`, and Git-context environment, then
+records actual child arguments, environment, and working directory without
+network access.
 
 It must prove:
 
-1. the exact Project caller vector succeeds and the child receives the fixed
-   vector without `--repo`;
-2. missing, wrong, duplicate, aliased, or joined repository selectors fail
+1. the exact Project caller vector succeeds and the child receives fixed argv
+   without wrapper-only `--repo`, with pinned `GH_HOST`, cleared ambient
+   repository context, and working directory `/`;
+2. an ordinary repository write succeeds with its exact canonical full-repo
+   argv and the same child environment;
+3. missing, wrong, duplicate, attached, joined, malformed, or alternate-host
+   repository selectors fail without calling the stub;
+4. wrong project, item, field, or option IDs and extra/reordered arguments fail
    without calling the stub;
-3. wrong project, item, field, or option IDs and extra/reordered arguments fail
-   without calling the stub;
-4. other Project operations, name-based Project selectors, generic `api` and
-   `repo` commands, and foreign positional repository URLs fail without calling
-   the stub;
-5. an ordinary repository command keeps its original arguments;
+5. other Project operations, name-based Project selectors, generic `api` and
+   `repo` commands, hostname flags, and foreign positional repository URLs
+   fail without calling the stub;
 6. Project child failure is reported without a success record and its exit
    status is propagated; and
-7. Project audit output contains only the fixed identifiers and result fields.
+7. sanitized audit output contains fixed identifiers and never caller data.
 
 ## Documentation and review
 
@@ -141,4 +162,4 @@ It must prove:
 - Keeps administrative execution and all release/production actions out of
   scope: PASS.
 
-Status: SPEC INTERNALLY APPROVED AND READY FOR DURABLE REVIEW.
+Status: OWNER AUTHORIZED IMPLEMENTATION; exact-HEAD gate pending.

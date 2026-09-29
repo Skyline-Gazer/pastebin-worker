@@ -1,6 +1,6 @@
 # Narrow Project write guard PHASES
 
-Status: **PHASE DECOMPOSITION READY — internal consistency review PASS**.
+Status: **PHASE ACTIVE — owner authorized the bounded implementation and fix pass**.
 
 Parent PLAN: [`project-write-guard-plan.md`](project-write-guard-plan.md)
 
@@ -11,7 +11,9 @@ Parent SPEC: [`project-write-guard-spec.md`](project-write-guard-spec.md)
 Add one stub-tested, fail-closed route to the GitHub CLI write wrapper for the
 pinned Issue #186 Project item `Status -> Done` operation. Track the wrapper,
 retain authorized ordinary repository writes, and reject other Project and
-GraphQL routes.
+GraphQL routes. Pin child calls to `github.com`, reject attached or alternate
+repository/host selectors, and prove the actual child argv and environment in
+the stub fixture.
 
 - Dependencies: owner-approved PLAN and internally approved SPEC persisted in
   draft PR #190.

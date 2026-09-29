@@ -3,12 +3,18 @@ set -uo pipefail
 
 OWNER="Skyline-Gazer"
 REPO="Skyline-Gazer/pastebin-worker"
+HOSTED_REPO="github.com/$REPO"
 PROJECT_NUMBER="3"
 PROJECT_ID="PVT_kwDOEwGMMc4BkEoc"
 ISSUE_NUMBER="186"
 ITEM_ID="PVTI_lADOEwGMMc4BkEoczg86CUA"
 FIELD_ID="PVTSSF_lADOEwGMMc4BkEoczhi2l5A"
 OPTION_ID="98236657"
+
+# Pin every child CLI call to github.com, independent of caller environment.
+unset GH_REPO GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR
+GH_HOST="github.com"
+export GH_HOST
 
 refuse() {
   echo "Refusing GitHub write: unauthorized command or target." >&2
@@ -28,7 +34,7 @@ for ((i = 0; i < ${#args[@]}; i++)); do
       repo="${args[i + 1]}"
       i=$((i + 1))
       ;;
-    -R|--repo=*)
+    -R*|--repo*|--hostname*|--host*|-h*)
       refuse
       ;;
     *)
@@ -37,7 +43,8 @@ for ((i = 0; i < ${#args[@]}; i++)); do
   esac
 done
 
-[[ "$repo_count" -eq 1 && "$repo" == "$REPO" && ${#route_args[@]} -gt 0 ]] || refuse
+[[ "$repo_count" -eq 1 && "$repo" == "$HOSTED_REPO" && ${#route_args[@]} -gt 0 ]] || refuse
+[[ "${route_args[0]}" != -* ]] || refuse
 
 [[ "${route_args[0]}" != "api" && "${route_args[0]}" != "repo" ]] || refuse
 
@@ -45,10 +52,12 @@ for arg in "${route_args[@]}"; do
   [[ "$arg" != *://* ]] || refuse
 done
 
+cd / || refuse
+
 if [[ "${route_args[0]}" == "project" ]]; then
   expected=(
     project item-edit
-    --repo "$REPO"
+    --repo "$HOSTED_REPO"
     --id "$ITEM_ID"
     --field-id "$FIELD_ID"
     --project-id "$PROJECT_ID"
@@ -61,7 +70,8 @@ if [[ "${route_args[0]}" == "project" ]]; then
 
   printf '%s\n' \
     "TARGET_OWNER=$OWNER" \
-    "TARGET_REPO=${REPO#*/}" \
+    "TARGET_HOST=github.com" \
+    "TARGET_REPO=${REPO##*/}" \
     "TARGET_ACTION=project_item_status_done" \
     "TARGET_PROJECT_NUMBER=$PROJECT_NUMBER" \
     "TARGET_PROJECT_ID=$PROJECT_ID" \
@@ -87,6 +97,7 @@ fi
 
 printf '%s\n' \
   "TARGET_OWNER=$OWNER" \
-  "TARGET_REPO=${REPO#*/}" \
+  "TARGET_HOST=github.com" \
+  "TARGET_REPO=${REPO##*/}" \
   "TARGET_ACTION=repository_write"
 exec gh "${args[@]}"

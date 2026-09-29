@@ -82,18 +82,33 @@ source or the exported patch series.
 
 1. Track the existing repository allowlist wrapper at
    `downstream/scripts/gh-write.sh`.
-2. Keep ordinary non-Project `gh` commands on the existing rule: require exact
-   `--repo Skyline-Gazer/pastebin-worker`, print the resolved repository, and
-   pass the command through unchanged.
-3. Reject `gh api graphql` and every `gh project` command except the exact
+2. Keep the logical repository allowlist exactly
+   `Skyline-Gazer/pastebin-worker`; require the canonical selector
+   `--repo github.com/Skyline-Gazer/pastebin-worker` for ordinary commands.
+   Reject other repository selector spellings, including attached `-R`,
+   duplicates, joined `--repo=`, malformed `--repo*`, hostless targets, and
+   alternate hosts or repositories.
+3. Pin host resolution for every child: set `GH_HOST=github.com`, unset
+   `GH_REPO` and `GIT_DIR`/`GIT_WORK_TREE`/`GIT_COMMON_DIR`, and run `gh`
+   from `/` so caller environment and Git remote cannot select another host.
+   Reject `-h`, `--hostname*`, and `--host*` selectors before execution.
+4. Reject `gh api graphql` and every `gh project` command except the exact
    direct-ID `project item-edit` form approved here.
-4. For that form, parse and validate one occurrence of each required flag,
+5. For that form, match and validate the exact required flag vector,
    consume `--repo` as wrapper-only metadata, require the pinned IDs above, and
    invoke only `gh project item-edit` with the validated direct-ID arguments.
-5. Print a sanitized audit record containing the fixed repository owner/name,
+6. Print a sanitized audit record containing the fixed host/repository,
+   owner/name,
    action name, project number, Issue number, and pinned non-secret node IDs.
-6. Add one shell fixture with a stub `gh` that proves the permitted argv and
-   relevant fail-closed cases without contacting GitHub.
+7. Extend the stub-`gh` fixture to prove child argv, host/environment/work
+   directory binding, and fail-closed selector cases without contacting GitHub.
+
+GitHub CLI host resolution was verified against its official environment
+contract: `GH_HOST` selects a host only when the host is not provided or
+inferred from a local Git repository, while `GH_REPO` can provide an implicit
+`[HOST/]OWNER/REPO` target. The wrapper therefore fixes the environment and
+removes Git context; `GH_HOST` alone is insufficient. See
+<https://cli.github.com/manual/gh_help_environment>.
 
 ## Expected files/components
 
@@ -106,10 +121,12 @@ source or the exported patch series.
 
 ## Validation strategy
 
-- Observe the new guard test fail before the wrapper implementation exists.
+- Observe the strengthened guard test fail against the prior behavior because
+  child host resolution can inherit the caller Git context/environment.
 - Run the stub test for the one allowed Project invocation and rejection of
-  wrong/missing repository, project, item, field, option, owner, duplicate or
-  unknown flags, other Project commands, and GraphQL.
+  wrong/missing/duplicate/attached/alternate repository selectors, host flags,
+  wrong project/item/field/option/owner, unknown flags, other Project commands,
+  and generic API/GraphQL routes.
 - Run `bash -n` on the wrapper and fixture.
 - Run applicable downstream regression checks, formatting, and
   `git diff --check`.
@@ -117,5 +134,13 @@ source or the exported patch series.
   reviewer responses remain non-votes, and this governance change requires the
   normal quorum.
 
-Status: PLAN APPROVED AND READY FOR DURABLE REVIEW.
-Implementation has NOT started.
+## Owner implementation authorization
+
+On 2026-09-29, the Owner authorized the bounded repository-selector and
+GitHub-host corrections against exact base HEAD
+`569781587fff2669fbd775fadb7e5893dae492be`, with tests and governance updates.
+The approval expressly excludes merge, quorum override, Project/Issue writes,
+and release/production actions. The prior override draft does not apply to a
+new HEAD.
+
+Status: PLAN APPROVED; implementation authorized; exact-HEAD validation pending.

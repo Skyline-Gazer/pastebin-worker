@@ -1,6 +1,6 @@
 # Narrow Project write guard TODO
 
-Status: **TODO READY — internal consistency review PASS**.
+Status: **IMPLEMENTATION AUTHORIZED — PR #190 exact-HEAD settlement pending**.
 
 Parent PLAN: [`project-write-guard-plan.md`](project-write-guard-plan.md)
 
@@ -24,17 +24,18 @@ Phase: [`project-write-guard-phases.md`](project-write-guard-phases.md)
 ## TDD / implementation
 
 - [x] Add the PATH-stubbed shell contract test without contacting GitHub.
-- [x] RED: `bash downstream/tests/gh-write.test.sh` exited `1` before the
-      tracked wrapper existed with `Expected executable wrapper:
-.../downstream/scripts/gh-write.sh`. The test stopped before creating or
-      invoking its stub and made no network request.
+- [x] RED: after adding hostile `GH_HOST`/`GH_REPO`, a foreign Git remote,
+      and child environment assertions, the fixture exited `1`: the old
+      behavior passed the foreign repository working directory to the stub
+      instead of pinning `/`. The stub made no network request.
 - [x] Implement the minimal exact-vector Project route and ordinary repository
       allowlist behavior in `downstream/scripts/gh-write.sh`.
-- [x] GREEN: `bash downstream/tests/gh-write.test.sh` — PASS (`gh write guard
-fixtures passed`).
-- [x] REFACTOR: retained direct exact-vector comparison instead of adding a
-      general parser; rejected the generic `api`/`repo` families and foreign
-      positional repository URLs, then reran the focused test — PASS.
+- [x] Extend the guard to reject attached/alternate/duplicate repository
+      selectors and hostname aliases; pin `GH_HOST`, clear ambient repo/Git
+      context, and run child processes from `/`.
+- [x] GREEN: `bash downstream/tests/gh-write.test.sh` — PASS; verifies child
+      argv/environment, caller remote isolation, selector/API/GraphQL/Project
+      rejection before invocation, sanitized audit, and child failure status.
 
 ## Validation
 

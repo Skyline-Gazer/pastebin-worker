@@ -1,6 +1,6 @@
 # Narrow Project write guard SPEC
 
-Status: **INTERNALLY REVIEWED; DURABLE PERSISTENCE PENDING**.
+Status: **INTERNALLY REVIEWED; DURABLY PERSISTED IN PR #190**.
 
 PLAN: [`project-write-guard-plan.md`](project-write-guard-plan.md)
 

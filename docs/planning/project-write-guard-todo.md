@@ -34,8 +34,8 @@ Phase: [`project-write-guard-phases.md`](project-write-guard-phases.md)
       selectors and hostname aliases; pin `GH_HOST`, clear ambient repo/Git
       context, and run child processes from `/`.
 - [x] Fresh audit found arbitrary `gh` alias/extension routes could reach the
-      child. Restrict repository passthrough to core `issue comment` and `pr
-      comment`; test alias, extension, and non-comment routes never reach it.
+      child. Restrict repository passthrough to `issue comment` and
+      `pr comment`; test alias, extension, and non-comment routes never reach it.
 - [x] RED: removing that route allowlist made the stub fixture fail at the
       alias rejection case before invocation; restoring the allowlist made the
       full fixture pass.

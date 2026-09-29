@@ -94,9 +94,9 @@ source or the exported patch series.
    Reject `-h`, `--hostname*`, and `--host*` selectors before execution.
 4. Reject `gh api graphql` and every `gh project` command except the exact
    direct-ID `project item-edit` form approved here.
-   Limit ordinary repository passthrough to core `issue comment` and `pr
-   comment`; refuse aliases, extensions, and all other routes so local `gh`
-   configuration cannot expand this wrapper into an unreviewed write.
+   Limit ordinary repository passthrough to core `issue comment` and
+   `pr comment`; refuse aliases, extensions, and all other routes so local
+   `gh` configuration cannot expand this wrapper into an unreviewed write.
 5. For that form, match and validate the exact required flag vector,
    consume `--repo` as wrapper-only metadata, require the pinned IDs above, and
    invoke only `gh project item-edit` with the validated direct-ID arguments.

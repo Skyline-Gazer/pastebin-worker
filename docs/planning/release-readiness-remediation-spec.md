@@ -1,7 +1,7 @@
 # Release-readiness remediation SPEC
 
-Status: **SPEC READY FOR OWNER REVIEW**. This is a behavioral and release
-contract, not SPEC approval or implementation authorization.
+Status: **DRAFT — OWNER BASELINE ALIGNMENT REQUIRED**. This is a behavioral
+and release contract, not SPEC approval or implementation authorization.
 
 Parent PLAN: [Release-readiness remediation PLAN](release-readiness-remediation-plan.md),
 approved by the Owner on 2026-09-29 at exact commit
@@ -10,10 +10,11 @@ only. SPEC approval is still required before PHASE/TODO preparation.
 
 ```text
 PR191_PLAN=APPROVED
-PR191_SPEC_STATUS=READY_FOR_OWNER_REVIEW
+PR191_SPEC_STATUS=BLOCKED_OWNER_BASELINE_ALIGNMENT
 PR191_SPEC_APPROVAL=REQUIRED_NOT_GRANTED
 PR191_PHASE_TODO=NOT_PREPARED
 PR191_IMPLEMENTATION=NOT_STARTED
+BASELINE_ALIGNMENT=OWNER_AMENDMENT_REQUIRED
 PRODUCTION_CONFIGURATION_CHANGE=NOT_AUTHORIZED
 DEPLOYMENT_TAG_PUBLICATION_MERGE=NOT_AUTHORIZED
 ```
@@ -61,8 +62,10 @@ and version checks, and final read-only health checks.
   records; it does not remediate already-retained records.
 - Do not rotate credentials or invalidate sessions based only on the known
   invocation-URL exposure. Callback/session compromise is not established.
-- Do not include FT-14/15, project or issue mutation, or historical fixture
-  reconstruction as a release implementation task.
+- Do not include FT-14/15, project or issue mutation, or unrelated historical
+  fixture reconstruction as release implementation. Reconstruction of the
+  single named production tag is release evidence only; it is never original
+  release-time evidence or a runtime rollback.
 - Do not claim that a source tag alone is a deployable runtime rollback
   artifact, or that a rehearsal is an actual rollback.
 
@@ -104,56 +107,136 @@ and version checks, and final read-only health checks.
 - A prior audit reported the live Worker setting as `false`. Current live
   configuration and logs were not re-read during SPEC preparation because
   Cloudflare authentication is unavailable; current state is UNKNOWN.
+- The approved PLAN records upstream pin
+  `0835cac4ea0952b7d30ade1d80272421a3789b96`, while audited candidate
+  `e300500d0cba6dd486035d33ed304bb409448bd3` and production tag
+  `downstream-v2026.09.10.1` each record
+  `0835cac4ab8f974035d31845f5c2b93b0c85b5c6` in their committed
+  `downstream/release.json`. The latter resolves in `upstream-sync`, matches
+  `upstream/goshujin` as of 2026-09-29, and exists in official upstream; the
+  PLAN's value resolves to no local commit and the official upstream commit
+  lookup returns no commit. Classification: `DOCUMENTATION_ERROR`. Do not
+  rewrite the approved PLAN or silently choose either value in this SPEC. The
+  Owner must amend and re-approve the PLAN before phase planning or
+  implementation; candidate PASS and tag eligibility remain blocked until the
+  approved PLAN pin and candidate manifest are aligned.
+- Read-only GitHub inspection on 2026-09-29 requested
+  `GET /repos/Skyline-Gazer/pastebin-worker/rulesets?includes_parents=true&targets=tag`.
+  It returned HTTP 200 with body `[]`. The authenticated account's repository
+  permissions were `admin=true`; the authenticated classic OAuth token exposed
+  the `repo` scope and GitHub accepted that scope for the request. GitHub's
+  REST documentation says the repository ruleset list requires Metadata read
+  for fine-grained tokens, includes applicable higher-level rules when
+  `includes_parents=true`, and is visible to anyone with repository read
+  access. This is a complete, authorized empty result for repository and
+  inherited tag rulesets, so the current protection result is
+  `FAIL/NOT_PROTECTED`, not PASS. The legacy
+  `GET /repos/Skyline-Gazer/pastebin-worker/tags/protection` endpoint returned
+  HTTP 404 and is recorded only as secondary evidence. A future request with
+  insufficient permission, incomplete parent visibility, pagination gaps,
+  or an unavailable/error response is `UNKNOWN`. Tag existence alone does not
+  establish protection.
 
 Evidence: [Wrangler configuration reference](https://developers.cloudflare.com/workers/wrangler/configuration/),
 [Cloudflare Worker edit API](https://developers.cloudflare.com/api/resources/workers/subresources/beta/subresources/workers/methods/edit/),
 [Cloudflare Worker read API](https://developers.cloudflare.com/api/typescript/resources/workers/subresources/beta/subresources/workers/methods/get/),
 [Worker deployments API](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/list/),
-[Worker versions API](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/list/).
+[Worker versions API](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/list/),
+and [GitHub repository rules API](https://docs.github.com/en/rest/repos/rules).
 
 ## 3.5 Desired behavior
 
 ### Candidate gate
 
-1. The gate accepts a clean committed downstream SHA and validates its release
-   manifest, exact upstream commit, explicit ordered patch series, and every
-   patch file. Unsafe paths, missing inputs, dirty/untracked input, or a failed
-   patch replay stop the gate.
+1. Before validating a candidate, compare the manifest's upstream SHA with the
+   Owner-approved PLAN baseline. A mismatch blocks the gate before assembly;
+   do not guess which pin to use. The mismatch recorded in §3.4 currently
+   prevents candidate PASS. After Owner alignment, the gate accepts a clean
+   committed downstream SHA and validates its release manifest, exact upstream
+   commit, explicit ordered patch series, and every patch file. Unsafe paths,
+   missing inputs, dirty/untracked input, or failed patch replay stop the gate.
 2. The patched Pastebin target installs dependencies from the assembled
    upstream worktree's exact committed lockfile with frozen resolution. Its
-   frontend manifest is built before Worker typecheck/build. The caller's
-   `node_modules` cannot influence the result.
-3. The Add-on target uses the exact candidate commit and root workspace
-   lockfile, installed with frozen resolution. Validation runs from the
-   repository root and covers the Add-on Worker and frontend lint/typecheck,
-   tests, and builds, including required upstream frontend prerequisites.
+   frontend manifest is built before Worker typecheck/build. Install and checks
+   run inside the disposable assembled worktree; caller `node_modules`,
+   `NODE_PATH`, and caller-provided `.bin` entries cannot influence execution.
+3. The Add-on target runs from an isolated downstream worktree at the exact
+   candidate commit, using that commit's root workspace lockfile and frozen
+   resolution. It does not reuse the caller checkout's `node_modules`.
+   Validation runs from the isolated repository root and covers the Add-on
+   Worker and frontend lint/typecheck, tests, and builds, including required
+   upstream frontend prerequisites.
 4. The documented default command runs both targets. Release mode rejects
    target-command overrides and fixture-only switches; overrides may exist
    only in tests and cannot produce candidate PASS or provenance.
-5. On failure, report the failed target and stage plus a bounded sanitized
-   diagnostic. Do not print secrets, full OAuth callback URLs, cookies, tokens,
-   management passwords, or full Paste content. Do not silently discard the
-   failing output.
-6. CI invokes the same default gate. Workflow steps may not replace the gate
+5. `CANDIDATE_STATUS=passed` means only that baseline alignment and both named
+   default target suites passed for the exact candidate SHA. The candidate
+   command never emits `TAG_ELIGIBLE=yes`; a separate tag-eligibility check
+   emits `TAG_ELIGIBILITY=eligible` only after retained provenance and artifact
+   identity have been verified for that same SHA, required CI and review gates
+   pass, and no release blocker remains. Eligibility is a technical
+   precondition, not Owner authorization to create a tag, release, or deploy.
+   Until that check passes, tag eligibility is `no` or `unknown`.
+6. On a candidate-gate failure, report the target, stable stage ID, numeric
+   exit code, sanitized diagnostic, and whether the diagnostic was truncated.
+   Emit at most 80 lines and 8 KiB of UTF-8 diagnostic text to stderr before
+   deleting temporary output. Redact
+   all URL query strings, full URLs, authorization/cookie headers, OAuth
+   `code`/`state`, tokens, passwords, management secrets, and user content. If
+   redaction cannot safely classify an excerpt, suppress its text and report
+   only the stage and failure category. Never print the raw command line or
+   raw captured output.
+   Stage IDs are stable slugs for baseline alignment, manifest, series, patch
+   replay, dependency install, frontend manifest, format, lint, typecheck,
+   tests, Worker build, and override guard.
+
+   The machine-readable failure envelope is:
+
+   ```text
+   RELEASE_FAILURE_SCHEMA=1
+   CANDIDATE_STATUS=failed|blocked
+   TARGET=PASTEBIN|ADDON|PRECHECK
+   STAGE=<stable-stage-id>
+   EXIT_CODE=<decimal>
+   TAG_ELIGIBLE=no
+   DEPLOY_CLAIM=no
+   DIAGNOSTIC_TRUNCATED=yes|no
+   DIAGNOSTIC_SHA256=<sha256-of-sanitized-diagnostic>
+   DIAGNOSTIC_BEGIN
+   <sanitized text, at most 80 lines and 8 KiB>
+   DIAGNOSTIC_END
+   ```
+
+   Emit the envelope to stderr before temporary output is removed. If the
+   excerpt is suppressed, keep the envelope and hash the empty diagnostic.
+
+7. CI invokes the same default gate. Workflow steps may not replace the gate
    with `true`, skip a target, or convert a nonzero result to success.
 
 ### Provenance and artifact identity
 
 1. Provenance records schema version, UTC generation time, downstream commit,
-   pinned upstream commit, ordered patch paths and SHA-256 hashes, assembled
+   upstream commit, ordered patch paths and SHA-256 hashes, assembled
    commit/tree, each used lockfile path and SHA-256 plus tool versions, gate
    mode (`default`), each target's named checks and results, and GitHub
-   workflow run ID/attempt and candidate SHA.
-2. A candidate is not `retained` until the provenance JSON and its SHA-256
-   sidecar exist and upload succeeds. Missing files, upload errors, absent
-   artifact ID/URL/digest, or unexpected retention fail closed.
+   workflow run ID/attempt and candidate SHA. It records no post-upload
+   artifact digest inside the file that digest identifies.
+2. `PROVENANCE_STATUS=retained` is possible only after the provenance JSON and
+   its SHA-256 sidecar exist and the workflow upload succeeds. Candidate build
+   PASS alone is never `retained` and never tag-eligible. Missing files, upload
+   errors, absent artifact ID/URL/digest, or unexpected retention fail closed.
 3. Upload uses a unique non-overwritten artifact name, `if-no-files-found:
-error`, and retention of at least 30 days. The uploaded artifact's returned
-   ID, URL, and archive SHA-256 digest are recorded after upload in the
-   workflow run summary, alongside the candidate SHA, run ID/attempt, and
-   provenance-file SHA-256. A read-only GitHub run/artifact lookup must verify
-   that identity. Do not put a post-upload digest inside the artifact that it
-   hashes or represent an unavailable deployment ID as evidence.
+error`, and retention of at least 30 days. The workflow records the returned
+   artifact ID, browser URL, archive SHA-256 digest, creation/expiry times, and
+   exact name in the run summary, alongside candidate SHA, run ID/attempt, and
+   provenance-file SHA-256. A read-only GitHub Actions API lookup verifies the
+   exact run attempt and candidate `head_sha`, artifact ID/name, non-expired
+   state, archive digest, and an expiry at least 30 days after creation. A
+   read-only artifact download recomputes the provenance JSON SHA-256 and
+   matches it to the sidecar and summary. Missing or contradictory fields,
+   lookup/download errors, or retention below 30 days prevent `retained` and
+   tag eligibility. The summary is a convenience record; API-linked artifact
+   metadata and the downloaded checksum are the verification evidence.
 4. The summary and artifact distinguish candidate validation from release
    authorization, deployment, and publication. Candidate generation is
    non-deploying and does not create a tag or Release.
@@ -165,23 +248,62 @@ and [GitHub artifact documentation](https://docs.github.com/en/actions/tutorials
 
 ### Production-tag rollback procedure
 
-1. Read-only rehearsal selects only an existing protected production tag and
-   resolves it to a full commit SHA. It records both the selected tag and
-   resolved SHA, verifies the remote ref against durable expected tag evidence
-   and the applicable GitHub tag-protection rule, and never moves or deletes
-   the tag. Missing expected identity or protection evidence is UNKNOWN.
-2. Rehearsal checks out that exact tag in a disposable worktree, installs from
-   that tag's own committed lockfile with frozen resolution, and runs the
-   gate/tooling and release inputs available at that tag. It must not
-   substitute today's scripts, dependencies, patch series, or configuration
-   without labeling the result as reconstruction. No automatic conflict
+1. Rehearsal records the full source-release identity: tag name/ref, annotated
+   tag-object SHA, peeled commit SHA, committed `release.json` SHA-256, pinned
+   upstream SHA, downstream Add-on/source commit, ordered patch-series path,
+   patch count, and every ordered patch path and SHA-256. Durable expected
+   identity must come from the original release record or Owner-approved
+   evidence. Re-read the remote tag ref before and after rehearsal; any change
+   from its expected tag-object or peeled-commit SHA fails the rehearsal.
+2. The known production tag is
+   `downstream-v2026.09.10.1` (tag object
+   `d07eeb4aee7fba8a0509e04fff630332ad8ea77c`, peeled commit
+   `58bc7dda4da6237bfdd9806326a92fa4df11afac`). Its prior rollback tag is
+   `downstream-v2026.09.07.1` (tag object
+   `c2a36242ab8aedb4d5032c0739a89b12e924e4d0`, peeled commit
+   `0fc784c2a4cf2951de060cae37b8e89dfb054820`). These are source identities,
+   not Worker runtime identities. The production tag's committed
+   `downstream/patches/series` contains exactly 30 ordered patch entries; the
+   audited candidate series contains 33. Reconstruction MUST read only the
+   selected tag's own `release.json` and `series`, validate and hash its 30
+   entries, and stop if the count or any expected hash differs. It must never
+   use the current 33-entry series as a substitute.
+3. Before calling a tag protected, verify the applicable repository and
+   inherited GitHub rulesets against the exact tag pattern. Evidence must show
+   enforcement prevents tag creation, updates, and deletion by the relevant
+   actors, with no applicable bypass for release automation. A complete
+   successful lookup with no matching protection rule or a rule that permits
+   mutation is `FAIL/NOT_PROTECTED`; unavailable APIs, insufficient scope, or
+   incomplete inherited-rule visibility is `UNKNOWN`. Tag existence and a
+   successful historical build do not prove protection. The 2026-09-29
+   authorized lookup described in §3.4 returned HTTP 200 and an empty result,
+   so current protection is `FAIL/NOT_PROTECTED`; do not report rollback PASS.
+   Rehearsal never moves, creates, or deletes a tag.
+4. Rehearsal checks out the exact peeled commit in a disposable worktree,
+   installs from that tag's own committed lockfile with frozen resolution, and
+   runs its own release inputs. Any compatibility harness or tool added after
+   the tag is separately identified by commit and labeled as reconstruction;
+   it cannot silently replace the tag's inputs. No automatic conflict
    resolution or manual product edits are allowed.
-3. Rehearsal output labels whether evidence is original release-time evidence
-   or a present-day reconstruction, compares recorded source/build identity,
-   and verifies both build targets. Missing historical inputs, failed default
-   validation, or a mismatch means rollback readiness is UNKNOWN/FAILED; no
-   override may turn it into PASS.
-4. A future actual rollback requires a separate Owner deployment
+5. Label evidence `ORIGINAL_RELEASE_TIME` only when it was created and retained
+   at release time; evidence generated now is
+   `RECONSTRUCTED_FROM_SOURCE_TAG`. The reconstruction compares the tag,
+   manifest, upstream pin, all 30 ordered patch hashes, lockfiles/tool
+   versions, assembled tree, and both target results. It proves source/build
+   reproducibility only, not what Cloudflare ran or whether a runtime rollback
+   is available. A source mismatch or failed target is `FAIL`; missing or
+   unverifiable historical evidence is `UNKNOWN`. Neither may be overridden
+   into PASS.
+6. Runtime rollback identity is separate for each Worker target: Cloudflare
+   account and script name, exact version ID, deployment ID, active traffic
+   percentage, and UTC observation time from read-only APIs. Verify target
+   versions that are currently active and the exact previously deployed
+   versions before any future rollback is considered. If a target was not
+   deployed or the prior version/deployment identity cannot be proved, record
+   that fact only when release evidence establishes it; otherwise runtime
+   rollback readiness is `UNKNOWN`, regardless of source reconstruction PASS.
+   A Git tag does not supply a runtime version ID.
+7. A future actual rollback requires a separate Owner deployment
    authorization, exact Cloudflare Worker version/deployment identity for both
    targets, a reviewed traffic plan, and a compatibility check for D1,
    Queues, and external side effects. Re-deploying a source tag does not undo
@@ -189,16 +311,30 @@ and [GitHub artifact documentation](https://docs.github.com/en/actions/tutorials
 
 ### OAuth query redaction and drift detection
 
-1. The tracked Worker contract will require this TOML setting under
-   `[observability]`:
+1. The tracked Worker observability contract requires the redaction setting
+   and these measurable values:
 
    ```toml
+   [observability]
+   enabled = true
+   head_sampling_rate = 1
    redact_query_string = true
+
+   [observability.logs]
+   enabled = true
+   invocation_logs = true
+   head_sampling_rate = 1
+
+   [observability.traces]
+   enabled = true
+   head_sampling_rate = 1
    ```
 
-   The locked Wrangler schema at `4.129.0` accepts it. Cloudflare's edit API
-   contract names the same boolean field and describes removal of request URL
-   query strings from logs/traces. Do not use an undocumented CLI assumption.
+   The locked Wrangler schema at `4.129.0` accepts the redaction field.
+   Cloudflare's edit API contract names the same boolean and describes removal
+   of request URL query strings from logs/traces. Do not use an undocumented
+   CLI assumption. No tracked overlay may lower the sampling rate or disable
+   invocation logs, logs, traces, or query redaction.
 
 2. Every tracked deployment overlay that supplies Worker observability config
    must preserve `true`. Automated offline tests use the exact locked Wrangler
@@ -206,15 +342,17 @@ and [GitHub artifact documentation](https://docs.github.com/en/actions/tutorials
    ignored by schema serialization. Overlay tests fail on missing or false
    values.
 3. A read-only configuration-drift check calls
-   `GET /accounts/{account_id}/workers/workers/{worker_id}` and requires the
-   returned observability field to be exactly `true`. False, missing,
-   malformed, unauthorized, or unavailable is a failed/UNKNOWN check, never a
-   pass. Live check credentials require only `Workers Scripts Read`; no PATCH
-   or deploy credential is used by this checker.
-4. Tests cover API responses `true`, `false`, missing field, API error, and
-   malformed response. They assert sanitized output and nonzero failure for
-   every non-true case. A deployment verification also records the exact
-   deployment/version ID and active traffic percentages from the read APIs.
+   `GET /accounts/{account_id}/workers/workers/{worker_id}` and compares every
+   returned setting listed above to the exact tracked value. An explicit
+   `false` or sampling-rate mismatch is `FAIL`; a missing/malformed field,
+   unauthorized response, API error, or unavailable response is `UNKNOWN`.
+   Neither is a pass. Live check credentials require only `Workers Scripts
+Read`; no PATCH or deploy credential is used by this checker.
+4. Tests cover exact expected values, explicit false/mismatched values,
+   missing fields, API errors, unauthorized responses, and malformed bodies.
+   They assert sanitized output and nonzero failure for every non-PASS result.
+   A deployment verification also records the exact deployment/version ID and
+   active traffic percentages from the read APIs.
 5. Redaction applies prospectively to future logs/traces. It does not alter,
    erase, or sanitize records already retained. Historical access and
    retention disposition remain separate Owner decisions.
@@ -229,30 +367,54 @@ Only after a separately authorized deployment, a read-only verifier:
 - reads the active deployment and requires the approved Worker version at
   100% traffic for each target; records IDs and UTC observation time;
 - reads Worker observability configuration and requires query-string
-  redaction `true`, with expected logs, invocation logs, traces, and sampling
-  still enabled;
-- sends at most one approved, harmless, non-authenticated GET to a read-only
-  route with a random non-secret query marker, then confirms the marker is
-  absent from a newly emitted log record; it never calls OAuth callback/login
-  routes and never captures full request URLs;
-- reports `UNKNOWN` when the log sink, retention window, version mapping, API
-  permission, or fresh event cannot be verified. No absence-of-evidence claim
-  is converted into PASS.
+  redaction `true`, with `enabled=true` and sampling rates exactly `1` for
+  Worker logs and traces, and invocation logs enabled;
+- after an explicit deployment authorization, sends at most one GET to a
+  code-reviewed, unauthenticated, read-only route from an allowlist. The check
+  generates a one-use marker from at least 128 bits of cryptographic
+  randomness and places it only in a dedicated query parameter. It never uses
+  OAuth callback/login routes or includes secrets, PII, cookies, tokens, or
+  customer data;
+- captures the response's provider request ID (for example, CF-Ray) without
+  recording the full request URL. It queries logs only for the bounded
+  five-minute interval after the request and correlates the exact event by the
+  same request ID, method, path, status, and active Worker version. It
+  requires exactly one matching event, verifies that the logged URL contains
+  no query and that the marker is absent from every returned event field, then
+  discards the raw marker and event payload. The durable evidence contains
+  only marker SHA-256, request ID, method/path/status, Worker version, and UTC
+  timestamps;
+- reports `FAIL` if a correlated event includes a query string or marker and
+  `UNKNOWN` if no common request ID, unique event, complete log result,
+  five-minute freshness window, API permission, or stable version mapping can
+  be verified. It does not infer redaction from a missing or uncorrelated
+  event.
 
-The synthetic marker and check request may be included only after deployment
-authorization and must not contain OAuth code/state, cookies, tokens, PII, or
-customer data. This SPEC performs no request against production.
+The marker exists only in process memory while the authorized check runs; it
+is never written to logs, summaries, or artifacts. Offline fixtures must prove
+the correlation and redaction rules without a production request. This SPEC
+performs no request against production.
 
 ### Final read-only production health checks
 
-Following deployment verification, the final health report uses a declared
-UTC observation window and records point-in-time vs. historical evidence
-separately. It checks:
+Following deployment verification, the final health report uses one UTC
+window `[window_start, window_end]` of at most 15 minutes. Each point-in-time
+API read must complete during the last five minutes of that window; historical
+queries include only events within the declared window. It records observation
+time, source, target, and freshness for each result. Each check is `PASS` only
+when complete authoritative evidence within the window meets its stated
+predicate; a contradictory in-window value is `FAIL`; missing, stale,
+unauthorized, malformed, partial, out-of-window, or approximate evidence is
+`UNKNOWN`. Overall status is `FAIL` if any required check fails, else `UNKNOWN`
+if any required check is unknown, else `PASS`. It checks:
 
-- public Add-on availability on its canonical origin and a safe unauthenticated
-  session endpoint response, without a user session or mutation;
+- public Add-on availability on its canonical origin (expected 2xx) and the
+  safe unauthenticated `GET /api/auth/session` response (expected 401), without
+  a user session or mutation;
 - current active Worker deployment/version identity and configured service
-  binding, with no traffic change;
+  binding. The expected version must receive 100% traffic and the binding must
+  match the reviewed deployment manifest; explicit mismatch or split traffic
+  is `FAIL`;
 - aggregate D1 operation/batch/reconciliation-required/in-flight counts using
   SELECT-only access; no entry IDs, user payloads, secrets, or paste bodies;
 - Queue and DLQ identity and best-effort backlog metrics. A zero
@@ -260,32 +422,51 @@ separately. It checks:
   exact Queue emptiness. No peek, ack, purge, replay, send, or reconfiguration
   is part of the final health check;
 - public Paste availability only through an already approved safe probe; do
-  not create a test Paste or inspect unrelated users' content; and
-- aggregate recent error status without exporting raw request URLs or
-  historical OAuth values.
+  not create a test Paste or inspect unrelated users' content; a successful
+  safe GET must return its documented 2xx status; and
+- aggregate recent server-error status without exporting raw request URLs or
+  historical OAuth values. Zero in-window 5xx events from a complete log
+  source is `PASS`; one or more is `FAIL`; incomplete sampling, unavailable
+  logs, or uncertain query coverage is `UNKNOWN`.
 
-Unavailable or ambiguous evidence remains UNKNOWN. A healthy point-in-time
-check does not establish a historical absence of errors or unauthorized log
-access. The two retained inventory entries without reconstructible expected
-hashes remain UNKNOWN until the Owner supplies identifiers and sources or
-explicitly authorizes their exclusion from that inventory scope. IP,
-geolocation, and user-agent retention remains a separate privacy decision.
+Queue/DLQ names and D1 counts are reported as aggregate values only; no
+unapproved threshold is inferred for batch or in-flight counts. A D1 check is
+`PASS` when the SELECT-only read is complete, counts are valid nonnegative
+integers, and `reconciliation_required_count=0`; a positive reconciliation
+count is `FAIL`, and a missing or invalid value is `UNKNOWN`. Queue/DLQ checks
+are `PASS` when identities match the reviewed manifest and the complete
+response contains valid nonnegative backlog fields; a nonzero backlog is
+reported, not interpreted as empty or failed. A zero
+`oldest_message_timestamp_ms` makes the Queue age/emptiness check `UNKNOWN`,
+never proof that a Queue is empty. Unavailable or ambiguous evidence remains
+`UNKNOWN`. A healthy 15-minute window does not establish a historical absence
+of errors or unauthorized log access. The two retained inventory entries
+without reconstructible expected hashes remain `UNKNOWN` until the Owner
+supplies identifiers and sources or explicitly authorizes their exclusion from
+that inventory scope. IP, geolocation, and user-agent retention remains a
+separate privacy decision.
 
 ## 3.6 User/operator flows
 
 1. A maintainer selects a clean, committed downstream candidate SHA and
-   invokes the non-deploying default gate.
+   invokes the non-deploying default gate. If the manifest pin differs from
+   the Owner-approved PLAN, the gate blocks before assembly.
 2. The gate resolves manifest inputs, assembles the exact patched upstream
    tree, installs each target from its pinned lockfile, runs all target checks,
-   and reports pass/failure per named stage.
+   and reports `CANDIDATE_STATUS` per named stage. Candidate PASS does not imply
+   retained evidence or tag eligibility.
 3. A separate owner-triggered candidate workflow runs the same gate on that
    exact SHA. It generates provenance and checksum, uploads them, and writes
    the post-upload artifact identity to the durable run summary.
 4. A maintainer verifies the run, artifact metadata/digest, file checksum,
    candidate SHA, and patch hashes through read-only GitHub evidence.
-5. A read-only rollback rehearsal validates the exact existing production tag
-   and its own inputs. It makes no Cloudflare changes.
-6. A separately approved deployment may run later. Post-deployment API reads,
+5. A separate read-only tag-eligibility check reports eligible only after
+   artifact verification and all review gates pass; it does not create a tag or
+   authorize release.
+6. A read-only source-tag reconstruction validates the exact existing
+   production tag identity and its own 30-entry patch series. It makes no
+   Cloudflare changes and cannot prove runtime rollback readiness.
+7. A separately approved deployment may run later. Post-deployment API reads,
    redaction check, safe synthetic probe, and final health checks follow only
    after that authorization. Their results are not implied by candidate PASS.
 
@@ -317,7 +498,10 @@ identities recorded only by a separately authorized post-deployment verifier.
 ## 3.9 Compatibility
 
 - Patch replay remains exact, ordered, and fail-closed from the pinned upstream
-  commit. Upstream-owned changes stay in exported patches.
+  commit. The candidate manifest pin must equal the Owner-approved PLAN pin;
+  until the mismatch in §3.4 is amended and re-approved, no phase may use
+  either value as an approved candidate baseline. Upstream-owned changes stay
+  in exported patches.
 - Locked Wrangler `4.129.0` schema is the tracked configuration validation
   baseline; any version change must repeat schema and Cloudflare API contract
   verification before changing the redaction configuration mechanism.
@@ -331,46 +515,75 @@ identities recorded only by a separately authorized post-deployment verifier.
 
 - Missing or malformed source/lock/series input, dirty state, patch conflict,
   dependency drift, skipped/overridden target, test/build failure, secret-like
-  output, or absent required stage result prevents candidate PASS.
+  output, absent required stage result, or approved-PLAN/manifest pin mismatch
+  prevents candidate PASS. Candidate PASS alone never makes a tag eligible.
 - Provenance or checksum failure, upload failure, missing artifact metadata,
-  or retention below 30 days prevents `retained` status and candidate release
-  eligibility.
-- Rollback rehearsal failure or unavailable historical inputs reports
-  FAILED/UNKNOWN and `DEPLOY_CLAIM=no`; it never substitutes current source or
-  claims rollback success.
+  unverifiable run/attempt/candidate identity, or retention below 30 days
+  prevents `PROVENANCE_STATUS=retained` and tag eligibility.
+- A tag-eligibility check without retained provenance, verified artifact
+  identity, current review/CI evidence, aligned baseline, or verified tag
+  protection reports `TAG_ELIGIBILITY=refused`; no candidate script may
+  convert those statuses to eligible.
+- Rollback source mismatch or failed target is `FAIL`; unavailable expected
+  identity, tag protection, runtime deployment identity, or historical input
+  is `UNKNOWN`. Either blocks rollback readiness and reports
+  `DEPLOY_CLAIM=no`; never substitute current source or claim runtime rollback
+  success from a source reconstruction.
+- A target failure emits the §3.5 bounded stderr envelope before temporary
+  output is deleted. Raw command output is never included in artifacts or
+  summaries.
 - Redaction schema mismatch or live drift result other than exactly true
   reports FAIL/UNKNOWN and blocks release readiness. Do not change production
   configuration automatically.
 - Post-deployment version/config/log evidence or final health-check evidence
   that is absent, stale, ambiguous, or unauthorized remains UNKNOWN and cannot
   be represented as PASS.
+- Final health status is `FAIL` if any required check has a trusted in-window
+  failure, otherwise `UNKNOWN` if any required check is missing, stale,
+  ambiguous, or out of window, and `PASS` only when every required check passes
+  within the declared maximum 15-minute UTC window.
 
 ## 3.11 Acceptance criteria
 
+- [ ] Owner-approved PLAN pin and candidate manifest pin match. Current
+      mismatch remains `BLOCKED_OWNER_BASELINE_ALIGNMENT` until the Owner
+      amends and re-approves the PLAN; no candidate PASS is allowed meanwhile.
 - [ ] The default release candidate path validates both complete targets from
       a clean exact SHA and fails when a target override or skip is attempted.
-- [ ] The assembled upstream tree and downstream Add-on use their own
-      committed lockfile inputs with frozen dependency resolution.
+      Candidate PASS is separate from retained provenance and tag eligibility.
+- [ ] The assembled upstream and isolated downstream candidate worktrees use
+      their own committed lockfiles with frozen resolution; poisoned caller
+      `node_modules`, `.bin`, `PATH`, and `NODE_PATH` cannot affect checks.
 - [ ] Frontend prerequisites execute before dependent Worker typecheck/build;
       Add-on Worker and frontend validation run from the correct repository root.
-- [ ] A failure fixture proves stage diagnostics remain available and
-      sanitized; the downstream workflow invokes no `true` target override.
+- [ ] Failure output follows the exact §3.5 envelope, is emitted before temp
+      output cleanup, remains at most 80 lines/8 KiB after sanitization, and
+      contains no secret sentinel, raw URL, or raw command. The downstream
+      workflow invokes no `true` target override.
 - [ ] Provenance records source, patch, assembly, lockfile, gate, workflow run,
       and target identities and includes no deployment claim.
 - [ ] Artifact upload fails closed on missing files; retention is at least 30
-      days; the workflow summary records and API-verifies run/attempt, candidate
-      SHA, artifact ID/URL/archive digest, and provenance SHA-256.
-- [ ] Rollback rehearsal uses a pre-existing production tag and its own
-      committed inputs, verifies both targets, labels reconstruction evidence,
-      and never changes tag or production state.
-- [ ] Locked Wrangler schema tests prove TOML redaction support; every tracked
-      overlay requires true; unit fixtures prove live drift detection accepts only
-      API `true` and fails closed for all other responses.
-- [ ] Post-deployment verification checks exact active Worker version and
-      traffic, redaction and observability settings, and a harmless query marker's
-      absence in a new log, only after separate deployment authorization.
-- [ ] Final read-only health checks cover the criteria in §3.5, preserve
-      UNKNOWN where evidence is unavailable, and perform no D1/Queue/Paste writes.
+      days; a read-only API lookup verifies run/attempt, candidate SHA, artifact
+      ID/name/digest/expiry, and a downloaded provenance SHA-256 match.
+- [ ] Rollback rehearsal records tag-object and peeled-commit identities,
+      release manifest, upstream pin, lockfiles, full ordered patch hashes,
+      both build targets, tag-protection status, and separate Cloudflare runtime
+      version/deployment identities. Historical reconstruction uses exactly the
+      selected tag's 30-entry series, never the current 33-entry series.
+- [ ] A complete tag-protection lookup with no matching enforced rule fails as
+      `NOT_PROTECTED`; incomplete or unavailable protection evidence is
+      `UNKNOWN`. Neither permits rollback readiness PASS.
+- [ ] Locked Wrangler schema fixtures assert the exact observability values in
+      §3.5 for every tracked overlay; live drift fixtures distinguish explicit
+      mismatches (`FAIL`) from missing/unavailable evidence (`UNKNOWN`).
+- [ ] Post-deployment fixtures verify one safe synthetic query marker by a
+      unique provider request ID, exact single-event correlation, five-minute
+      search bound, query/marker absence, and no raw marker or request URL in
+      durable evidence. No production probe occurs before separate deployment
+      authorization.
+- [ ] Final read-only health checks use a maximum 15-minute UTC window and
+      five-minute point-read freshness, report PASS/FAIL/UNKNOWN per §3.5, and
+      perform no D1/Queue/Paste writes.
 - [ ] No production configuration, deployment, tag, release, publication,
       Project, Issue, historical-log, or cleanup mutation occurs in the approved
       implementation scope without its own required authorization.
@@ -378,29 +591,45 @@ identities recorded only by a separately authorized post-deployment verifier.
 ## 3.12 Test specification
 
 - Candidate script fixtures: exact commits, clean/dirty/untracked input,
-  pinned lockfiles, patch ordering/replay failure, both named target suites,
-  frontend prerequisite ordering, target override/skip rejection, CI command
-  wiring, retained bounded diagnostics, and secret-sentinel redaction.
+  PLAN/manifest pin match and mismatch, pinned lockfiles, patch
+  ordering/replay failure, both named target suites, frontend prerequisite
+  ordering, target override/skip rejection, CI command wiring, caller
+  `node_modules`/`.bin`/`PATH`/`NODE_PATH` poisoning, and isolated worktree
+  installs. A failing target fixture proves the §3.5 failure envelope is
+  emitted before temporary output cleanup, stays within both size limits, and
+  redacts URL, OAuth, cookie, token, password, and user-content sentinels.
 - Provenance fixtures: schema fields, exact SHA/hash values, default-vs-fixture
   mode, no deployment assertion, stable serialization, checksum match/mismatch,
-  missing output, and no-op retention rejection.
+  missing output, no-op retention rejection, and that candidate PASS alone
+  cannot create `PROVENANCE_STATUS=retained` or tag eligibility.
 - Workflow fixtures: pinned action references, run SHA propagation, no
   credentials with PR source, no `true` override, fail-closed artifact upload,
-  retention input, post-upload ID/URL/digest, and durable summary identity.
-- Rollback fixtures: existing immutable production tag, missing/moved tag,
-  exact tag worktree/lockfile, current-vs-historical script distinction,
-  upstream and both target outcomes, provenance match/mismatch, and no deploy
-  or tag mutation claims.
+  retention input, post-upload ID/URL/digest, artifact expiry, API run/attempt
+  and `head_sha` match, non-expired state, downloaded checksum, and
+  tamper/missing-metadata rejection.
+- Tag-eligibility fixtures: no eligibility before artifact verification;
+  reject candidate/artifact SHA mismatch, missing review/CI result, unaligned
+  baseline, missing protection, and incomplete evidence; pass only on exact
+  retained evidence without creating a tag.
+- Rollback fixtures: annotated tag object and peeled commit identity,
+  missing/moved tag, protection pass/no-rule/API-unknown cases, exact tag
+  worktree/lockfile, the tag's 30-entry patch series versus the current
+  33-entry series, per-patch hash mismatch, current-vs-historical tooling,
+  upstream and both target outcomes, provenance match/mismatch, separate
+  Cloudflare version/deployment identities, and no deploy/tag mutation claims.
 - Wrangler contract fixtures: parse tracked TOML with the exact lock-resolved
-  Wrangler schema, assert serializer/API name and true, validate each tracked
-  overlay, and reject absent/false/misspelled keys.
-- Cloudflare drift fixtures: API true passes; false, missing, malformed,
-  unauthorized, and transport error fail/UNKNOWN; output contains neither
-  authorization material nor raw request URLs.
+  Wrangler schema, assert exact redaction/log/invocation/trace/sampling values,
+  validate every tracked overlay, and reject absent/false/misspelled keys.
+- Cloudflare drift fixtures: exact values pass; explicit false/rate mismatch
+  fails; missing, malformed, unauthorized, and transport-error evidence is
+  UNKNOWN; output contains neither authorization material nor raw URLs.
 - Post-deploy/final health fixtures: expected and split traffic, wrong/missing
-  version, query redaction true/false, safe query marker, unavailable logs,
-  stale checks, SELECT-only aggregate query path, approximate Queue zero and
-  `oldest_message_timestamp_ms=0` handling, and no state-changing method.
+  version, exact observability values, safe 128-bit marker, unique/missing/
+  duplicate request-ID correlation, marker/query leakage, five-minute log
+  deadline, 15-minute window boundaries, stale point reads, zero/nonzero 5xx,
+  SELECT-only D1 counts, reconciliation-required count, approximate Queue zero
+  and `oldest_message_timestamp_ms=0`, overall PASS/FAIL/UNKNOWN aggregation,
+  and no state-changing method.
 
 Implementation must record RED/GREEN evidence for behavioral fixes and run
 the repository's required CI and exact-HEAD Phase Review Gate. This section is
@@ -409,6 +638,16 @@ of this SPEC drafting step.
 
 ## 3.13 Open questions
 
+- Owner must amend and re-approve the PLAN's upstream pin before PHASE/TODO or
+  implementation. Until then retain both observed SHA values, classify the
+  difference as `DOCUMENTATION_ERROR`, and keep the SPEC blocked; do not
+  update the approved PLAN or choose a new baseline in this PR.
+- The 2026-09-29 authenticated ruleset lookup returned HTTP 200 and `[]` for
+  repository and inherited tag rulesets, with repo-admin access and the
+  documented repository-read permission. The current state is
+  `FAIL/NOT_PROTECTED`; any future insufficiently authorized, incomplete, or
+  unavailable policy lookup is `UNKNOWN`. No tag policy change is authorized
+  here.
 - Which tracked deployment overlays besides `downstream/addons/messaging/wrangler.toml`
   exist in the eventual implementation checkout, and what must be tested for
   each? Inventory them before coding; absence of a verified production overlay
@@ -426,9 +665,10 @@ of this SPEC drafting step.
   that inventory scope while integrity remains UNKNOWN.
 - IP/geolocation/user-agent retention minimization needs its own Owner
   decision and does not determine OAuth credential or session compromise.
-- The current release workflow's durable run-summary retention policy must be
-  checked against the artifact's minimum 30-day retention before claiming the
-  identity record is durable for the same period.
+- The run summary is a convenience index, not the sole artifact identity
+  record. If the Actions API metadata or artifact bytes cannot be verified for
+  the required retention period, provenance is not retained and tag eligibility
+  is UNKNOWN.
 
 ## Validation and documentation impact
 
@@ -440,5 +680,5 @@ default candidate command, applicable repository CI, rollback fixtures, and
 exact-HEAD review settlement. Cloudflare API reads and any harmless production
 probe remain gated behind separate deployment/production-read authorization.
 
-Status: **SPEC READY FOR OWNER REVIEW**.
+Status: **DRAFT — OWNER BASELINE ALIGNMENT REQUIRED**.
 Implementation has **NOT** started. SPEC approval has **NOT** been granted.

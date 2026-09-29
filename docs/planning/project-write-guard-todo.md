@@ -23,9 +23,11 @@ Phase: [`project-write-guard-phases.md`](project-write-guard-phases.md)
 
 ## TDD / implementation
 
-- [ ] Add the PATH-stubbed shell contract test without contacting GitHub.
-- [ ] RED: run the focused test before the tracked wrapper exists and record
-      the command and observed contract failure here.
+- [x] Add the PATH-stubbed shell contract test without contacting GitHub.
+- [x] RED: `bash downstream/tests/gh-write.test.sh` exited `1` before the
+      tracked wrapper existed with `Expected executable wrapper:
+      .../downstream/scripts/gh-write.sh`. The test stopped before creating or
+      invoking its stub and made no network request.
 - [ ] Implement the minimal exact-vector Project route and ordinary repository
       allowlist behavior in `downstream/scripts/gh-write.sh`.
 - [ ] GREEN: rerun the focused test and record the result here.

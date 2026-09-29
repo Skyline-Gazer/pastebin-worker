@@ -20,9 +20,18 @@ release publication, destructive work, and cleanup outside this work.
 ## Audited baseline
 
 - downstream candidate: `e300500d0cba6dd486035d33ed304bb409448bd3`;
-- upstream pin: `0835cac4ea0952b7d30ade1d80272421a3789b96`;
+- upstream pin: `0835cac4ab8f974035d31845f5c2b93b0c85b5c6`;
 - known production tag: `downstream-v2026.09.10.1` at `58bc7dda`;
 - prior rollback tag: `downstream-v2026.09.07.1` at `0fc784c2`.
+
+Owner-approved amendment on 2026-09-29: correct the upstream pin above from
+`0835cac4ea0952b7d30ade1d80272421a3789b96` to
+`0835cac4ab8f974035d31845f5c2b93b0c85b5c6`. The replacement resolves in the
+official upstream repository; `goshujin` currently points to that exact
+commit. The audited candidate and production tag manifests already record the
+replacement. This amendment changes the PLAN's documented baseline only; it
+does not change release inputs or broaden the original
+`SPEC PREPARATION ONLY` approval scope.
 
 The local file `/private/tmp/ft13-release-provenance-e300500.json` still
 exists. It is 8,157 bytes and its verified SHA-256 is
@@ -194,6 +203,8 @@ artifact approvals.
 PLAN_APPROVAL=APPROVED_BY_OWNER_2026-09-29
 PLAN_APPROVAL_HEAD=6c9c926b390a9070c5a7b01fc9acae35e7277d58
 APPROVAL_SCOPE=SPEC_PREPARATION_ONLY
+PLAN_BASELINE_AMENDMENT=OWNER_APPROVED_2026-09-29
+PLAN_BASELINE_AMENDMENT_SCOPE=DOCUMENTED_UPSTREAM_PIN_ONLY
 SPEC_APPROVAL=REQUIRED_NOT_GRANTED
 PHASE_TODO_PREPARATION=NOT_AUTHORIZED
 IMPLEMENTATION=NOT_AUTHORIZED

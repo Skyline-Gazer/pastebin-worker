@@ -1,7 +1,7 @@
 # Release-readiness remediation SPEC
 
-Status: **DRAFT — OWNER BASELINE ALIGNMENT REQUIRED**. This is a behavioral
-and release contract, not SPEC approval or implementation authorization.
+Status: **DRAFT — OWNER SPEC APPROVAL REQUIRED**. This is a behavioral and
+release contract, not SPEC approval or implementation authorization.
 
 Parent PLAN: [Release-readiness remediation PLAN](release-readiness-remediation-plan.md),
 approved by the Owner on 2026-09-29 at exact commit
@@ -10,11 +10,11 @@ only. SPEC approval is still required before PHASE/TODO preparation.
 
 ```text
 PR191_PLAN=APPROVED
-PR191_SPEC_STATUS=BLOCKED_OWNER_BASELINE_ALIGNMENT
+PR191_SPEC_STATUS=DRAFT_AWAITING_OWNER_APPROVAL
 PR191_SPEC_APPROVAL=REQUIRED_NOT_GRANTED
 PR191_PHASE_TODO=NOT_PREPARED
 PR191_IMPLEMENTATION=NOT_STARTED
-BASELINE_ALIGNMENT=OWNER_AMENDMENT_REQUIRED
+BASELINE_ALIGNMENT=ALIGNED_AFTER_OWNER_APPROVED_AMENDMENT
 PRODUCTION_CONFIGURATION_CHANGE=NOT_AUTHORIZED
 DEPLOYMENT_TAG_PUBLICATION_MERGE=NOT_AUTHORIZED
 ```
@@ -107,19 +107,16 @@ and version checks, and final read-only health checks.
 - A prior audit reported the live Worker setting as `false`. Current live
   configuration and logs were not re-read during SPEC preparation because
   Cloudflare authentication is unavailable; current state is UNKNOWN.
-- The approved PLAN records upstream pin
-  `0835cac4ea0952b7d30ade1d80272421a3789b96`, while audited candidate
-  `e300500d0cba6dd486035d33ed304bb409448bd3` and production tag
-  `downstream-v2026.09.10.1` each record
-  `0835cac4ab8f974035d31845f5c2b93b0c85b5c6` in their committed
-  `downstream/release.json`. The latter resolves in `upstream-sync`, matches
-  `upstream/goshujin` as of 2026-09-29, and exists in official upstream; the
-  PLAN's value resolves to no local commit and the official upstream commit
-  lookup returns no commit. Classification: `DOCUMENTATION_ERROR`. Do not
-  rewrite the approved PLAN or silently choose either value in this SPEC. The
-  Owner must amend and re-approve the PLAN before phase planning or
-  implementation; candidate PASS and tag eligibility remain blocked until the
-  approved PLAN pin and candidate manifest are aligned.
+- The originally approved PLAN contained the documentation error
+  `0835cac4ea0952b7d30ade1d80272421a3789b96`. On 2026-09-29 the Owner
+  authorized correcting that PLAN field to
+  `0835cac4ab8f974035d31845f5c2b93b0c85b5c6`. Read-only source verification
+  confirms the corrected SHA resolves in official upstream and that
+  `goshujin` points to it; the audited candidate and production tag manifests
+  already record the same SHA. This is a documentation-only baseline
+  correction; no manifest, upstream dependency, patch series, or release input
+  changed. The baseline alignment blocker is resolved. Candidate validation
+  and tag eligibility remain subject to all other gates in this SPEC.
 - Read-only GitHub inspection on 2026-09-29 requested
   `GET /repos/Skyline-Gazer/pastebin-worker/rulesets?includes_parents=true&targets=tag`.
   It returned HTTP 200 with body `[]`. The authenticated account's repository
@@ -150,16 +147,19 @@ and [GitHub repository rules API](https://docs.github.com/en/rest/repos/rules).
 
 1. Before validating a candidate, compare the manifest's upstream SHA with the
    Owner-approved PLAN baseline. A mismatch blocks the gate before assembly;
-   do not guess which pin to use. The mismatch recorded in §3.4 currently
-   prevents candidate PASS. After Owner alignment, the gate accepts a clean
-   committed downstream SHA and validates its release manifest, exact upstream
-   commit, explicit ordered patch series, and every patch file. Unsafe paths,
-   missing inputs, dirty/untracked input, or failed patch replay stop the gate.
+   do not guess which pin to use. The corrected PLAN and audited candidate
+   manifest currently record the same upstream SHA. The gate accepts a clean
+   committed downstream SHA and validates its release manifest, exact
+   upstream commit, explicit ordered patch series, and every patch file.
+   Unsafe paths, missing inputs, dirty/untracked input, or failed patch replay
+   stop the gate.
 2. The patched Pastebin target installs dependencies from the assembled
    upstream worktree's exact committed lockfile with frozen resolution. Its
    frontend manifest is built before Worker typecheck/build. Install and checks
    run inside the disposable assembled worktree; caller `node_modules`,
-   `NODE_PATH`, and caller-provided `.bin` entries cannot influence execution.
+   `NODE_PATH`, caller-provided `.bin` entries, and caller-supplied `PATH`
+   entries cannot influence command or module resolution. Construct `PATH`
+   from the declared toolchain and required platform utilities.
 3. The Add-on target runs from an isolated downstream worktree at the exact
    candidate commit, using that commit's root workspace lockfile and frozen
    resolution. It does not reuse the caller checkout's `node_modules`.
@@ -499,9 +499,9 @@ identities recorded only by a separately authorized post-deployment verifier.
 
 - Patch replay remains exact, ordered, and fail-closed from the pinned upstream
   commit. The candidate manifest pin must equal the Owner-approved PLAN pin;
-  until the mismatch in §3.4 is amended and re-approved, no phase may use
-  either value as an approved candidate baseline. Upstream-owned changes stay
-  in exported patches.
+  the documented baseline amendment in §3.4 aligns both at
+  `0835cac4ab8f974035d31845f5c2b93b0c85b5c6`. Any future mismatch blocks the
+  candidate gate. Upstream-owned changes stay in exported patches.
 - Locked Wrangler `4.129.0` schema is the tracked configuration validation
   baseline; any version change must repeat schema and Cloudflare API contract
   verification before changing the redaction configuration mechanism.
@@ -545,9 +545,9 @@ identities recorded only by a separately authorized post-deployment verifier.
 
 ## 3.11 Acceptance criteria
 
-- [ ] Owner-approved PLAN pin and candidate manifest pin match. Current
-      mismatch remains `BLOCKED_OWNER_BASELINE_ALIGNMENT` until the Owner
-      amends and re-approves the PLAN; no candidate PASS is allowed meanwhile.
+- [ ] Owner-approved PLAN pin and candidate manifest pin match. The current
+      baseline amendment aligns them; any future mismatch blocks candidate
+      PASS before assembly.
 - [ ] The default release candidate path validates both complete targets from
       a clean exact SHA and fails when a target override or skip is attempted.
       Candidate PASS is separate from retained provenance and tag eligibility.
@@ -636,12 +636,8 @@ the repository's required CI and exact-HEAD Phase Review Gate. This section is
 the required validation plan; no tests or production checks were run as part
 of this SPEC drafting step.
 
-## 3.13 Open questions
+## 3.13 Remaining questions and evidence unknowns
 
-- Owner must amend and re-approve the PLAN's upstream pin before PHASE/TODO or
-  implementation. Until then retain both observed SHA values, classify the
-  difference as `DOCUMENTATION_ERROR`, and keep the SPEC blocked; do not
-  update the approved PLAN or choose a new baseline in this PR.
 - The 2026-09-29 authenticated ruleset lookup returned HTTP 200 and `[]` for
   repository and inherited tag rulesets, with repo-admin access and the
   documented repository-read permission. The current state is
@@ -680,5 +676,5 @@ default candidate command, applicable repository CI, rollback fixtures, and
 exact-HEAD review settlement. Cloudflare API reads and any harmless production
 probe remain gated behind separate deployment/production-read authorization.
 
-Status: **DRAFT — OWNER BASELINE ALIGNMENT REQUIRED**.
+Status: **DRAFT — OWNER SPEC APPROVAL REQUIRED**.
 Implementation has **NOT** started. SPEC approval has **NOT** been granted.

@@ -67,6 +67,14 @@ Phase: [`project-write-guard-phases.md`](project-write-guard-phases.md)
 - [x] Fix P2 missing durable write policy by adding the owner-approved GitHub
       write boundary to tracked `AGENTS.md` and correcting the PLAN baseline
       description.
+- [x] Extend the fixture across HTTP/HTTPS, lowercase/mixed-case/`www` hosts,
+      and both issue/pull URL paths on the allowed `issue comment` and
+      `pr comment` routes; assert rejection before child execution and no
+      successful target audit. Existing numeric comment cases still verify
+      exact child arguments and environment.
+- [x] TDD: N/A — test-only regression coverage; runtime code was unchanged.
+      First run after adding the cases, `bash downstream/tests/gh-write.test.sh`,
+      passed against the existing wrapper; no RED claimed.
 - [x] Rerun focused test, shell syntax, and `git diff --check` — PASS.
 
 ## Delivery

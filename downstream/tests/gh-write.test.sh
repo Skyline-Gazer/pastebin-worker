@@ -55,6 +55,8 @@ expect_reject() {
   run_guard "$@"
   [[ "$RUN_STATUS" -eq 2 ]]
   [[ ! -s "$LOG" && ! -s "$ENV_LOG" ]]
+  ! grep -q '^TARGET_ACTION=' "$OUTPUT"
+  ! grep -q '^RESULT=success$' "$OUTPUT"
 }
 
 REPO="github.com/Skyline-Gazer/pastebin-worker"
@@ -158,6 +160,17 @@ printf '%s\n' pr comment 190 --repo "$REPO" --body-file "$FIXTURE/review.md" >"$
 diff -u "$EXPECTED" "$LOG"
 diff -u "$EXPECTED_ENV" "$ENV_LOG"
 grep -q '^TARGET_ACTION=repository_write$' "$OUTPUT"
+
+for scheme in http https; do
+  for host in github.com GitHub.com www.github.com; do
+    for target in issues pull; do
+      expect_reject issue comment "$scheme://$host/cli/cli/$target/1" \
+        --repo "$REPO" --body "$SENTINEL"
+    done
+    expect_reject pr comment "$scheme://$host/cli/cli/pull/1" \
+      --repo "$REPO" --body "$SENTINEL"
+  done
+done
 
 expect_reject issue close 186
 expect_reject issue close 186 --repo other/repository

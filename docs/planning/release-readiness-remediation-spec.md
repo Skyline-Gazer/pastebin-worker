@@ -148,7 +148,7 @@ Evidence: [Wrangler configuration reference](https://developers.cloudflare.com/w
    sidecar exist and upload succeeds. Missing files, upload errors, absent
    artifact ID/URL/digest, or unexpected retention fail closed.
 3. Upload uses a unique non-overwritten artifact name, `if-no-files-found:
-   error`, and retention of at least 30 days. The uploaded artifact's returned
+error`, and retention of at least 30 days. The uploaded artifact's returned
    ID, URL, and archive SHA-256 digest are recorded after upload in the
    workflow run summary, alongside the candidate SHA, run ID/attempt, and
    provenance-file SHA-256. A read-only GitHub run/artifact lookup must verify
@@ -199,6 +199,7 @@ and [GitHub artifact documentation](https://docs.github.com/en/actions/tutorials
    The locked Wrangler schema at `4.129.0` accepts it. Cloudflare's edit API
    contract names the same boolean field and describes removal of request URL
    query strings from logs/traces. Do not use an undocumented CLI assumption.
+
 2. Every tracked deployment overlay that supplies Worker observability config
    must preserve `true`. Automated offline tests use the exact locked Wrangler
    schema to parse/validate the TOML and fail if the key is absent, false, or
@@ -347,32 +348,32 @@ identities recorded only by a separately authorized post-deployment verifier.
 ## 3.11 Acceptance criteria
 
 - [ ] The default release candidate path validates both complete targets from
-  a clean exact SHA and fails when a target override or skip is attempted.
+      a clean exact SHA and fails when a target override or skip is attempted.
 - [ ] The assembled upstream tree and downstream Add-on use their own
-  committed lockfile inputs with frozen dependency resolution.
+      committed lockfile inputs with frozen dependency resolution.
 - [ ] Frontend prerequisites execute before dependent Worker typecheck/build;
-  Add-on Worker and frontend validation run from the correct repository root.
+      Add-on Worker and frontend validation run from the correct repository root.
 - [ ] A failure fixture proves stage diagnostics remain available and
-  sanitized; the downstream workflow invokes no `true` target override.
+      sanitized; the downstream workflow invokes no `true` target override.
 - [ ] Provenance records source, patch, assembly, lockfile, gate, workflow run,
-  and target identities and includes no deployment claim.
+      and target identities and includes no deployment claim.
 - [ ] Artifact upload fails closed on missing files; retention is at least 30
-  days; the workflow summary records and API-verifies run/attempt, candidate
-  SHA, artifact ID/URL/archive digest, and provenance SHA-256.
+      days; the workflow summary records and API-verifies run/attempt, candidate
+      SHA, artifact ID/URL/archive digest, and provenance SHA-256.
 - [ ] Rollback rehearsal uses a pre-existing production tag and its own
-  committed inputs, verifies both targets, labels reconstruction evidence,
-  and never changes tag or production state.
+      committed inputs, verifies both targets, labels reconstruction evidence,
+      and never changes tag or production state.
 - [ ] Locked Wrangler schema tests prove TOML redaction support; every tracked
-  overlay requires true; unit fixtures prove live drift detection accepts only
-  API `true` and fails closed for all other responses.
+      overlay requires true; unit fixtures prove live drift detection accepts only
+      API `true` and fails closed for all other responses.
 - [ ] Post-deployment verification checks exact active Worker version and
-  traffic, redaction and observability settings, and a harmless query marker's
-  absence in a new log, only after separate deployment authorization.
+      traffic, redaction and observability settings, and a harmless query marker's
+      absence in a new log, only after separate deployment authorization.
 - [ ] Final read-only health checks cover the criteria in §3.5, preserve
-  UNKNOWN where evidence is unavailable, and perform no D1/Queue/Paste writes.
+      UNKNOWN where evidence is unavailable, and perform no D1/Queue/Paste writes.
 - [ ] No production configuration, deployment, tag, release, publication,
-  Project, Issue, historical-log, or cleanup mutation occurs in the approved
-  implementation scope without its own required authorization.
+      Project, Issue, historical-log, or cleanup mutation occurs in the approved
+      implementation scope without its own required authorization.
 
 ## 3.12 Test specification
 

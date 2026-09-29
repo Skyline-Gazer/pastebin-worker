@@ -1,6 +1,6 @@
 # Narrow Project write guard PLAN
 
-Status: **OWNER APPROVED 2026-09-29; DURABLE PERSISTENCE PENDING**.
+Status: **OWNER APPROVED 2026-09-29; DURABLY PERSISTED IN PR #190**.
 
 Owner approval authorizes the remaining SPEC/PHASE/TODO artifacts and a
 reviewed implementation PR. It does not authorize a Project or Issue mutation,

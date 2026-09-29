@@ -1,6 +1,12 @@
 # Release-readiness remediation PLAN
 
-Status: **OWNER APPROVAL REQUIRED BEFORE SPEC**.
+Status: **OWNER APPROVED 2026-09-29 — SPEC PREPARATION ONLY**.
+
+Owner approval applies to this PLAN at exact commit
+`6c9c926b390a9070c5a7b01fc9acae35e7277d58`. It authorizes SPEC preparation
+only. SPEC approval is required before PHASE/TODO preparation; implementation,
+production configuration changes, deployment, tags, publication, merge, and
+cleanup remain unauthorized.
 
 ## Objective
 
@@ -184,6 +190,13 @@ artifact approvals.
 
 ## Approval boundary
 
-Owner approval of this PLAN is required before SPEC preparation. Approval does
-not authorize implementation, merge, workflow dispatch, artifact publication,
-tag/release creation, deployment, production mutation, or cleanup.
+```text
+PLAN_APPROVAL=APPROVED_BY_OWNER_2026-09-29
+PLAN_APPROVAL_HEAD=6c9c926b390a9070c5a7b01fc9acae35e7277d58
+APPROVAL_SCOPE=SPEC_PREPARATION_ONLY
+SPEC_APPROVAL=REQUIRED_NOT_GRANTED
+PHASE_TODO_PREPARATION=NOT_AUTHORIZED
+IMPLEMENTATION=NOT_AUTHORIZED
+PRODUCTION_CONFIGURATION_CHANGE=NOT_AUTHORIZED
+DEPLOYMENT_TAG_PUBLICATION_MERGE_CLEANUP=NOT_AUTHORIZED
+```

@@ -219,6 +219,8 @@ Every non-trivial change — product development, upstream patch development, pa
 
 Kody is permanently retired from downstream review governance. No Kody channel may be triggered, polled, awaited, classified, used as evidence or guidance, or included in settlement/quorum calculations. Automatically produced Kody output has no governance authority; historical output remains history only. The reviewer pool is Cursor Bugbot, Greptile, and Codex Final Verify.
 
+GitHub write boundary: automation MUST target exactly `github.com/Skyline-Gazer/pastebin-worker` through `downstream/scripts/gh-write.sh`. The wrapper pins child `GH_HOST=github.com`, clears `GH_REPO` and Git repository-context overrides, and runs `gh` outside the caller's repository. It rejects bare, attached, duplicate, alternate, host, and malformed repository selectors before execution. Repository passthrough is limited to core `issue comment` and `pr comment` commands; user-defined aliases/extensions and all other repository command routes are rejected. The wrapper prints a sanitized resolved target and retains the fixed Project #3 Status → Done route for Issue #186. The `upstream` git remote is fetch-only for automation; official upstream is read-only context.
+
 1. Every non-trivial implementation PR MUST pass the AI Review Bot Phase Review Gate before merge.
 2. Review MUST cover the latest/current PR HEAD; ANY commit that changes the HEAD SHA invalidates the previous gate and requires a new completed review of the new HEAD.
 3. ANY commit that changes the PR HEAD SHA after review invalidates the previous AI-review gate and requires a new completed review of the new HEAD (mechanical rule).

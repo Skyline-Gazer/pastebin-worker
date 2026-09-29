@@ -71,9 +71,11 @@ and version checks, and final read-only health checks.
   remains deferred until a separate deployment authorization.
 - GitHub Actions CI evidence-artifact upload and retention of sanitized
   candidate provenance/checksum are in scope after the required SPEC/PHASE
-  approvals. That non-public CI artifact is distinct from a GitHub Release or
-  public release artifact publication. Final release provenance has the
-  separate lifetime requirement in §3.5.
+  approvals. This CI workflow artifact is distinct from a GitHub Release and
+  public release assets. The repository is public, so the artifact and run
+  summary must be safe for repository readers: no secrets, PII, or raw
+  sensitive values. Final release provenance has the separate lifetime
+  requirement in §3.5.
 - Do not remove or rewrite historical logs. Query redaction protects future
   records; it does not remediate already-retained records.
 - Do not rotate credentials or invalidate sessions based only on the known
@@ -541,8 +543,9 @@ geolocation, and user-agent retention remains a separate privacy decision.
 3. A separate owner-triggered candidate workflow runs the same gate on that
    exact SHA. It generates provenance and checksum, uploads them, and writes
    the post-upload artifact identity to the durable run summary. This is a
-   private CI evidence artifact with at least 30-day retention, not a GitHub
-   Release or public release publication.
+   CI workflow artifact with at least 30-day retention, distinct from a
+   GitHub Release or public release assets. Its contents and run summary must
+   be safe for repository readers under §3.8.
 4. A maintainer verifies the run, artifact metadata/digest, file checksum,
    candidate SHA, and patch hashes through read-only GitHub evidence.
 5. A separate read-only tag-eligibility check reports eligible only after
@@ -579,9 +582,11 @@ identities recorded only by a separately authorized post-deployment verifier.
   permission only unless an independently reviewed need proves otherwise.
 - The live drift checker uses a read-only Cloudflare token; deployment
   credentials are not exposed to the candidate build or tests.
-- Logs, artifacts, summaries, and provenance must be sanitized and bounded.
-  Never persist raw OAuth callback query values, cookies, tokens, passwords,
-  user content, or provider secrets.
+- Logs, artifacts, summaries, and provenance must be sanitized and bounded,
+  and safe for repository readers because this repository is public. Never
+  persist secrets, PII, raw sensitive values, raw OAuth callback query values,
+  cookies, tokens, passwords, authorization materials, full URLs, user content,
+  or provider secrets.
 - Historical log-access authorization, current retention, state consumption,
   and session linkage are outside this release SPEC and remain UNKNOWN where
   audit data is unavailable. See the separate OAuth security follow-up.
@@ -700,9 +705,10 @@ identities recorded only by a separately authorized post-deployment verifier.
 - [ ] No production configuration, deployment, tag, GitHub Release, public
       release publication, Project, Issue, historical-log, or cleanup mutation
       occurs in the approved implementation scope. The separately authorized
-      private GitHub Actions CI evidence-artifact upload is allowed after the
-      planning approvals. The bounded Phase 4 read-only health audit runs only
-      after the required PRs merge under the current Owner authorization;
+      GitHub Actions CI workflow artifact upload is allowed after the
+      planning approvals, and its contents must be safe for repository readers
+      under §3.8. The bounded Phase 4 read-only health audit runs only after the
+      required PRs merge under the current Owner authorization;
       post-deployment verification remains gated on separate deployment
       authorization.
 

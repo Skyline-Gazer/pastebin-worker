@@ -33,6 +33,12 @@ Phase: [`project-write-guard-phases.md`](project-write-guard-phases.md)
 - [x] Extend the guard to reject attached/alternate/duplicate repository
       selectors and hostname aliases; pin `GH_HOST`, clear ambient repo/Git
       context, and run child processes from `/`.
+- [x] Fresh audit found arbitrary `gh` alias/extension routes could reach the
+      child. Restrict repository passthrough to core `issue comment` and `pr
+      comment`; test alias, extension, and non-comment routes never reach it.
+- [x] RED: removing that route allowlist made the stub fixture fail at the
+      alias rejection case before invocation; restoring the allowlist made the
+      full fixture pass.
 - [x] GREEN: `bash downstream/tests/gh-write.test.sh` — PASS; verifies child
       argv/environment, caller remote isolation, selector/API/GraphQL/Project
       rejection before invocation, sanitized audit, and child failure status.

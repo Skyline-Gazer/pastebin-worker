@@ -48,6 +48,14 @@ done
 
 [[ "${route_args[0]}" != "api" && "${route_args[0]}" != "repo" ]] || refuse
 
+# Only core comment commands and the fixed Project route may use passthrough.
+# This blocks user-defined top-level gh aliases/extensions from selecting an
+# unreviewed API, repository, Project, or host route.
+case "${route_args[0]}:${route_args[1]-}" in
+  issue:comment|pr:comment|project:item-edit) ;;
+  *) refuse ;;
+esac
+
 for arg in "${route_args[@]}"; do
   [[ "$arg" != *://* ]] || refuse
 done

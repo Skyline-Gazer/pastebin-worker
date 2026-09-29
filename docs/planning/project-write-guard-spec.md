@@ -7,9 +7,9 @@ PLAN: [`project-write-guard-plan.md`](project-write-guard-plan.md)
 ## Scope
 
 Track `downstream/scripts/gh-write.sh` as the single GitHub CLI write wrapper.
-Keep its repository allowlist behavior for ordinary repository commands and add
-one exact Project write route for moving Issue #186's existing Project #3 item
-to `Done`.
+Keep the exact repository allowlist, limit ordinary repository passthrough to
+core `issue comment` and `pr comment` commands, and add one exact Project write
+route for moving Issue #186's existing Project #3 item to `Done`.
 
 ## Fixed authorization values
 
@@ -58,14 +58,17 @@ repository remote. See <https://cli.github.com/manual/gh_help_environment>.
 
 ### Ordinary repository route
 
-Commands whose first argument is neither `project`, `api`, nor `repo` retain
-their original argument vector, including the authorized `--repo` pair, when
-passed to `gh`. The wrapper rejects the generic `api` and `repo` command
-families because their positional target can bypass repository metadata. A
-caller argument containing a URL scheme is rejected because URL targets can
-override repository metadata or hide in case/host aliases. Callers use numeric
-Issue/PR targets and body files instead. Host selectors and root options that
-could alter command routing are rejected before dispatch.
+Only the core commands `issue comment` and `pr comment` retain their original
+argument vector, including the authorized `--repo` pair, when passed to `gh`.
+Every other repository command is rejected. This core-command allowlist
+prevents user-defined top-level aliases and extensions from selecting an
+unreviewed API, GraphQL, Project, repository, or host route. The wrapper also
+rejects the generic `api` and `repo` command families because their positional
+target can bypass repository metadata. A caller argument containing a URL
+scheme is rejected because URL targets can override repository metadata or
+hide in case/host aliases. Callers use numeric Issue/PR targets and body files
+instead. Host selectors and root options that could alter command routing are
+rejected before dispatch.
 
 The wrapper rejects an empty command. It emits only a fixed audit header with
 the authorized owner, repository, and `repository_write` action; it does not
@@ -132,15 +135,16 @@ It must prove:
 1. the exact Project caller vector succeeds and the child receives fixed argv
    without wrapper-only `--repo`, with pinned `GH_HOST`, cleared ambient
    repository context, and working directory `/`;
-2. an ordinary repository write succeeds with its exact canonical full-repo
-   argv and the same child environment;
+2. allowed `issue comment` and `pr comment` writes succeed with their exact
+   canonical full-repo argv and the same child environment;
 3. missing, wrong, duplicate, attached, joined, malformed, or alternate-host
    repository selectors fail without calling the stub;
 4. wrong project, item, field, or option IDs and extra/reordered arguments fail
    without calling the stub;
 5. other Project operations, name-based Project selectors, generic `api` and
-   `repo` commands, hostname flags, and foreign positional repository URLs
-   fail without calling the stub;
+   `repo` commands, user aliases/extensions, non-comment repository routes,
+   hostname flags, and foreign positional repository URLs fail without calling
+   the stub;
 6. Project child failure is reported without a success record and its exit
    status is propagated; and
 7. sanitized audit output contains fixed identifiers and never caller data.

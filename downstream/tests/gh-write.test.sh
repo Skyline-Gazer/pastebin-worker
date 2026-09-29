@@ -127,6 +127,11 @@ expect_reject api --method POST graphql --repo "$REPO" -f query=mutation
 expect_reject api https://api.github.com/graphql --repo "$REPO" -f query=mutation
 expect_reject api repos/Skyline-Gazer/pastebin-worker/issues --repo "$REPO" --method POST
 expect_reject repo archive other/repository --repo "$REPO"
+expect_reject alias set escape 'api graphql mutation' --repo "$REPO"
+expect_reject escape --repo "$REPO"
+expect_reject extension dangerous --repo "$REPO"
+expect_reject pr dangerous-alias 190 --repo "$REPO"
+expect_reject issue close 186 --repo "$REPO"
 expect_reject issue close https://github.com/cli/cli/issues/1 --repo "$REPO"
 expect_reject issue close https://GitHub.com/cli/cli/issues/1 --repo "$REPO"
 expect_reject issue close https://www.github.com/cli/cli/issues/1 --repo "$REPO"
@@ -146,6 +151,13 @@ diff -u "$EXPECTED" "$LOG"
 diff -u "$EXPECTED_ENV" "$ENV_LOG"
 grep -q '^TARGET_ACTION=repository_write$' "$OUTPUT"
 ! grep -q "$SENTINEL" "$OUTPUT"
+
+run_guard pr comment 190 --repo "$REPO" --body-file "$FIXTURE/review.md"
+[[ "$RUN_STATUS" -eq 0 ]]
+printf '%s\n' pr comment 190 --repo "$REPO" --body-file "$FIXTURE/review.md" >"$EXPECTED"
+diff -u "$EXPECTED" "$LOG"
+diff -u "$EXPECTED_ENV" "$ENV_LOG"
+grep -q '^TARGET_ACTION=repository_write$' "$OUTPUT"
 
 expect_reject issue close 186
 expect_reject issue close 186 --repo other/repository

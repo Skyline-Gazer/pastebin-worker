@@ -28,19 +28,28 @@ Phase: [`project-write-guard-phases.md`](project-write-guard-phases.md)
       tracked wrapper existed with `Expected executable wrapper:
       .../downstream/scripts/gh-write.sh`. The test stopped before creating or
       invoking its stub and made no network request.
-- [ ] Implement the minimal exact-vector Project route and ordinary repository
+- [x] Implement the minimal exact-vector Project route and ordinary repository
       allowlist behavior in `downstream/scripts/gh-write.sh`.
-- [ ] GREEN: rerun the focused test and record the result here.
-- [ ] REFACTOR: remove duplication only if it makes the security contract
-      smaller; rerun the focused test.
+- [x] GREEN: `bash downstream/tests/gh-write.test.sh` — PASS (`gh write guard
+      fixtures passed`).
+- [x] REFACTOR: retained direct exact-vector comparison instead of adding a
+      general parser; expanded GraphQL endpoint rejection and reran the focused
+      test — PASS.
 
 ## Validation
 
-- [ ] Run `bash -n` on the wrapper and shell test.
-- [ ] Run applicable downstream shell regression tests.
-- [ ] Run repository formatting checks available in the isolated checkout.
-- [ ] Run `git diff --check`.
-- [ ] Confirm the test stub made no network or live GitHub mutation.
+- [x] Run `bash -n` on the wrapper and shell test — PASS.
+- [x] Run applicable downstream shell regression tests. The focused guard,
+      browser-origin, Issue #86, secret-observable, and upstream-sync fixtures
+      passed. Three unrelated release fixtures assume `git init` creates
+      `master`; rerunning with that fixture setting made provenance and rollback
+      pass, while release-candidate then reached its pre-existing GNU/BSD `sed
+      -i` incompatibility on macOS. No failure involved the new wrapper.
+- [x] Run repository formatting checks available in the isolated checkout —
+      Prettier and ShellCheck are unavailable; shell syntax and manual Markdown
+      inspection passed.
+- [x] Run `git diff --check` — PASS.
+- [x] Confirm the PATH stub made no network or live GitHub mutation.
 
 ## Delivery
 

@@ -84,8 +84,9 @@ exit status and returns that same status.
 
 ### GraphQL
 
-The command pair `api graphql` is always rejected with exit status `2` before
-`gh` runs. No GraphQL query or mutation text is inspected or forwarded.
+An `api` route containing the endpoint token `graphql` or a URL/path ending in
+`/graphql` is always rejected with exit status `2` before `gh` runs, regardless
+of flag order. No GraphQL query or mutation text is inspected or forwarded.
 
 ## Failure behavior
 

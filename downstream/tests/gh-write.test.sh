@@ -26,7 +26,8 @@ export GH_STUB_LOG="$LOG"
 run_guard() {
   : >"$LOG"
   set +e
-  PATH="$FIXTURE/bin:$PATH" "$WRAPPER" "$@" >"$OUTPUT" 2>&1
+  GH_STUB_EXIT="${GH_STUB_EXIT:-0}" PATH="$FIXTURE/bin:$PATH" \
+    "$WRAPPER" "$@" >"$OUTPUT" 2>&1
   RUN_STATUS=$?
   set -e
 }
@@ -96,6 +97,8 @@ expect_reject project item-edit --repo "$REPO" --field-id "$FIELD_ID" --id "$ITE
 expect_reject project item-delete --repo "$REPO" --id "$ITEM_ID"
 expect_reject project item-edit --repo "$REPO" --owner Skyline-Gazer --url https://example.invalid --field Status --value Done
 expect_reject api graphql --repo "$REPO" -f query=mutation
+expect_reject api --method POST graphql --repo "$REPO" -f query=mutation
+expect_reject api https://api.github.com/graphql --repo "$REPO" -f query=mutation
 expect_reject --repo "$REPO"
 
 SENTINEL="AUDIT_MUST_NOT_ECHO_CALLER_ARGUMENTS"

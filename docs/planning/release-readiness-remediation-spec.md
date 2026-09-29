@@ -132,7 +132,13 @@ and version checks, and final read-only health checks.
   HTTP 404 and is recorded only as secondary evidence. A future request with
   insufficient permission, incomplete parent visibility, pagination gaps,
   or an unavailable/error response is `UNKNOWN`. Tag existence alone does not
-  establish protection.
+  establish protection. This result assesses current ruleset protection; it
+  does not show that the tag was historically moved or tampered with. The
+  evidence reviewed does not demonstrate tampering, but historical tag
+  immutability/integrity remains `UNKNOWN` without a durable release-time or
+  Owner-approved expected tag identity and sufficient history evidence. Tag
+  eligibility stays fail-closed until current protection is verifiable and
+  the exact source identity passes its checks.
 
 Evidence: [Wrangler configuration reference](https://developers.cloudflare.com/workers/wrangler/configuration/),
 [Cloudflare Worker edit API](https://developers.cloudflare.com/api/resources/workers/subresources/beta/subresources/workers/methods/edit/),
@@ -277,8 +283,13 @@ and [GitHub artifact documentation](https://docs.github.com/en/actions/tutorials
    incomplete inherited-rule visibility is `UNKNOWN`. Tag existence and a
    successful historical build do not prove protection. The 2026-09-29
    authorized lookup described in §3.4 returned HTTP 200 and an empty result,
-   so current protection is `FAIL/NOT_PROTECTED`; do not report rollback PASS.
-   Rehearsal never moves, creates, or deletes a tag.
+   so current ruleset protection is `FAIL/NOT_PROTECTED`; do not report
+   rollback PASS. This current protection status is separate from historical
+   tag integrity, which remains `UNKNOWN` absent sufficient trusted evidence;
+   the empty ruleset result alone does not demonstrate past tag tampering.
+   Tag eligibility remains fail-closed until protection is verifiable and
+   exact source identity checks pass. Rehearsal never moves, creates, or
+   deletes a tag.
 4. Rehearsal checks out the exact peeled commit in a disposable worktree,
    installs from that tag's own committed lockfile with frozen resolution, and
    runs its own release inputs. Any compatibility harness or tool added after
@@ -572,7 +583,10 @@ identities recorded only by a separately authorized post-deployment verifier.
       selected tag's 30-entry series, never the current 33-entry series.
 - [ ] A complete tag-protection lookup with no matching enforced rule fails as
       `NOT_PROTECTED`; incomplete or unavailable protection evidence is
-      `UNKNOWN`. Neither permits rollback readiness PASS.
+      `UNKNOWN`. Historical immutability/integrity is reported separately and
+      stays `UNKNOWN` when trusted expected identity/history evidence is
+      missing; no-ruleset evidence alone is not evidence of past tampering.
+      Neither state permits rollback readiness PASS.
 - [ ] Locked Wrangler schema fixtures assert the exact observability values in
       §3.5 for every tracked overlay; live drift fixtures distinguish explicit
       mismatches (`FAIL`) from missing/unavailable evidence (`UNKNOWN`).
@@ -615,8 +629,9 @@ identities recorded only by a separately authorized post-deployment verifier.
   missing/moved tag, protection pass/no-rule/API-unknown cases, exact tag
   worktree/lockfile, the tag's 30-entry patch series versus the current
   33-entry series, per-patch hash mismatch, current-vs-historical tooling,
-  upstream and both target outcomes, provenance match/mismatch, separate
-  Cloudflare version/deployment identities, and no deploy/tag mutation claims.
+  upstream and both target outcomes, provenance match/mismatch, distinct
+  current-protection and historical-integrity statuses, separate Cloudflare
+  version/deployment identities, and no deploy/tag mutation claims.
 - Wrangler contract fixtures: parse tracked TOML with the exact lock-resolved
   Wrangler schema, assert exact redaction/log/invocation/trace/sampling values,
   validate every tracked overlay, and reject absent/false/misspelled keys.
@@ -641,9 +656,13 @@ of this SPEC drafting step.
 - The 2026-09-29 authenticated ruleset lookup returned HTTP 200 and `[]` for
   repository and inherited tag rulesets, with repo-admin access and the
   documented repository-read permission. The current state is
-  `FAIL/NOT_PROTECTED`; any future insufficiently authorized, incomplete, or
-  unavailable policy lookup is `UNKNOWN`. No tag policy change is authorized
-  here.
+  `ruleset protection=FAIL/NOT_PROTECTED`. Overall historical tag
+  immutability/integrity remains `UNKNOWN`; no tampering is demonstrated by
+  the evidence reviewed, and the empty ruleset response does not prove that
+  past mutation occurred. Any future insufficiently authorized, incomplete,
+  or unavailable policy lookup is `UNKNOWN`. Tag eligibility stays refused
+  until protection is verifiable and trusted source-identity checks pass. No
+  tag policy change is authorized here.
 - Which tracked deployment overlays besides `downstream/addons/messaging/wrangler.toml`
   exist in the eventual implementation checkout, and what must be tested for
   each? Inventory them before coding; absence of a verified production overlay

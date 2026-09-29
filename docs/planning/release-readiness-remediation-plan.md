@@ -14,8 +14,10 @@ Repair the downstream release gate, evidence path, and confirmed production-log
 configuration gap so a candidate can be
 validated from pinned inputs with the documented default commands, produce
 durable provenance with a verifiable artifact identity, and rehearse rollback
-against the existing immutable production tag. Keep deployment, tag creation,
-release publication, destructive work, and cleanup outside this work.
+against the existing production tag after its exact source identity and
+effective immutability/protection are established. Keep deployment, tag
+creation, release publication, destructive work, and cleanup outside this
+work.
 
 ## Audited baseline
 
@@ -32,6 +34,12 @@ commit. The audited candidate and production tag manifests already record the
 replacement. This amendment changes the PLAN's documented baseline only; it
 does not change release inputs or broaden the original
 `SPEC PREPARATION ONLY` approval scope.
+
+Owner-approved consistency clarification on 2026-09-29: the existing
+production tag is the rollback target; its exact source identity and effective
+tag protection must be established before rollback readiness is passed. This
+clarifies a verification requirement and does not change release policy or
+inputs.
 
 The local file `/private/tmp/ft13-release-provenance-e300500.json` still
 exists. It is 8,157 bytes and its verified SHA-256 is
@@ -147,8 +155,9 @@ artifact approvals.
   authoritative and fail closed.
 - A candidate cannot be called retained until the provenance/checksum artifact
   upload succeeds and its identity is recorded.
-- The existing production tag is the rollback baseline; rehearsal is read-only
-  and compares clearly labeled provenance.
+- The existing production tag is the rollback target. Its exact source identity
+  and effective tag protection must be established before rollback readiness
+  can pass; rehearsal is read-only and compares clearly labeled provenance.
 - Tests record RED/GREEN evidence for each behavioral phase.
 - Each PR passes current-HEAD CI, supported reviewer settlement, normal quorum,
   and has no unresolved actionable findings.

@@ -56,6 +56,15 @@ wrapper and its shell fixture.
 
 ## Validation and documentation
 
-Record exact RED/GREEN results in the implementation PR. The guard contract
-and this plan are the affected documentation. Required exact-HEAD CI and
-Phase Review Gate settlement remain pending after PR creation.
+RED: `bash downstream/tests/gh-write.test.sh` exited `1` at the first allowed
+branch-push case because the existing wrapper rejected `git push`; no network
+call occurred.
+
+GREEN: `bash downstream/tests/gh-write.test.sh` — PASS using local `git` and
+`gh` stubs. `bash -n downstream/scripts/gh-write.sh
+downstream/tests/gh-write.test.sh` — PASS. `git diff --check` — PASS. Local
+`gh` 2.101.0 help confirmed the PR list/create flags; ShellCheck is unavailable.
+
+The guard contract and this plan are the affected documentation. Required
+exact-HEAD CI and Phase Review Gate settlement remain pending after PR
+creation.

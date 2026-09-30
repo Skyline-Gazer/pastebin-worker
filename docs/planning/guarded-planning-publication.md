@@ -36,9 +36,10 @@ and their fixed repository/host checks intact.
 This is downstream governance tooling. No GitHub write occurs during tests.
 The authorized publication flow is limited to the approved planning history
 and the guard-extension review PR. Do not enable general Git pushes, tag
-writes, repository/API passthrough, force-push, GitHub UI publication, project
-or issue mutations, production actions, deployment, release, or tag ruleset
-changes. A changed PHASE/TODO requires renewed owner review and approval.
+writes, repository/API passthrough, arbitrary or caller-specified force-push,
+GitHub UI publication, project or issue mutations, production actions,
+deployment, release, or tag ruleset changes. A changed PHASE/TODO requires
+renewed owner review and approval.
 
 ## Phase and TODO
 
@@ -76,13 +77,16 @@ only the new PR #192 HEAD and the authorized formatter-only PR #193 HEAD. The
 original create-only route and its checks remain unchanged.
 
 The update route requires the caller to provide the expected current remote
-HEAD for the same-name `codex/*` branch. It verifies the authorized HTTPS
-origin, clean worktree, exact current remote SHA, fetched remote commit,
-fast-forward ancestry, and live `downstream/main` ancestry, then rechecks the
-remote SHA immediately before a non-forced push of the reviewed local commit to
-that fixed branch ref. It rejects configured proxies, alternate transport
+HEAD for the same-name `codex/*` branch. The initial implementation verified
+the authorized HTTPS origin, clean worktree, exact current remote SHA, fetched
+remote commit, fast-forward ancestry, and live `downstream/main` ancestry, then
+rechecked the remote SHA immediately before an ordinary push. The manual review
+finding below identified that this preflight sequence left a check/write race.
+
+The route now uses the server-side ref lease described in the corrective
+addendum below. It still rejects configured proxies, alternate transport
 routes, mirror mode, stale or moved remote heads, no-op/non-fast-forward
-updates, and all extra push options/refspecs. It never pushes tags.
+updates, and caller-supplied push options/refspecs. It never pushes tags.
 
 Validation:
 
@@ -99,3 +103,44 @@ Validation:
 The published update is limited to PR #192 and PR #193 under the 2026-09-30
 Owner decision. It does not authorize a merge, unrelated branch update,
 implementation, production action, or release.
+
+## Owner-directed atomic-ref correction (2026-09-30)
+
+The Owner authorized a correction after a manual review found a TOCTOU gap:
+`ls-remote` checks followed by ordinary `git push` did not bind the server's
+ref update to the earlier absence check or expected remote SHA. A concurrent
+fast-forward between the last check and push could therefore be accepted.
+
+Both publication routes now send one fixed branch ref with an internally
+constructed Git push lease:
+
+- Create-only push uses `--force-with-lease=<fixed-ref>:`. The empty expected
+  value requires that the ref remain absent when the server processes the
+  update, so a branch created in the check/write gap is rejected.
+- Existing-branch update uses
+  `--force-with-lease=<fixed-ref>:<expected-full-SHA>`. The server rejects any
+  moved ref even if its new commit is still an ancestor of the proposed HEAD.
+- Before pushing, the guard still verifies that the expected update SHA is an
+  ancestor of the proposed HEAD and that live `downstream/main` is an ancestor.
+  Thus the lease only permits the validated fast-forward from the exact
+  expected ref state.
+- Callers cannot supply a lease, force option, refspec, wildcard, tag, or
+  alternate target. The guarded code constructs the lease from the validated
+  branch name and, for updates, the required full expected SHA. No general
+  force-push route is enabled. Guarded pushes disable local Git hooks.
+
+TDD evidence and validation:
+
+- RED: updated command-contract assertions failed while the pushes lacked the
+  required exact-ref lease.
+- A real local bare-repository fixture advances the branch after the guard's
+  final preflight read but immediately before the guarded push. It covers both
+  a create-only ref appearing at an ancestor of the proposed HEAD and an
+  existing ref advancing to an ancestor of the proposed HEAD; both leased
+  pushes fail and leave the concurrent ref untouched.
+- The same fixture verifies create-only publication succeeds while the ref is
+  absent and an expected-HEAD update succeeds while the ref is unchanged.
+- `bash downstream/tests/gh-write.test.sh` — PASS.
+- `bash -n downstream/scripts/gh-write.sh downstream/tests/gh-write.test.sh` —
+  PASS.
+- `git diff --check` — PASS.

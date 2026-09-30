@@ -296,7 +296,9 @@ run_publish_guard git push --repo "$REPO"
 [[ "$RUN_STATUS" -eq 0 ]]
 grep -q '^TARGET_ACTION=git_branch_push$' "$OUTPUT"
 grep -q "^TARGET_HEAD=$WRITE_HEAD$" "$OUTPUT"
-printf '%s\n' -C "$WRITE_REPO_REAL" push --porcelain --no-follow-tags origin \
+printf '%s\n' -C "$WRITE_REPO_REAL" -c core.hooksPath=/dev/null push \
+  --porcelain --no-follow-tags \
+  "--force-with-lease=refs/heads/$PUSH_BRANCH:" origin \
   "HEAD:refs/heads/$PUSH_BRANCH" >"$EXPECTED"
 diff -u "$EXPECTED" "$GIT_STUB_LOG"
 GIT_STUB_PUSH_EXIT=9 run_publish_guard git push --repo "$REPO"
@@ -312,6 +314,7 @@ expect_publish_reject() {
 }
 
 expect_publish_reject git push --force --repo "$REPO"
+expect_publish_reject git push --force-with-lease="refs/heads/$PUSH_BRANCH:" --repo "$REPO"
 expect_publish_reject git push --delete origin "$PUSH_BRANCH" --repo "$REPO"
 expect_publish_reject git push --repo other/repository
 GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" expect_publish_reject git push --repo "$REPO"
@@ -336,7 +339,8 @@ grep -q '^TARGET_ACTION=git_branch_fast_forward_update$' "$OUTPUT"
 grep -q "^TARGET_EXPECTED_REMOTE_HEAD=$WRITE_BASE$" "$OUTPUT"
 grep -q "^TARGET_HEAD=$WRITE_HEAD$" "$OUTPUT"
 printf '%s\n' -C "$WRITE_REPO_REAL" -c core.hooksPath=/dev/null push \
-  --porcelain --no-follow-tags origin "$WRITE_HEAD:refs/heads/$PUSH_BRANCH" >"$EXPECTED"
+  --porcelain --no-follow-tags "--force-with-lease=refs/heads/$PUSH_BRANCH:$WRITE_BASE" \
+  origin "$WRITE_HEAD:refs/heads/$PUSH_BRANCH" >"$EXPECTED"
 diff -u "$EXPECTED" "$GIT_STUB_LOG"
 
 GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
@@ -347,6 +351,8 @@ grep -q '^CHILD_EXIT=9$' "$OUTPUT"
 
 expect_update_reject git push --repo "$REPO" --expected-head not-a-commit
 expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_BASE" --force
+expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_BASE" \
+  --force-with-lease="refs/heads/$PUSH_BRANCH:$WRITE_BASE"
 expect_update_reject git push --repo other/repository --expected-head "$WRITE_BASE"
 expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_HEAD"
 expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_BASE" --tags
@@ -383,6 +389,123 @@ git -C "$WRITE_REPO" remote set-url origin git@github.com:Skyline-Gazer/pastebin
 GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
   expect_update_reject "${UPDATE_ARGS[@]}"
 git -C "$WRITE_REPO" remote set-url origin https://github.com/Skyline-Gazer/pastebin-worker.git
+
+# Exercise the final-check-to-write race against a local bare receive-pack.
+# The wrapper swaps in the bare repository for origin and advances the target
+# ref immediately before forwarding the guarded push to real Git.
+RACE_REPO="$FIXTURE/race-repo"
+RACE_REMOTE="$FIXTURE/race-remote.git"
+RACE_BIN="$FIXTURE/race-bin"
+RACE_BRANCH="codex/lease-race"
+RACE_REF="refs/heads/$RACE_BRANCH"
+RACE_PUSH_LOG="$FIXTURE/race-push.args"
+mkdir -p "$RACE_BIN"
+"$REAL_GIT" init -q --bare "$RACE_REMOTE"
+"$REAL_GIT" init -q "$RACE_REPO"
+"$REAL_GIT" -C "$RACE_REPO" config user.name GuardRaceTest
+"$REAL_GIT" -C "$RACE_REPO" config user.email guard-race-test@example.invalid
+"$REAL_GIT" -C "$RACE_REPO" checkout -q -b downstream/main
+printf 'race base\n' >"$RACE_REPO/input"
+"$REAL_GIT" -C "$RACE_REPO" add input
+"$REAL_GIT" -C "$RACE_REPO" commit -qm 'race base'
+RACE_BASE="$("$REAL_GIT" -C "$RACE_REPO" rev-parse HEAD)"
+"$REAL_GIT" -C "$RACE_REPO" checkout -q -b "$RACE_BRANCH"
+printf 'race middle\n' >>"$RACE_REPO/input"
+"$REAL_GIT" -C "$RACE_REPO" commit -qam 'race middle'
+RACE_MID="$("$REAL_GIT" -C "$RACE_REPO" rev-parse HEAD)"
+printf 'race proposed head\n' >>"$RACE_REPO/input"
+"$REAL_GIT" -C "$RACE_REPO" commit -qam 'race proposed head'
+RACE_HEAD="$("$REAL_GIT" -C "$RACE_REPO" rev-parse HEAD)"
+RACE_REPO_REAL="$("$REAL_GIT" -C "$RACE_REPO" rev-parse --show-toplevel)"
+"$REAL_GIT" -C "$RACE_REPO" remote add origin https://github.com/Skyline-Gazer/pastebin-worker.git
+"$REAL_GIT" -C "$RACE_REPO" push -q "$RACE_REMOTE" "$RACE_BASE:refs/heads/downstream/main"
+cat >"$RACE_BIN/git" <<'RACE_GIT_STUB'
+#!/usr/bin/env bash
+args=("$@")
+repo=""
+command_index=0
+if [[ "${args[0]-}" == "-C" ]]; then
+  repo="${args[1]}"
+  command_index=2
+fi
+while [[ "${args[command_index]-}" == "-c" ]]; do
+  command_index=$((command_index + 2))
+done
+command="${args[command_index]-}"
+if [[ "$command" == "push" ]]; then
+  printf '%s\n' "${args[@]}" >"$RACE_PUSH_LOG"
+  if [[ -n "${RACE_ADVANCE_TO:-}" ]]; then
+    "$GH_TEST_REAL_GIT" -C "$repo" push -q "$RACE_REMOTE" \
+      "$RACE_ADVANCE_TO:$RACE_REF" || exit $?
+  fi
+fi
+case "$command" in
+  fetch|ls-remote|push)
+    for ((i = 0; i < ${#args[@]}; i++)); do
+      [[ "${args[i]}" != "origin" ]] || args[i]="$RACE_REMOTE"
+    done
+    ;;
+esac
+exec "$GH_TEST_REAL_GIT" "${args[@]}"
+RACE_GIT_STUB
+chmod +x "$RACE_BIN/git"
+export RACE_BRANCH RACE_REF RACE_PUSH_LOG RACE_REMOTE GH_TEST_REAL_GIT
+
+run_race_guard() {
+  : >"$RACE_PUSH_LOG"
+  set +e
+  (cd "$RACE_REPO" && HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= http_proxy= https_proxy= all_proxy= \
+    RACE_REMOTE="$RACE_REMOTE" RACE_REF="$RACE_REF" \
+    RACE_PUSH_LOG="$RACE_PUSH_LOG" RACE_ADVANCE_TO="${RACE_ADVANCE_TO:-}" \
+    PATH="$RACE_BIN:$FIXTURE/bin:$PATH" "$WRAPPER" "$@") >"$OUTPUT" 2>&1
+  RUN_STATUS=$?
+  set -e
+}
+
+expected_race_create_push() {
+  printf '%s\n' -C "$RACE_REPO_REAL" -c core.hooksPath=/dev/null push \
+    --porcelain --no-follow-tags \
+    "--force-with-lease=$RACE_REF:" origin "HEAD:$RACE_REF" >"$EXPECTED"
+  diff -u "$EXPECTED" "$RACE_PUSH_LOG"
+}
+
+remote_race_sha() {
+  "$REAL_GIT" --git-dir="$RACE_REMOTE" rev-parse --verify "$RACE_REF" 2>/dev/null
+}
+
+RACE_ADVANCE_TO="$RACE_MID" run_race_guard git push --repo "$REPO"
+[[ "$RUN_STATUS" -ne 0 ]]
+grep -q '^TARGET_ACTION=git_branch_push$' "$OUTPUT"
+grep -q '^RESULT=failure$' "$OUTPUT"
+expected_race_create_push
+[[ "$(remote_race_sha)" == "$RACE_MID" ]]
+
+"$REAL_GIT" --git-dir="$RACE_REMOTE" update-ref -d "$RACE_REF"
+run_race_guard git push --repo "$REPO"
+[[ "$RUN_STATUS" -eq 0 ]]
+expected_race_create_push
+[[ "$(remote_race_sha)" == "$RACE_HEAD" ]]
+
+"$REAL_GIT" --git-dir="$RACE_REMOTE" update-ref "$RACE_REF" "$RACE_BASE"
+expected_race_update_push() {
+  printf '%s\n' -C "$RACE_REPO_REAL" -c core.hooksPath=/dev/null push --porcelain \
+    --no-follow-tags "--force-with-lease=$RACE_REF:$RACE_BASE" \
+    origin "$RACE_HEAD:$RACE_REF" >"$EXPECTED"
+  diff -u "$EXPECTED" "$RACE_PUSH_LOG"
+}
+
+RACE_ADVANCE_TO="$RACE_MID" run_race_guard git push --repo "$REPO" --expected-head "$RACE_BASE"
+[[ "$RUN_STATUS" -ne 0 ]]
+grep -q '^TARGET_ACTION=git_branch_fast_forward_update$' "$OUTPUT"
+grep -q '^RESULT=failure$' "$OUTPUT"
+expected_race_update_push
+[[ "$(remote_race_sha)" == "$RACE_MID" ]]
+
+"$REAL_GIT" --git-dir="$RACE_REMOTE" update-ref "$RACE_REF" "$RACE_BASE"
+run_race_guard git push --repo "$REPO" --expected-head "$RACE_BASE"
+[[ "$RUN_STATUS" -eq 0 ]]
+expected_race_update_push
+[[ "$(remote_race_sha)" == "$RACE_HEAD" ]]
 
 git -C "$WRITE_REPO" switch -q downstream/main
 expect_publish_reject git push --repo "$REPO"

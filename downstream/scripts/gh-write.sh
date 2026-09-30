@@ -106,7 +106,8 @@ if [[ "${route_args[0]}:${route_args[1]-}" == "git:push" ]]; then
       "TARGET_BASE_SHA=$publish_base" \
       "TARGET_HEAD_REF=$remote_ref" \
       "TARGET_HEAD=$publish_head"
-    git -C "$publish_root" push --porcelain --no-follow-tags origin "HEAD:$remote_ref"
+    git -C "$publish_root" -c core.hooksPath=/dev/null push --porcelain --no-follow-tags \
+      "--force-with-lease=$remote_ref:" origin "HEAD:$remote_ref"
     status=$?
     if [[ "$status" -eq 0 ]]; then
       echo "RESULT=success"
@@ -154,7 +155,8 @@ if [[ "${route_args[0]}:${route_args[1]-}" == "git:push" ]]; then
     "TARGET_HEAD_REF=$remote_ref" \
     "TARGET_HEAD=$publish_head"
   git -C "$publish_root" -c core.hooksPath=/dev/null push --porcelain \
-    --no-follow-tags origin "$publish_head:$remote_ref"
+    --no-follow-tags "--force-with-lease=$remote_ref:$expected_remote_head" \
+    origin "$publish_head:$remote_ref"
   status=$?
   if [[ "$status" -eq 0 ]]; then
     echo "RESULT=success"

@@ -215,6 +215,11 @@ verification remains separately gated by deployment authorization.
 may not expose reliable drift evidence; distinguish `FAIL` from `UNKNOWN`, and
 make no historical-log remediation claim.
 
+**Exit criteria:** The redaction setting is present and schema-valid in every
+owned overlay; drift checks and required exact-HEAD review gates pass; the PR is
+merged and `downstream/main` is refreshed. No production configuration or
+retained log is changed.
+
 ## RR-03 — Atomic OAuth state consumption
 
 **Goal:** Consume one valid OAuth state at most once under concurrent callbacks
@@ -277,6 +282,11 @@ credential rotation, or session invalidation occurs.
 unverified; missing, ambiguous, or failing evidence blocks implementation and
 leaves compatibility and exploitation status `UNKNOWN`.
 
+**Exit criteria:** Proceed to merge only after the hosted/local one-winner gate,
+callback/session checks, exact-HEAD CI, and review gate pass. If the gate is
+unavailable, ambiguous, or fails, stop with no database implementation and
+preserve `UNKNOWN`; after merge, refresh `downstream/main`.
+
 ## RR-04 — Durable candidate provenance and artifact identity
 
 **Goal:** Persist sanitized provenance and verify exact workflow artifact
@@ -322,6 +332,11 @@ for repository readers.
 
 **TODO timing:** Prepare the implementation-sized TODO only after RR-01 merges
 and the target branch is refreshed, as required by §10.1.
+
+**Exit criteria:** After RR-01 merges, prepare and obtain approval for the
+RR-04-specific TODO; merge only when artifact identity, checksum, retention,
+exact-HEAD CI, and review gates pass. Refresh `downstream/main` before RR-05;
+keep tag eligibility blocked unless every required protection check passes.
 
 ## RR-05 — Production-tag source reconstruction and rollback evidence
 
@@ -370,6 +385,12 @@ failure blocks overall readiness.
 
 **TODO timing:** Prepare the implementation-sized TODO only after RR-04 merges
 and the target branch is refreshed, as required by §10.1.
+
+**Exit criteria:** After RR-04 merges, prepare and obtain approval for the
+RR-05-specific TODO; complete read-only reconstruction and bounded authorized
+health checks with unknowns preserved, then pass exact-HEAD CI and review gates
+before merge. Report release readiness blocked while tag protection or any
+required evidence remains unresolved.
 
 ## Shared ownership and review gates
 

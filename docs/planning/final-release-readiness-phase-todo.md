@@ -60,9 +60,11 @@ approved; do not start from this planning branch.
   and must never substitute for the tag's 30-entry series.
 - Hosted non-production D1 support for the exact atomic state-consumption
   primitive and concurrent one-winner behavior remains `UNKNOWN`.
-- No tag ruleset change, workflow artifact upload, log deletion, production
-  configuration change, deployment, tag, GitHub Release, or publication is
-  authorized by this package.
+- Nothing is executed during this non-mutating planning preparation. RR-04's
+  sanitized Actions evidence artifact remains a later implementation deliverable
+  after its implementation-sized TODO is prepared and approved. No tag ruleset
+  change, log deletion, production configuration change, deployment, tag,
+  GitHub Release, or release publication is authorized here.
 
 ## Phase dependency order
 
@@ -99,6 +101,16 @@ certify a candidate.
 **Dependencies:** Approved exact Release Readiness SPEC and this PHASE/TODO;
 start from refreshed `downstream/main`. Independent of RR-02/RR-03.
 
+**Inputs:** The approved Release Readiness SPEC, refreshed `downstream/main`,
+the pinned release manifest and ordered patch series, and the committed lockfiles
+for both build targets.
+
+**Deliverables:** Candidate-gate script and regression tests, the corrected
+downstream PR workflow, owned build/test documentation, and exact-HEAD CI and
+review evidence.
+
+**Expected branch type:** `build/*`.
+
 **Branch/PR:** `codex/build-release-candidate-gate` → PR target
 `downstream/main`. Do not reuse remote branch `codex/release-candidate-gate`,
 which is attached to stale PR #191.
@@ -132,7 +144,7 @@ which is attached to stale PR #191.
    `CANDIDATE_STATUS`, both target statuses, assembled HEAD and tree identity.
 8. Update owned docs and retain RED/GREEN evidence in the implementation PR.
 
-**Tests and exact-HEAD acceptance:** Focused `downstream/tests/release-candidate.test.sh`,
+**Acceptance criteria and tests:** Focused `downstream/tests/release-candidate.test.sh`,
 the unoverridden default candidate command, and applicable PR workflow checks
 must pass on the actual PR HEAD. Current workflow contexts observed are
 `Feishu internal services / feishu-validation` and
@@ -167,6 +179,16 @@ the designated document owner to integrate without concurrent file edits.
 **Dependencies:** Approved Release Readiness SPEC and this PHASE/TODO. May run
 in parallel with RR-01 and RR-03 after PHASE/TODO approval.
 
+**Inputs:** The approved Release Readiness SPEC, refreshed `downstream/main`,
+the locked Wrangler 4.129.0 schema, tracked configuration overlays, and the
+documented Cloudflare API contract.
+
+**Deliverables:** Tracked query-string redaction configuration, schema and
+drift-contract tests, a narrow read-only drift checker, and owned security
+documentation.
+
+**Expected branch type:** `fix/*`.
+
 **Branch/PR:** `codex/security-oauth-query-redaction` → PR target
 `downstream/main`. Keep this PR distinct from RR-03 and from any production
 deployment authorization.
@@ -184,10 +206,14 @@ deployment authorization.
 5. Ensure all tests and diagnostics contain no raw OAuth values, cookies,
    tokens, or other secrets.
 
-**Tests and exit criteria:** Locked-schema and overlay tests, drift-check
+**Acceptance criteria and tests:** Locked-schema and overlay tests, drift-check
 fixtures, focused security tests, applicable current-HEAD CI and review gate
 pass. No production access/configuration operation occurs. Post-deployment
 verification remains separately gated by deployment authorization.
+
+**Risks:** The tracked setting may be unsupported by an overlay or the live API
+may not expose reliable drift evidence; distinguish `FAIL` from `UNKNOWN`, and
+make no historical-log remediation claim.
 
 ## RR-03 — Atomic OAuth state consumption
 
@@ -205,6 +231,17 @@ time.
 **Dependencies:** Approved OAuth SPEC and this PHASE/TODO. Before any database
 implementation, pass the hosted non-production D1 compatibility gate below.
 This phase is independent of RR-01 and RR-02, subject to the gate.
+
+**Inputs:** The approved OAuth State Consumption SPEC, refreshed
+`downstream/main`, existing callback/session behavior, local Workers D1, and an
+already-existing isolated hosted non-production D1 database.
+
+**Deliverables:** Only after the hosted/local one-winner gate passes: atomic
+state-consumption code, deterministic callback/session regression tests, owned
+security documentation, and exact-HEAD CI/review evidence. Otherwise, a
+sanitized gate result with compatibility left `UNKNOWN` and no implementation.
+
+**Expected branch type:** `fix/*`.
 
 **Branch/PR:** `codex/security-oauth-state-single-use` → PR target
 `downstream/main` after the gate passes. If hosted D1 validation is unavailable
@@ -231,10 +268,14 @@ exploitation status `UNKNOWN`.
 5. Confirm no migration or session/CSRF boundary change is introduced. Keep
    secrets out of test diagnostics and update the owned security docs.
 
-**Tests and exit criteria:** Hosted and local D1 evidence proves the one-winner
+**Acceptance criteria and tests:** Hosted and local D1 evidence proves the one-winner
 contract; callback/session tests and focused checks pass on exact PR HEAD;
 required CI and review settlement pass; no production database operation,
 credential rotation, or session invalidation occurs.
+
+**Risks:** D1 statement support or concurrent cross-call behavior may remain
+unverified; missing, ambiguous, or failing evidence blocks implementation and
+leaves compatibility and exploitation status `UNKNOWN`.
 
 ## RR-04 — Durable candidate provenance and artifact identity
 
@@ -253,40 +294,34 @@ provenance/artifact sections of `docs/BUILD_DEPLOY.md` (§§8–9) and
 **Dependencies:** RR-01 merged; refresh `downstream/main`; consume A's stable
 candidate result and exact assembled HEAD/tree. No use of uncommitted inputs.
 
+**Inputs:** The merged RR-01 candidate contract and refreshed target branch,
+exact committed candidate identity, Actions workflow/run-attempt evidence, and
+the approved Release Readiness SPEC.
+
+**Deliverables:** Sanitized provenance and checksum contract, an owner-triggered
+Actions evidence workflow with verifiable artifact identity/retention, updated
+owned build/test documentation, and exact-HEAD CI/review evidence.
+
+**Expected branch type:** `build/*`.
+
 **Branch/PR:** `codex/build-release-provenance-artifacts` → PR target
 `downstream/main` from refreshed `downstream/main`.
 
-**TODO:**
-
-1. Write provenance/checksum tests first. Fail closed for candidate failure,
-   missing inputs, no-op retention, failed upload/readback, missing/contradictory
-   identity, checksum mismatch, too-short retention, or candidate/run mismatch.
-2. Record downstream/upstream SHAs, ordered patch paths/hashes, lockfile and
-   assembled source/tree identities, target/test results, workflow run/attempt,
-   artifact identity/checksum, and retention without secrets, PII, raw URLs, or
-   OAuth values.
-3. Upload a CI workflow artifact for the exact committed candidate, with at
-   least 30-day artifact retention. Since this repository is public, artifact
-   and run-summary contents must be safe for repository readers. This is not a
-   GitHub Release asset or public release publication.
-4. Verify artifact ID/name/archive digest/expiry and workflow-run ID/head SHA
-   through Actions APIs. Verify `(run_id, run_attempt)` through the Workflow
-   Runs API; bind the artifact to that attempt with a unique non-overwritten
-   name and in-artifact receipt. Download and recompute the provenance
-   checksum; reject any disagreement.
-5. Keep final-provenance retention separate from candidate artifact retention:
-   final release provenance is to be retained with the approved release record
-   for the life of that release. Do not create a tag, release record, or
-   publication in this phase.
-6. Make tag eligibility depend on validated retained provenance, exact
-   candidate identity, current CI/review evidence, and verified tag protection.
-   No eligibility PASS while tag enforcement is `FAIL/NOT_PROTECTED`.
-
-**Tests and exit criteria:** Upload/readback contract fixtures cover success,
+**Acceptance criteria and tests:** Upload/readback contract fixtures cover success,
 failure, digest, retention, exact run attempt, and all negative/mismatch cases.
 The workflow must not deploy or publish a release. Exact-HEAD CI/review passes;
-candidate artifact is independently readable/verifiable for the required
-retention; provenance status is not inferred from a local file or summary.
+the sanitized Actions artifact is independently readable/verifiable for the
+required retention; provenance status is not inferred from a local file or
+summary. Tag eligibility remains blocked unless every SPEC requirement is
+verified.
+
+**Risks:** Actions API evidence may not identify the artifact's run attempt or
+retention reliably; reject ambiguous identity and keep eligibility blocked.
+Because the repository is public, every artifact and run summary must be safe
+for repository readers.
+
+**TODO timing:** Prepare the implementation-sized TODO only after RR-01 merges
+and the target branch is refreshed, as required by §10.1.
 
 ## RR-05 — Production-tag source reconstruction and rollback evidence
 
@@ -305,45 +340,36 @@ annotated tag `downstream-v2026.09.10.1` and its own pinned manifest/30-entry
 series. Never use the current candidate's 33-entry series for this historical
 reconstruction.
 
+**Inputs:** The merged RR-04 provenance contract, refreshed `downstream/main`,
+the selected annotated production tag and its own manifest/30-entry series, and
+trusted expected identities where available.
+
+**Deliverables:** A read-only source reconstruction and rollback-evidence
+rehearsal, separately labeled evidence for historical integrity and runtime
+identity, owned rollback documentation, and exact-HEAD CI/review evidence.
+
+**Expected branch type:** `build/*`.
+
 **Branch/PR:** `codex/build-release-rollback-evidence` → PR target
 `downstream/main` from refreshed `downstream/main`.
 
-**TODO:**
-
-1. Test tag name/ref, annotated tag-object SHA, peeled commit, manifest/upstream
-   pin, lockfiles, exact ordered patch paths/count/hashes, and both target
-   results. Compare against trusted expected identity where available.
-2. Re-read the remote tag before and after the disposable rehearsal; fail if
-   missing or moved. Use only the tag's own 30 ordered patch entries, and label
-   new evidence `RECONSTRUCTED_FROM_SOURCE_TAG`, never original release-time
-   evidence.
-3. If the old tag lacks current tooling, use a separately identified
-   reconstruction harness; do not silently inject current code or call it
-   original release evidence. No `git am --3way`, manual product fix, tag
-   mutation, or deployment.
-4. Keep current candidate reconstruction distinct: after RR-01, capture the
-   current baseline's 33-entry ordered series and its assembled identity
-   through the candidate/provenance contract. Assert these 33 inputs are never
-   substituted for the tag's 30.
-5. Report current tag enforcement `FAIL/NOT_PROTECTED` until an applicable
-   ruleset is independently read back. Preserve historical integrity and
-   runtime deployment identity as separate `UNKNOWN`s when evidence is absent;
-   keep `DEPLOY_CLAIM=no` and do not claim rollback readiness PASS.
-6. Run the Owner-authorized bounded Phase 4 production health audit only after
-   all required implementation PRs merge. Use the approved at-most-15-minute
-   UTC window and five-minute point-read freshness; preserve missing or
-   unavailable evidence as UNKNOWN and keep the two Owner-excluded historical
-   Paste records outside integrity claims. No writes, cleanup, or OAuth/login
-   route probes.
-7. Keep post-deployment configuration/version verification and synthetic
-   redaction-marker observation behind separate deployment authorization.
-
-**Tests and exit criteria:** Historical and current series fixtures cannot be
+**Acceptance criteria and tests:** Historical and current series fixtures cannot be
 confused; tag movement, manifest/hash mismatch, missing provenance, absent tag
 protection, and unknown runtime identity block PASS as specified. Read-only
 rehearsal makes no deployment/tag mutation. Required CI and review gate pass on
 exact PR HEAD. Overall release readiness remains blocked if tag protection or
-other required evidence is unresolved.
+other required evidence is unresolved. The bounded Owner-authorized Phase 4
+health audit occurs only after all required implementation PRs merge; missing
+evidence stays `UNKNOWN`, with no writes, cleanup, or OAuth/login route probes.
+Post-deployment checks remain separately gated by deployment authorization.
+
+**Risks:** The tag's historical release-time identity and deployed Worker
+identity may remain `UNKNOWN`; source reconstruction alone cannot establish
+historical integrity or runtime rollback readiness. Current tag protection
+failure blocks overall readiness.
+
+**TODO timing:** Prepare the implementation-sized TODO only after RR-04 merges
+and the target branch is refreshed, as required by §10.1.
 
 ## Shared ownership and review gates
 
@@ -370,12 +396,13 @@ other required evidence is unresolved.
 ## Separate Owner decision: tag protection
 
 Current evidence is `FAIL/NOT_PROTECTED`. Before tag eligibility can pass, the
-Owner must separately decide whether to authorize an active tag ruleset for
-`refs/tags/downstream-v*` that restricts creation, update, and deletion and
-explicitly defines allowed bypass actors, including whether release automation
-may bypass it. This PHASE/TODO does not create or change that policy. Until a
-separately authorized policy is applied and read back, tag eligibility and
-rollback readiness stay blocked.
+Owner must separately authorize an active tag ruleset for
+`refs/tags/downstream-v*` that restricts creation, update, and deletion. The
+approved SPEC requires no applicable bypass for release automation; this is
+not an open Owner choice, and RR-04 must fail closed if such a bypass exists.
+This PHASE/TODO does not create or change that policy. Until a separately
+authorized policy is applied and read back, tag eligibility and rollback
+readiness stay blocked.
 
 ## Final verification after implementation PRs
 
@@ -390,9 +417,10 @@ After all approved implementation PRs merge and `downstream/main` is refreshed:
 3. Perform the Owner-authorized bounded, read-only pre-release Phase 4 health
    audit only after the required PRs merge. Report unavailable production
    access as UNKNOWN; make no production mutations.
-4. Do not create a tag, GitHub Release, public artifact, or deployment. A later
-   release/deployment requires a separate explicit Owner authorization; only
-   then may post-deployment checks run.
+4. Do not create a tag, GitHub Release, public release asset, or release
+   publication. The sanitized Actions CI evidence artifact required by RR-04
+   remains in scope. A later release/deployment requires a separate explicit
+   Owner authorization; only then may post-deployment checks run.
 
 ## Approval boundary
 

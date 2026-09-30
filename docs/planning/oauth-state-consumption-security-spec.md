@@ -103,11 +103,11 @@ force the SELECT/DELETE race or assert concurrent callback/session counts.
 
 The current durable state remains the existing `feishu_oauth_states` row:
 
-| Field | Meaning |
-|---|---|
-| `state` | Primary-key callback state supplied by the provider |
-| `expires_at` | Existing state-expiry timestamp |
-| `provider` | Stored provider (`feishu` default for historical rows) |
+| Field        | Meaning                                                |
+| ------------ | ------------------------------------------------------ |
+| `state`      | Primary-key callback state supplied by the provider    |
+| `expires_at` | Existing state-expiry timestamp                        |
+| `provider`   | Stored provider (`feishu` default for historical rows) |
 
 Consumption is represented by the state row no longer being available to a
 second caller. Existing browser-session rows remain unchanged. No new durable

@@ -10,6 +10,8 @@ CALLER="$FIXTURE/caller"
 OUTPUT="$FIXTURE/output"
 EXPECTED="$FIXTURE/expected"
 EXPECTED_ENV="$FIXTURE/expected.env"
+GIT_STUB_LOG="$FIXTURE/git.args"
+GH_STUB_READ_LOG="$FIXTURE/gh.read.args"
 trap 'rm -rf "$FIXTURE"' EXIT
 
 [[ -x "$WRAPPER" ]] || {
@@ -20,6 +22,11 @@ trap 'rm -rf "$FIXTURE"' EXIT
 mkdir "$FIXTURE/bin"
 cat >"$FIXTURE/bin/gh" <<'STUB'
 #!/usr/bin/env bash
+if [[ "${1-}" == "pr" && "${2-}" == "list" ]]; then
+  printf '%s\n' "$@" >>"$GH_STUB_READ_LOG"
+  printf '%s\n' "${GH_STUB_PR_COUNT:-0}"
+  exit 0
+fi
 printf '%s\n' "$@" >"$GH_STUB_LOG"
 printf 'GH_HOST=%s\n' "${GH_HOST-unset}" >"$GH_STUB_ENV_LOG"
 printf 'GH_REPO=%s\n' "${GH_REPO-unset}" >>"$GH_STUB_ENV_LOG"
@@ -35,6 +42,7 @@ git -C "$CALLER" init -q
 git -C "$CALLER" remote add origin https://attacker.example/attacker/repository.git
 export GH_STUB_LOG="$LOG"
 export GH_STUB_ENV_LOG="$ENV_LOG"
+export GH_STUB_READ_LOG
 export GH_HOST="attacker.example"
 export GH_REPO="attacker/target"
 export GIT_DIR="$CALLER/.git"
@@ -192,5 +200,384 @@ GH_STUB_EXIT=9 run_guard "${project_args[@]}"
 grep -q '^RESULT=failure$' "$OUTPUT"
 grep -q '^CHILD_EXIT=9$' "$OUTPUT"
 ! grep -q '^RESULT=success$' "$OUTPUT"
+
+# Exercise guarded publication with local command stubs; these cases use no network.
+REAL_GIT="$(command -v git)"
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR
+GIT_BIN="$FIXTURE/gitbin"
+WRITE_REPO="$FIXTURE/write-repo"
+PUSH_BRANCH="codex/guard-test"
+mkdir -p "$GIT_BIN" "$WRITE_REPO"
+cat >"$GIT_BIN/git" <<'GIT_STUB'
+#!/usr/bin/env bash
+args=("$@")
+repo=""
+command_index=0
+if [[ "${args[0]-}" == "-C" ]]; then
+  repo="${args[1]}"
+  command_index=2
+fi
+while [[ "${args[command_index]-}" == "-c" ]]; do
+  command_index=$((command_index + 2))
+done
+command="${args[command_index]-}"
+case "$command" in
+  fetch)
+    ref="${args[${#args[@]}-1]}"
+    case "$ref" in
+      refs/heads/downstream/main) fetched="$GIT_STUB_BASE" ;;
+      refs/heads/*) fetched="${GIT_STUB_FETCH_SHA:-${GIT_STUB_REMOTE_SHA:-$GIT_STUB_BASE}}" ;;
+      *) exit 1 ;;
+    esac
+    printf "%s\t\t%s of origin\n" "$fetched" "$ref" >"$repo/.git/FETCH_HEAD"
+    exit 0
+    ;;
+  ls-remote)
+    ref=""
+    for arg in "${args[@]}"; do
+      [[ "$arg" == refs/heads/* ]] && ref="$arg"
+    done
+    if [[ "$ref" == "refs/heads/${GIT_STUB_REMOTE_BRANCH:-}" && -n "${GIT_STUB_REMOTE_BRANCH:-}" ]]; then
+      sha="${GIT_STUB_REMOTE_SHA:-$GIT_STUB_BASE}"
+      if [[ -n "${GIT_STUB_REMOTE_COUNT_FILE:-}" ]]; then
+        count=0
+        [[ -f "$GIT_STUB_REMOTE_COUNT_FILE" ]] && read -r count <"$GIT_STUB_REMOTE_COUNT_FILE"
+        count=$((count + 1))
+        printf '%s\n' "$count" >"$GIT_STUB_REMOTE_COUNT_FILE"
+        if [[ "$count" -gt 1 && -n "${GIT_STUB_REMOTE_SHA_AFTER_FIRST:-}" ]]; then
+          sha="$GIT_STUB_REMOTE_SHA_AFTER_FIRST"
+        fi
+      fi
+      printf '%s\t%s\n' "$sha" "$ref"
+    fi
+    exit 0
+    ;;
+  push)
+    printf '%s\n' "${args[@]}" >"$GIT_STUB_LOG"
+    exit "${GIT_STUB_PUSH_EXIT:-0}"
+    ;;
+  *)
+    exec "$GH_TEST_REAL_GIT" "${args[@]}"
+    ;;
+esac
+GIT_STUB
+chmod +x "$GIT_BIN/git"
+git -C "$WRITE_REPO" init -q
+git -C "$WRITE_REPO" config user.name GuardTest
+git -C "$WRITE_REPO" config user.email guard-test@example.invalid
+git -C "$WRITE_REPO" checkout -q -b downstream/main
+printf 'base\n' >"$WRITE_REPO/input"
+git -C "$WRITE_REPO" add input
+git -C "$WRITE_REPO" commit -qm base
+WRITE_BASE="$(git -C "$WRITE_REPO" rev-parse HEAD)"
+git -C "$WRITE_REPO" checkout -q -b "$PUSH_BRANCH"
+printf 'topic\n' >>"$WRITE_REPO/input"
+git -C "$WRITE_REPO" commit -qam topic
+WRITE_HEAD="$(git -C "$WRITE_REPO" rev-parse HEAD)"
+WRITE_REPO_REAL="$(git -C "$WRITE_REPO" rev-parse --show-toplevel)"
+git -C "$WRITE_REPO" remote add origin git@github.com:Skyline-Gazer/pastebin-worker.git
+printf 'Planning PR body\n' >"$FIXTURE/pr-body.md"
+export GH_TEST_REAL_GIT="$REAL_GIT"
+export GIT_STUB_BASE="$WRITE_BASE"
+export GIT_STUB_LOG
+export GIT_STUB_REMOTE_COUNT_FILE="$FIXTURE/ls-remote.count"
+
+run_publish_guard() {
+  : >"$GIT_STUB_LOG"
+  : >"$GIT_STUB_REMOTE_COUNT_FILE"
+  set +e
+  (cd "$WRITE_REPO" && PATH="$GIT_BIN:$FIXTURE/bin:$PATH" \
+    "$WRAPPER" "$@") >"$OUTPUT" 2>&1
+  RUN_STATUS=$?
+  set -e
+}
+
+run_publish_guard git push --repo "$REPO"
+[[ "$RUN_STATUS" -eq 0 ]]
+grep -q '^TARGET_ACTION=git_branch_push$' "$OUTPUT"
+grep -q "^TARGET_HEAD=$WRITE_HEAD$" "$OUTPUT"
+printf '%s\n' -C "$WRITE_REPO_REAL" -c core.hooksPath=/dev/null push \
+  --porcelain --no-follow-tags \
+  "--force-with-lease=refs/heads/$PUSH_BRANCH:" origin \
+  "HEAD:refs/heads/$PUSH_BRANCH" >"$EXPECTED"
+diff -u "$EXPECTED" "$GIT_STUB_LOG"
+GIT_STUB_PUSH_EXIT=9 run_publish_guard git push --repo "$REPO"
+[[ "$RUN_STATUS" -eq 9 ]]
+grep -q '^RESULT=failure$' "$OUTPUT"
+grep -q '^CHILD_EXIT=9$' "$OUTPUT"
+
+expect_publish_reject() {
+  run_publish_guard "$@"
+  [[ "$RUN_STATUS" -eq 2 ]]
+  [[ ! -s "$GIT_STUB_LOG" ]]
+  ! grep -q '^TARGET_ACTION=git_branch_push$' "$OUTPUT"
+}
+
+expect_publish_reject git push --force --repo "$REPO"
+expect_publish_reject git push --force-with-lease="refs/heads/$PUSH_BRANCH:" --repo "$REPO"
+expect_publish_reject git push --delete origin "$PUSH_BRANCH" --repo "$REPO"
+expect_publish_reject git push --repo other/repository
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" expect_publish_reject git push --repo "$REPO"
+GIT_STUB_BASE="0000000000000000000000000000000000000000" \
+  expect_publish_reject git push --repo "$REPO"
+unset GIT_STUB_REMOTE_BRANCH
+GIT_STUB_BASE="$WRITE_BASE"
+
+expect_update_reject() {
+  run_publish_guard "$@"
+  [[ "$RUN_STATUS" -eq 2 ]]
+  [[ ! -s "$GIT_STUB_LOG" ]]
+  ! grep -q '^TARGET_ACTION=git_branch_fast_forward_update$' "$OUTPUT"
+}
+
+UPDATE_ARGS=(git push --repo "$REPO" --expected-head "$WRITE_BASE")
+git -C "$WRITE_REPO" remote set-url origin https://github.com/Skyline-Gazer/pastebin-worker.git
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  run_publish_guard "${UPDATE_ARGS[@]}"
+[[ "$RUN_STATUS" -eq 0 ]]
+grep -q '^TARGET_ACTION=git_branch_fast_forward_update$' "$OUTPUT"
+grep -q "^TARGET_EXPECTED_REMOTE_HEAD=$WRITE_BASE$" "$OUTPUT"
+grep -q "^TARGET_HEAD=$WRITE_HEAD$" "$OUTPUT"
+printf '%s\n' -C "$WRITE_REPO_REAL" -c core.hooksPath=/dev/null push \
+  --porcelain --no-follow-tags "--force-with-lease=refs/heads/$PUSH_BRANCH:$WRITE_BASE" \
+  origin "$WRITE_HEAD:refs/heads/$PUSH_BRANCH" >"$EXPECTED"
+diff -u "$EXPECTED" "$GIT_STUB_LOG"
+
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  GIT_STUB_PUSH_EXIT=9 run_publish_guard "${UPDATE_ARGS[@]}"
+[[ "$RUN_STATUS" -eq 9 ]]
+grep -q '^RESULT=failure$' "$OUTPUT"
+grep -q '^CHILD_EXIT=9$' "$OUTPUT"
+
+expect_update_reject git push --repo "$REPO" --expected-head not-a-commit
+expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_BASE" --force
+expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_BASE" \
+  --force-with-lease="refs/heads/$PUSH_BRANCH:$WRITE_BASE"
+expect_update_reject git push --repo other/repository --expected-head "$WRITE_BASE"
+expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_HEAD"
+expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_BASE" --tags
+expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_BASE" \
+  "$WRITE_HEAD:refs/heads/other"
+UNRELATED_TREE="$(printf '' | git -C "$WRITE_REPO" mktree)"
+UNRELATED_HEAD="$(printf 'unrelated fixture commit\n' | git -C "$WRITE_REPO" commit-tree "$UNRELATED_TREE")"
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$UNRELATED_HEAD" \
+  expect_update_reject git push --repo "$REPO" --expected-head "$UNRELATED_HEAD"
+GIT_STUB_REMOTE_BRANCH="" expect_update_reject "${UPDATE_ARGS[@]}"
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_HEAD" \
+  expect_update_reject "${UPDATE_ARGS[@]}"
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  GIT_STUB_FETCH_SHA="$WRITE_HEAD" expect_update_reject "${UPDATE_ARGS[@]}"
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  GIT_STUB_REMOTE_SHA_AFTER_FIRST="$WRITE_HEAD" \
+  expect_update_reject "${UPDATE_ARGS[@]}"
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_HEAD" \
+  expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_HEAD"
+HTTPS_PROXY=https://proxy.invalid GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" \
+  GIT_STUB_REMOTE_SHA="$WRITE_BASE" expect_update_reject "${UPDATE_ARGS[@]}"
+GIT_SSH_COMMAND='ssh -o ProxyCommand=false' GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" \
+  GIT_STUB_REMOTE_SHA="$WRITE_BASE" expect_update_reject "${UPDATE_ARGS[@]}"
+
+git -C "$WRITE_REPO" config remote.origin.mirror true
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  expect_update_reject "${UPDATE_ARGS[@]}"
+git -C "$WRITE_REPO" config --unset remote.origin.mirror
+git -C "$WRITE_REPO" config http.proxy https://proxy.invalid
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  expect_update_reject "${UPDATE_ARGS[@]}"
+git -C "$WRITE_REPO" config --unset http.proxy
+git -C "$WRITE_REPO" remote set-url origin git@github.com:Skyline-Gazer/pastebin-worker.git
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  expect_update_reject "${UPDATE_ARGS[@]}"
+git -C "$WRITE_REPO" remote set-url origin https://github.com/Skyline-Gazer/pastebin-worker.git
+
+# Exercise the final-check-to-write race against a local bare receive-pack.
+# The wrapper swaps in the bare repository for origin and advances the target
+# ref immediately before forwarding the guarded push to real Git.
+RACE_REPO="$FIXTURE/race-repo"
+RACE_REMOTE="$FIXTURE/race-remote.git"
+RACE_BIN="$FIXTURE/race-bin"
+RACE_BRANCH="codex/lease-race"
+RACE_REF="refs/heads/$RACE_BRANCH"
+RACE_PUSH_LOG="$FIXTURE/race-push.args"
+mkdir -p "$RACE_BIN"
+"$REAL_GIT" init -q --bare "$RACE_REMOTE"
+"$REAL_GIT" init -q "$RACE_REPO"
+"$REAL_GIT" -C "$RACE_REPO" config user.name GuardRaceTest
+"$REAL_GIT" -C "$RACE_REPO" config user.email guard-race-test@example.invalid
+"$REAL_GIT" -C "$RACE_REPO" checkout -q -b downstream/main
+printf 'race base\n' >"$RACE_REPO/input"
+"$REAL_GIT" -C "$RACE_REPO" add input
+"$REAL_GIT" -C "$RACE_REPO" commit -qm 'race base'
+RACE_BASE="$("$REAL_GIT" -C "$RACE_REPO" rev-parse HEAD)"
+"$REAL_GIT" -C "$RACE_REPO" checkout -q -b "$RACE_BRANCH"
+printf 'race middle\n' >>"$RACE_REPO/input"
+"$REAL_GIT" -C "$RACE_REPO" commit -qam 'race middle'
+RACE_MID="$("$REAL_GIT" -C "$RACE_REPO" rev-parse HEAD)"
+printf 'race proposed head\n' >>"$RACE_REPO/input"
+"$REAL_GIT" -C "$RACE_REPO" commit -qam 'race proposed head'
+RACE_HEAD="$("$REAL_GIT" -C "$RACE_REPO" rev-parse HEAD)"
+RACE_REPO_REAL="$("$REAL_GIT" -C "$RACE_REPO" rev-parse --show-toplevel)"
+"$REAL_GIT" -C "$RACE_REPO" remote add origin https://github.com/Skyline-Gazer/pastebin-worker.git
+"$REAL_GIT" -C "$RACE_REPO" push -q "$RACE_REMOTE" "$RACE_BASE:refs/heads/downstream/main"
+cat >"$RACE_BIN/git" <<'RACE_GIT_STUB'
+#!/usr/bin/env bash
+args=("$@")
+repo=""
+command_index=0
+if [[ "${args[0]-}" == "-C" ]]; then
+  repo="${args[1]}"
+  command_index=2
+fi
+while [[ "${args[command_index]-}" == "-c" ]]; do
+  command_index=$((command_index + 2))
+done
+command="${args[command_index]-}"
+if [[ "$command" == "push" ]]; then
+  printf '%s\n' "${args[@]}" >"$RACE_PUSH_LOG"
+  if [[ -n "${RACE_ADVANCE_TO:-}" ]]; then
+    "$GH_TEST_REAL_GIT" -C "$repo" push -q "$RACE_REMOTE" \
+      "$RACE_ADVANCE_TO:$RACE_REF" || exit $?
+  fi
+fi
+case "$command" in
+  fetch|ls-remote|push)
+    for ((i = 0; i < ${#args[@]}; i++)); do
+      [[ "${args[i]}" != "origin" ]] || args[i]="$RACE_REMOTE"
+    done
+    ;;
+esac
+exec "$GH_TEST_REAL_GIT" "${args[@]}"
+RACE_GIT_STUB
+chmod +x "$RACE_BIN/git"
+export RACE_BRANCH RACE_REF RACE_PUSH_LOG RACE_REMOTE GH_TEST_REAL_GIT
+
+run_race_guard() {
+  : >"$RACE_PUSH_LOG"
+  set +e
+  (cd "$RACE_REPO" && HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= http_proxy= https_proxy= all_proxy= \
+    RACE_REMOTE="$RACE_REMOTE" RACE_REF="$RACE_REF" \
+    RACE_PUSH_LOG="$RACE_PUSH_LOG" RACE_ADVANCE_TO="${RACE_ADVANCE_TO:-}" \
+    PATH="$RACE_BIN:$FIXTURE/bin:$PATH" "$WRAPPER" "$@") >"$OUTPUT" 2>&1
+  RUN_STATUS=$?
+  set -e
+}
+
+expected_race_create_push() {
+  printf '%s\n' -C "$RACE_REPO_REAL" -c core.hooksPath=/dev/null push \
+    --porcelain --no-follow-tags \
+    "--force-with-lease=$RACE_REF:" origin "HEAD:$RACE_REF" >"$EXPECTED"
+  diff -u "$EXPECTED" "$RACE_PUSH_LOG"
+}
+
+remote_race_sha() {
+  "$REAL_GIT" --git-dir="$RACE_REMOTE" rev-parse --verify "$RACE_REF" 2>/dev/null
+}
+
+RACE_ADVANCE_TO="$RACE_MID" run_race_guard git push --repo "$REPO"
+[[ "$RUN_STATUS" -ne 0 ]]
+grep -q '^TARGET_ACTION=git_branch_push$' "$OUTPUT"
+grep -q '^RESULT=failure$' "$OUTPUT"
+expected_race_create_push
+[[ "$(remote_race_sha)" == "$RACE_MID" ]]
+
+"$REAL_GIT" --git-dir="$RACE_REMOTE" update-ref -d "$RACE_REF"
+run_race_guard git push --repo "$REPO"
+[[ "$RUN_STATUS" -eq 0 ]]
+expected_race_create_push
+[[ "$(remote_race_sha)" == "$RACE_HEAD" ]]
+
+"$REAL_GIT" --git-dir="$RACE_REMOTE" update-ref "$RACE_REF" "$RACE_BASE"
+expected_race_update_push() {
+  printf '%s\n' -C "$RACE_REPO_REAL" -c core.hooksPath=/dev/null push --porcelain \
+    --no-follow-tags "--force-with-lease=$RACE_REF:$RACE_BASE" \
+    origin "$RACE_HEAD:$RACE_REF" >"$EXPECTED"
+  diff -u "$EXPECTED" "$RACE_PUSH_LOG"
+}
+
+RACE_ADVANCE_TO="$RACE_MID" run_race_guard git push --repo "$REPO" --expected-head "$RACE_BASE"
+[[ "$RUN_STATUS" -ne 0 ]]
+grep -q '^TARGET_ACTION=git_branch_fast_forward_update$' "$OUTPUT"
+grep -q '^RESULT=failure$' "$OUTPUT"
+expected_race_update_push
+[[ "$(remote_race_sha)" == "$RACE_MID" ]]
+
+"$REAL_GIT" --git-dir="$RACE_REMOTE" update-ref "$RACE_REF" "$RACE_BASE"
+run_race_guard git push --repo "$REPO" --expected-head "$RACE_BASE"
+[[ "$RUN_STATUS" -eq 0 ]]
+expected_race_update_push
+[[ "$(remote_race_sha)" == "$RACE_HEAD" ]]
+
+git -C "$WRITE_REPO" switch -q downstream/main
+expect_publish_reject git push --repo "$REPO"
+git -C "$WRITE_REPO" switch -q "$PUSH_BRANCH"
+printf 'dirty\n' >"$WRITE_REPO/untracked"
+expect_publish_reject git push --repo "$REPO"
+rm "$WRITE_REPO/untracked"
+git -C "$WRITE_REPO" remote set-url origin https://attacker.example/other/repo.git
+expect_publish_reject git push --repo "$REPO"
+git -C "$WRITE_REPO" remote set-url origin git@github.com:Skyline-Gazer/pastebin-worker.git
+
+PR_TITLE="Guarded planning publication"
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_HEAD" \
+  run_publish_guard pr create --repo "$REPO" --base downstream/main \
+  --head "$PUSH_BRANCH" --title "$PR_TITLE" --body-file "$FIXTURE/pr-body.md"
+[[ "$RUN_STATUS" -eq 0 ]]
+grep -q '^TARGET_ACTION=pr_create$' "$OUTPUT"
+grep -q '^TARGET_BASE=downstream/main$' "$OUTPUT"
+grep -q "^TARGET_HEAD=$PUSH_BRANCH$" "$OUTPUT"
+printf '%s\n' pr create --repo "$REPO" --base downstream/main \
+  --head "$PUSH_BRANCH" --title "$PR_TITLE" --body-file "$FIXTURE/pr-body.md" >"$EXPECTED"
+diff -u "$EXPECTED" "$LOG"
+printf '%s\n' pr list --repo "$REPO" --head "$PUSH_BRANCH" \
+  --state all --json number --jq length >"$EXPECTED"
+diff -u "$EXPECTED" "$GH_STUB_READ_LOG"
+diff -u "$EXPECTED_ENV" "$ENV_LOG"
+
+expect_pr_reject() {
+  : >"$LOG"
+  : >"$GH_STUB_READ_LOG"
+  run_publish_guard "$@"
+  [[ "$RUN_STATUS" -eq 2 ]]
+  [[ ! -s "$LOG" && ! -s "$GH_STUB_READ_LOG" ]]
+  ! grep -q '^TARGET_ACTION=pr_create$' "$OUTPUT"
+}
+
+expect_pr_reject pr create --repo "$REPO" --base upstream-sync \
+  --head "$PUSH_BRANCH" --title "$PR_TITLE" --body-file "$FIXTURE/pr-body.md"
+expect_pr_reject pr create --repo "$REPO" --base downstream/main \
+  --head codex/other --title "$PR_TITLE" --body-file "$FIXTURE/pr-body.md"
+expect_pr_reject pr create --repo "$REPO" --base downstream/main \
+  --head "$PUSH_BRANCH" --title "$PR_TITLE" --body-file "$FIXTURE/missing.md"
+expect_pr_reject pr create --repo "$REPO" --base downstream/main \
+  --head "$PUSH_BRANCH" --title "$PR_TITLE" --body-file "$FIXTURE/pr-body.md" --draft
+
+: >"$LOG"
+: >"$GH_STUB_READ_LOG"
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  run_publish_guard pr create --repo "$REPO" --base downstream/main \
+  --head "$PUSH_BRANCH" --title "$PR_TITLE" --body-file "$FIXTURE/pr-body.md"
+[[ "$RUN_STATUS" -eq 2 ]]
+[[ ! -s "$LOG" && ! -s "$GH_STUB_READ_LOG" ]]
+
+: >"$LOG"
+: >"$GH_STUB_READ_LOG"
+GH_STUB_PR_COUNT=1 GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" \
+  GIT_STUB_REMOTE_SHA="$WRITE_HEAD" run_publish_guard pr create \
+  --repo "$REPO" --base downstream/main --head "$PUSH_BRANCH" \
+  --title "$PR_TITLE" --body-file "$FIXTURE/pr-body.md"
+[[ "$RUN_STATUS" -eq 2 ]]
+[[ ! -s "$LOG" ]]
+grep -Fxq 'pr' "$GH_STUB_READ_LOG"
+grep -Fxq 'list' "$GH_STUB_READ_LOG"
+
+: >"$LOG"
+: >"$GH_STUB_READ_LOG"
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_HEAD" \
+  GH_STUB_EXIT=9 run_publish_guard pr create --repo "$REPO" \
+  --base downstream/main --head "$PUSH_BRANCH" --title "$PR_TITLE" \
+  --body-file "$FIXTURE/pr-body.md"
+[[ "$RUN_STATUS" -eq 9 ]]
+grep -q '^RESULT=failure$' "$OUTPUT"
+grep -q '^CHILD_EXIT=9$' "$OUTPUT"
 
 echo 'gh write guard fixtures passed'

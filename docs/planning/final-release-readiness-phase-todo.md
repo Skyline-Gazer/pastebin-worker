@@ -387,10 +387,12 @@ failure blocks overall readiness.
 and the target branch is refreshed, as required by §10.1.
 
 **Exit criteria:** After RR-04 merges, prepare and obtain approval for the
-RR-05-specific TODO; complete read-only reconstruction and bounded authorized
-health checks with unknowns preserved, then pass exact-HEAD CI and review gates
-before merge. Report release readiness blocked while tag protection or any
-required evidence remains unresolved.
+RR-05-specific TODO; complete read-only source reconstruction with unknowns
+preserved, then pass exact-HEAD CI and review gates before merge. Only after
+RR-05 and all other required implementation PRs merge, run the separately
+authorized bounded health audit described in Final verification. Report release
+readiness blocked while tag protection or any required evidence remains
+unresolved.
 
 ## Shared ownership and review gates
 

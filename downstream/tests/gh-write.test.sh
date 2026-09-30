@@ -217,11 +217,19 @@ if [[ "${args[0]-}" == "-C" ]]; then
   repo="${args[1]}"
   command_index=2
 fi
+while [[ "${args[command_index]-}" == "-c" ]]; do
+  command_index=$((command_index + 2))
+done
 command="${args[command_index]-}"
 case "$command" in
   fetch)
-    printf "%s\t\tbranch 'downstream/main' of origin\n" "$GIT_STUB_BASE" \
-      >"$repo/.git/FETCH_HEAD"
+    ref="${args[${#args[@]}-1]}"
+    case "$ref" in
+      refs/heads/downstream/main) fetched="$GIT_STUB_BASE" ;;
+      refs/heads/*) fetched="${GIT_STUB_FETCH_SHA:-${GIT_STUB_REMOTE_SHA:-$GIT_STUB_BASE}}" ;;
+      *) exit 1 ;;
+    esac
+    printf "%s\t\t%s of origin\n" "$fetched" "$ref" >"$repo/.git/FETCH_HEAD"
     exit 0
     ;;
   ls-remote)
@@ -230,7 +238,17 @@ case "$command" in
       [[ "$arg" == refs/heads/* ]] && ref="$arg"
     done
     if [[ "$ref" == "refs/heads/${GIT_STUB_REMOTE_BRANCH:-}" && -n "${GIT_STUB_REMOTE_BRANCH:-}" ]]; then
-      printf '%s\t%s\n' "${GIT_STUB_REMOTE_SHA:-$GIT_STUB_BASE}" "$ref"
+      sha="${GIT_STUB_REMOTE_SHA:-$GIT_STUB_BASE}"
+      if [[ -n "${GIT_STUB_REMOTE_COUNT_FILE:-}" ]]; then
+        count=0
+        [[ -f "$GIT_STUB_REMOTE_COUNT_FILE" ]] && read -r count <"$GIT_STUB_REMOTE_COUNT_FILE"
+        count=$((count + 1))
+        printf '%s\n' "$count" >"$GIT_STUB_REMOTE_COUNT_FILE"
+        if [[ "$count" -gt 1 && -n "${GIT_STUB_REMOTE_SHA_AFTER_FIRST:-}" ]]; then
+          sha="$GIT_STUB_REMOTE_SHA_AFTER_FIRST"
+        fi
+      fi
+      printf '%s\t%s\n' "$sha" "$ref"
     fi
     exit 0
     ;;
@@ -262,9 +280,11 @@ printf 'Planning PR body\n' >"$FIXTURE/pr-body.md"
 export GH_TEST_REAL_GIT="$REAL_GIT"
 export GIT_STUB_BASE="$WRITE_BASE"
 export GIT_STUB_LOG
+export GIT_STUB_REMOTE_COUNT_FILE="$FIXTURE/ls-remote.count"
 
 run_publish_guard() {
   : >"$GIT_STUB_LOG"
+  : >"$GIT_STUB_REMOTE_COUNT_FILE"
   set +e
   (cd "$WRITE_REPO" && PATH="$GIT_BIN:$FIXTURE/bin:$PATH" \
     "$WRAPPER" "$@") >"$OUTPUT" 2>&1
@@ -299,6 +319,70 @@ GIT_STUB_BASE="0000000000000000000000000000000000000000" \
   expect_publish_reject git push --repo "$REPO"
 unset GIT_STUB_REMOTE_BRANCH
 GIT_STUB_BASE="$WRITE_BASE"
+
+expect_update_reject() {
+  run_publish_guard "$@"
+  [[ "$RUN_STATUS" -eq 2 ]]
+  [[ ! -s "$GIT_STUB_LOG" ]]
+  ! grep -q '^TARGET_ACTION=git_branch_fast_forward_update$' "$OUTPUT"
+}
+
+UPDATE_ARGS=(git push --repo "$REPO" --expected-head "$WRITE_BASE")
+git -C "$WRITE_REPO" remote set-url origin https://github.com/Skyline-Gazer/pastebin-worker.git
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  run_publish_guard "${UPDATE_ARGS[@]}"
+[[ "$RUN_STATUS" -eq 0 ]]
+grep -q '^TARGET_ACTION=git_branch_fast_forward_update$' "$OUTPUT"
+grep -q "^TARGET_EXPECTED_REMOTE_HEAD=$WRITE_BASE$" "$OUTPUT"
+grep -q "^TARGET_HEAD=$WRITE_HEAD$" "$OUTPUT"
+printf '%s\n' -C "$WRITE_REPO_REAL" -c core.hooksPath=/dev/null push \
+  --porcelain --no-follow-tags origin "$WRITE_HEAD:refs/heads/$PUSH_BRANCH" >"$EXPECTED"
+diff -u "$EXPECTED" "$GIT_STUB_LOG"
+
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  GIT_STUB_PUSH_EXIT=9 run_publish_guard "${UPDATE_ARGS[@]}"
+[[ "$RUN_STATUS" -eq 9 ]]
+grep -q '^RESULT=failure$' "$OUTPUT"
+grep -q '^CHILD_EXIT=9$' "$OUTPUT"
+
+expect_update_reject git push --repo "$REPO" --expected-head not-a-commit
+expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_BASE" --force
+expect_update_reject git push --repo other/repository --expected-head "$WRITE_BASE"
+expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_HEAD"
+expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_BASE" --tags
+expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_BASE" \
+  "$WRITE_HEAD:refs/heads/other"
+UNRELATED_TREE="$(printf '' | git -C "$WRITE_REPO" mktree)"
+UNRELATED_HEAD="$(printf 'unrelated fixture commit\n' | git -C "$WRITE_REPO" commit-tree "$UNRELATED_TREE")"
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$UNRELATED_HEAD" \
+  expect_update_reject git push --repo "$REPO" --expected-head "$UNRELATED_HEAD"
+GIT_STUB_REMOTE_BRANCH="" expect_update_reject "${UPDATE_ARGS[@]}"
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_HEAD" \
+  expect_update_reject "${UPDATE_ARGS[@]}"
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  GIT_STUB_FETCH_SHA="$WRITE_HEAD" expect_update_reject "${UPDATE_ARGS[@]}"
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  GIT_STUB_REMOTE_SHA_AFTER_FIRST="$WRITE_HEAD" \
+  expect_update_reject "${UPDATE_ARGS[@]}"
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_HEAD" \
+  expect_update_reject git push --repo "$REPO" --expected-head "$WRITE_HEAD"
+HTTPS_PROXY=https://proxy.invalid GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" \
+  GIT_STUB_REMOTE_SHA="$WRITE_BASE" expect_update_reject "${UPDATE_ARGS[@]}"
+GIT_SSH_COMMAND='ssh -o ProxyCommand=false' GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" \
+  GIT_STUB_REMOTE_SHA="$WRITE_BASE" expect_update_reject "${UPDATE_ARGS[@]}"
+
+git -C "$WRITE_REPO" config remote.origin.mirror true
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  expect_update_reject "${UPDATE_ARGS[@]}"
+git -C "$WRITE_REPO" config --unset remote.origin.mirror
+git -C "$WRITE_REPO" config http.proxy https://proxy.invalid
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  expect_update_reject "${UPDATE_ARGS[@]}"
+git -C "$WRITE_REPO" config --unset http.proxy
+git -C "$WRITE_REPO" remote set-url origin git@github.com:Skyline-Gazer/pastebin-worker.git
+GIT_STUB_REMOTE_BRANCH="$PUSH_BRANCH" GIT_STUB_REMOTE_SHA="$WRITE_BASE" \
+  expect_update_reject "${UPDATE_ARGS[@]}"
+git -C "$WRITE_REPO" remote set-url origin https://github.com/Skyline-Gazer/pastebin-worker.git
 
 git -C "$WRITE_REPO" switch -q downstream/main
 expect_publish_reject git push --repo "$REPO"

@@ -68,3 +68,34 @@ downstream/tests/gh-write.test.sh` — PASS. `git diff --check` — PASS. Local
 The guard contract and this plan are the affected documentation. Required
 exact-HEAD CI and Phase Review Gate settlement remain pending after PR
 creation.
+
+## Owner-authorized existing-branch update addendum (2026-09-30)
+
+The Owner separately authorized a minimum guarded update route for publishing
+only the new PR #192 HEAD and the authorized formatter-only PR #193 HEAD. The
+original create-only route and its checks remain unchanged.
+
+The update route requires the caller to provide the expected current remote
+HEAD for the same-name `codex/*` branch. It verifies the authorized HTTPS
+origin, clean worktree, exact current remote SHA, fetched remote commit,
+fast-forward ancestry, and live `downstream/main` ancestry, then rechecks the
+remote SHA immediately before a non-forced push of the reviewed local commit to
+that fixed branch ref. It rejects configured proxies, alternate transport
+routes, mirror mode, stale or moved remote heads, no-op/non-fast-forward
+updates, and all extra push options/refspecs. It never pushes tags.
+
+Validation:
+
+- RED: `bash downstream/tests/gh-write.test.sh` exited 1 at the new allowed
+  existing-branch update case while the create-only guard was still in place.
+- GREEN: `bash downstream/tests/gh-write.test.sh` — PASS, including positive
+  fast-forward publication and negative repository, expected-HEAD, remote
+  movement, ancestry, proxy, mirror, transport, force, tag, and extra-refspec
+  fixtures. All GitHub/Git push calls use local stubs.
+- `bash -n downstream/scripts/gh-write.sh downstream/tests/gh-write.test.sh` —
+  PASS.
+- `git diff --check` — PASS.
+
+The published update is limited to PR #192 and PR #193 under the 2026-09-30
+Owner decision. It does not authorize a merge, unrelated branch update,
+implementation, production action, or release.
